@@ -16,7 +16,8 @@ The plan is tracked in [#1](https://github.com/urbania-media/eclair/issues/1). E
 - Database schema and migrations, on MySQL and PostgreSQL. Projects, API keys, storages and presets, with the CLI and the admin API.
 - `POST /v1/jobs`, `GET /v1/jobs/{id}`, list, cancel, retry, server-sent events.
 - Scheduler and workers on BullMQ: dependencies, retries, timeouts, capabilities, per-project priority and concurrency.
-- Storages: `https` inputs with the SSRF guard, `s3` inputs and outputs, `http` storages.
+- Storages: `https` inputs with the SSRF guard, `s3` inputs and outputs, `http` storages, temporary storage with uploads and expiry.
+- Synchronous probe (`POST /v1/probe`) and its `probe` queue.
 - Signed webhooks with retries.
 - `@eclair-js/operation`: interface, context, plugin loading, test helpers.
 - `probe`.
@@ -39,7 +40,7 @@ The operations that `laravel-mediatheque` runs today, with the same outputs:
 - `@eclair-js/client` (JavaScript).
 - `folklore/laravel-eclair` (PHP), in its own repository.
 - The opt-in `eclair` driver in a `laravel-mediatheque` 1.x minor release.
-- Deploy a shared Eclair and move a pilot application to it, one type at a time.
+- Deploy a shared Eclair and move Niche, the pilot application, to it, one type at a time.
 - Operations guide: sizing, monitoring, upgrades, incidents.
 
 ## Phase 4: AI and advanced operations
@@ -56,7 +57,7 @@ The operations that `laravel-mediatheque` runs today, with the same outputs:
 Eclair 1.0 ships when:
 
 - phases 0 to 3 are done, and `ai.transcribe` from phase 4;
-- the pilot application has run on Eclair in production for at least a month;
+- Niche has run on Eclair in production for at least a month;
 - the protocol is frozen at `v1`, and the operation interface is stable;
 - the docs cover installing, operating and extending Eclair.
 
@@ -72,8 +73,5 @@ The `v1.x` maintenance branch is created at 1.0.0. The other phase 4 operations 
 
 ## Open questions
 
-- **Applications without S3.** The `http` storage uploads outputs to the application. Is it enough, or does Eclair also need a temporary area where applications pick up their outputs?
-- **Metadata on upload.** The mediatheque reads some metadata synchronously when a media is created. With Eclair, it arrives with the pipeline. Which consumers rely on it being there right after upload?
 - **Fair scheduling.** Priority and per-project concurrency in BullMQ are enough to start. A busy shared server may need weighted fair queuing between projects.
 - **GPU.** Is a GPU worker worth its cost for transcription and NVENC, compared to CPU workers? To measure in phase 4.
-- **Pilot application.** Which one goes first.

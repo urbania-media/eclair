@@ -11,6 +11,8 @@ It provides:
 - a client for the API: `Eclair::jobs()->create(...)`, `find()`, `cancel()`, `retry()`, and presets;
 - a webhook route that verifies the signature and dispatches `JobCompleted`, `JobFailed` and `TaskCompleted` events;
 - the endpoint for `http` storages: it serves inputs and receives outputs on a Laravel disk, with signed requests, for applications that keep files on their own disk;
+- downloading outputs from Eclair's temporary storage to a Laravel disk, for applications that would rather pull than receive;
+- `Eclair::probe()`, the synchronous probe;
 - `Eclair::fake()` with assertions, to test applications without a server;
 - an `eclair:status` command that checks the connection, the key and the storages.
 
@@ -32,7 +34,7 @@ A minor release of `laravel-mediatheque` 1.x adds an opt-in driver that sends pi
 
 ### How a pipeline runs
 
-1. A media is created as today: the original is stored on the source, and the type is detected from its content.
+1. A media is created as today: the original is stored on the source. The driver then calls the synchronous probe (`POST /v1/probe`) and saves the type and metadata (dimensions, duration, page count, font name) before the request returns, as the local metadata readers do today. If Eclair doesn't answer in time, the driver detects the mime type locally and the pipeline fills the metadata later.
 2. The pipeline starts. With the `eclair` driver, the mediatheque creates the `Pipeline` and `PipelineJob` rows as usual, then sends one Eclair job:
     - the input is the original file, as a path on the Eclair storage that maps to the source's disk (or a temporary signed URL);
     - the output prefix comes from the mediatheque's path formatter;
@@ -40,7 +42,7 @@ A minor release of `laravel-mediatheque` 1.x adds an opt-in driver that sends pi
     - `metadata` holds the media id and the pipeline id.
 3. On `task.completed`, the driver attaches each output file to the media under the task's name, as the local jobs do, and marks the `PipelineJob` as ended. Thumbnails are attached as `thumbnails.0`, `thumbnails.1`…
 4. On `job.completed` or `job.failed`, the pipeline ends, with the same events and statuses as a local run.
-5. Metadata from `probe` (duration, dimensions, page count, font name) is saved on the media. Applications that let Eclair probe no longer need ffprobe or ImageMagick on their own servers.
+5. Applications that let Eclair probe and process their media no longer need ffprobe or ImageMagick on their own servers.
 
 Handles, file paths, sources and URLs stay the same, so `laravel-folklore` and the applications that read `$media->files->h264` see no difference.
 
@@ -60,12 +62,16 @@ Each mediatheque job's options are translated by the driver, so an application's
 
 ## Moving an application to Eclair
 
-1. Register the application as a project in Eclair, with a key and a storage that points to its bucket (or an `http` storage served by `laravel-eclair`).
+1. Register the application as a project in Eclair, with a key and a storage that points to its bucket. Applications that keep files on their own disk use an `http` storage served by `laravel-eclair`, or Eclair's temporary storage, from which `laravel-eclair` downloads the outputs.
 2. Install `folklore/laravel-eclair` and the mediatheque release with the driver.
 3. Enable the driver for one type (audio or documents first), compare outputs with the local jobs, then enable the others.
 4. Once every type runs on Eclair, remove the binaries from the application's servers and reduce their size.
 
-A pilot application goes first. The others follow once Eclair has run it in production for a while.
+## Pilot: Niche
+
+Niche, URBANIA's content platform, is the first application on Eclair. It runs on `laravel-mediatheque` with S3-compatible storage, so it uses an `s3` storage and the synchronous probe. Eclair is deployed in the same region as Niche's data, and external AI providers stay off for it unless Niche enables them.
+
+The other applications follow once Eclair has run Niche in production for a while.
 
 ## laravel-mediatheque 2.0
 

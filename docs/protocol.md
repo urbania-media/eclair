@@ -31,8 +31,8 @@ The protocol is the contract between Eclair and its clients. It is published in 
 
 | Field      | Content                                                                                                                         |
 | ---------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `input`    | Either `{ "url": "https://…" }` or `{ "storage": "<name>", "path": "<path>" }`. Optional `mime` and `size` hints, never trusted. |
-| `output`   | `{ "storage": "<name>", "prefix": "<prefix>", "path": "<pattern>" }`. Optional when no task writes files (a `probe` alone).     |
+| `input`    | `{ "url": "https://…" }`, `{ "storage": "<name>", "path": "<path>" }` or `{ "upload": "upl_…" }`. Optional `mime` and `size` hints, never trusted. |
+| `output`   | `{ "storage": "<name>", "prefix": "<prefix>", "path": "<pattern>" }`. `"storage": "eclair"` writes to the temporary storage. Optional when no task writes files (a `probe` alone). |
 | `preset`   | Name of a preset of the project, or of a global preset. Its tasks are merged with `tasks`.                                     |
 | `tasks`    | Named tasks. A name is also the output's name, so it is the handle the application reads.                                      |
 | `webhook`  | URL called when the job ends. Defaults to the project's webhook.                                                               |
@@ -98,12 +98,55 @@ Job statuses: `pending`, `running`, `completed`, `failed`, `canceled`. Task stat
 
 Files with many parts (HLS segments, thumbnail series) report their main files and a `count` of the others, not every segment.
 
+Files in the temporary storage also have a signed `url` and an `expiresAt`. An expired file keeps its entry with `"expired": true` and no `url`. `GET /v1/jobs/{id}/files` lists every file of the job, segments included, with fresh signed URLs.
+
 ### Other job endpoints
 
 - `GET /v1/jobs`: list, filtered by `status`, `createdAfter` and `metadata.*`.
 - `POST /v1/jobs/{id}/cancel`: cancel pending and running tasks.
 - `POST /v1/jobs/{id}/retry`: run the failed and canceled tasks again.
 - `GET /v1/jobs/{id}/events`: server-sent events with status and progress changes.
+
+## Probe
+
+### `POST /v1/probe`
+
+Returns the metadata of a file in the response ([decision 0012](decisions/0012-synchronous-probe.md)).
+
+```json
+{
+    "input": { "storage": "media", "path": "uploads/interview.mov" },
+    "timeout": 10,
+    "checksum": false
+}
+```
+
+The input takes the same forms as a job input. The file can also be sent as the request body (`multipart/form-data` or the raw file with its `Content-Type`), up to the project's direct upload limit.
+
+- `200` with `{ "metadata": { … } }`, the same object as the `probe` operation's output.
+- `202` with a job when the probe takes longer than `timeout` (10 seconds by default, 30 at most). The result comes with the job and its webhook.
+- `422` when the file can't be read or its type isn't supported.
+
+`checksum: true` adds a SHA-256 of the whole file, which reads all of it and can take longer.
+
+## Uploads
+
+### `POST /v1/uploads`
+
+Stores a file in the temporary storage ([decision 0011](decisions/0011-temporary-storage.md)). The body is the file (`multipart/form-data` or raw). Larger files use resumable uploads (`POST /v1/uploads` with `Upload-Length`, then `PATCH` chunks, following the tus protocol).
+
+```json
+{
+    "id": "upl_01J…",
+    "size": 48213904,
+    "expiresAt": "2026-10-16T14:00:00Z",
+    "metadata": { "kind": "video", "mime": "video/quicktime", "duration": 184.2 }
+}
+```
+
+`?probe=1` probes the file in the same request and adds `metadata`. The upload id is then used as a job or probe input: `{ "upload": "upl_01J…" }`.
+
+- `GET /v1/uploads/{id}` and `DELETE /v1/uploads/{id}`.
 
 ## Presets
 

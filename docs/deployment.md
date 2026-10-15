@@ -43,7 +43,7 @@ Put a reverse proxy with TLS in front of the API. The temporary directory should
 ```
 
 - API processes are stateless. Run several behind the reverse proxy.
-- Workers only need the database, Redis and access to the project storages. They don't share a disk.
+- Workers only need the database, Redis, the temporary storage bucket and access to the project storages. They don't share a disk.
 - Each operation runs on its capability's queue. A server without a GPU never serves `gpu`, so GPU work waits for a GPU worker instead of failing.
 - The database and Redis can be managed services. Use the database you already run: MySQL 8.4+ or PostgreSQL 15+.
 - A worker that stops gracefully (`SIGTERM`) finishes its running tasks, up to a timeout, and takes no new ones. A worker that dies has its tasks retried by another worker.
@@ -59,8 +59,10 @@ Environment variables, with defaults in `.env.example`:
 | `ECLAIR_SECRET_KEY`       | Key that encrypts storage credentials and provider keys. Keep it safe: losing it means registering storages again. |
 | `ECLAIR_ADMIN_TOKEN`      | Token for the admin API and the CLI                                        |
 | `ECLAIR_PUBLIC_URL`       | Public URL of the API                                                      |
-| `ECLAIR_QUEUES`           | Queues a worker serves, with optional concurrency: `cpu:4,video:1`        |
+| `ECLAIR_QUEUES`           | Queues a worker serves, with optional concurrency: `cpu:4,video:1`. Every worker also serves `probe` with reserved slots, unless `probe:0` |
 | `ECLAIR_TMP_DIR`          | Temporary directory for tasks                                              |
+| `ECLAIR_TEMP_STORAGE`     | Temporary storage backend: a local path (`file:///data/eclair`) on a single server, or an S3-compatible bucket (`s3://…`) when there are several |
+| `ECLAIR_TEMP_RETENTION`   | Default retention of temporary files (`24h`), and `ECLAIR_TEMP_MAX_RETENTION` for the per-project maximum |
 | `ECLAIR_PLUGINS`          | Extra operation packages to load                                           |
 | `ECLAIR_MAX_INPUT_SIZE`   | Default input size limit, overridable per project                          |
 | `ECLAIR_TASK_TIMEOUT`     | Default task timeout, overridable per operation and per project            |
@@ -81,5 +83,5 @@ Supported but not the default: install Node 24, `npm install -g @eclair-js/serve
 
 ## Backups and monitoring
 
-- Back up the database. Redis only holds queues and can be rebuilt by the scheduler.
+- Back up the database. The temporary storage doesn't need backups. Redis only holds queues and can be rebuilt by the scheduler.
 - Scrape `/metrics` with Prometheus. Alert on queue wait time, task failure rate per operation, webhook delivery failures and free space in the temporary directory.
