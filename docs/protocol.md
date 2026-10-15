@@ -1,11 +1,12 @@
 # Protocol (draft)
 
-The protocol is the contract between Eclair and its clients. It is published in `@eclair-js/protocol` as an OpenAPI document and JSON Schemas, with generated TypeScript types. The PHP client follows the same documents. This page is the draft that the OpenAPI document will be written from.
+The protocol is the contract between Eclair and its clients. It is published in `@eclair-js/protocol` as an OpenAPI document and JSON Schemas, with generated TypeScript types. The PHP client follows the same documents. This page explains the protocol. The reference is the OpenAPI document, [`packages/protocol/schema/openapi.json`](../packages/protocol/schema/openapi.json), which is still a draft until 1.0.
 
 ## Conventions
 
 - Base path `/v1`. Version 1 only changes additively: new fields, endpoints and operations, never removed or renamed ones.
 - JSON bodies, `camelCase` keys. Ids are prefixed ULIDs (`job_…`, `tsk_…`, `prj_…`).
+- Request bodies refuse unknown fields, so typos are caught. Responses and webhook bodies can gain fields: clients ignore the ones they don't know.
 - Authentication: `Authorization: Bearer <key>`.
 - Errors use `application/problem+json` (RFC 9457), with an `errors` member for validation errors keyed by JSON pointer.
 - `POST` endpoints that create something accept an `Idempotency-Key` header. A replay with the same key and body returns the first response.
@@ -68,7 +69,7 @@ The task graph must be acyclic. The API answers `202` with the job.
 
 ```json
 {
-    "id": "job_01J…",
+    "id": "job_01JA2Y8C6W4N5V7TQ3H9XK0B2M",
     "status": "completed",
     "createdAt": "2026-10-15T14:00:00Z",
     "endedAt": "2026-10-15T14:03:12Z",
@@ -184,7 +185,7 @@ Eclair-Signature: t=1760536992,v1=5257a869e7…
 
 The body is the job, as returned by `GET /v1/jobs/{id}`. The signature is the HMAC-SHA256 of `{t}.{body}` with the project's webhook secret. Receivers check it and refuse timestamps older than five minutes. Deliveries are retried with exponential backoff for 24 hours. Receivers must accept duplicates, using `Eclair-Delivery` to detect them.
 
-Events: `job.completed`, `job.failed`, `job.canceled`. A project can also subscribe to `task.completed`, to attach outputs as soon as they exist.
+Events: `job.completed`, `job.failed`, `job.canceled`. A project can also subscribe to `task.completed`, to attach outputs as soon as they exist. Its body is also the whole job, and an `Eclair-Task` header names the task that completed.
 
 ## HTTP storage uploads
 
@@ -197,7 +198,7 @@ Eclair-Job: job_01J…
 Eclair-Signature: t=…,v1=…
 ```
 
-The signature covers the timestamp, the path and the SHA-256 of the body (sent in `Eclair-Content-Sha256`). Inputs are read with a signed `GET` on the same endpoint.
+The signature covers the timestamp, the path and the SHA-256 of the body (sent in `Eclair-Content-Sha256`). Inputs are read with a signed `GET` on the same endpoint, where the body's SHA-256 is that of an empty body.
 
 ## Admin API
 
