@@ -210,6 +210,7 @@ check 'the entry point runs the eclair CLI' eclair-entrypoint eclair --help
 check 'eclair --version runs' eclair --version
 # The doctor fails without a database and Redis, but it must find every binary of the image.
 eclair doctor >"$work/doctor" 2>&1
+check 'eclair doctor runs' grep -Eq '^ok +configuration' "$work/doctor"
 refuse 'eclair doctor finds every binary' grep -Eq '^warn +[a-z-]+: (not found|doesn.t run)' "$work/doctor"
 
 printf '| Binary | Version |\n| --- | --- |\n'

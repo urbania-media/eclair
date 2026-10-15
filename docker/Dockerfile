@@ -128,6 +128,10 @@ COPY docker/imagemagick/policy.xml /etc/ImageMagick-7/policy.xml
 COPY --from=app /app /app
 COPY --chmod=0755 docker/entrypoint.sh /usr/local/bin/eclair-entrypoint
 
+# npm doesn't link the bin of a workspace package, so the eclair command is a small wrapper.
+RUN printf '#!/bin/sh\nexec node /app/packages/server/dist/cli/main.js "$@"\n' >/usr/local/bin/eclair \
+    && chmod 0755 /usr/local/bin/eclair
+
 # The eclair user can only write to ECLAIR_TMP_DIR, and to /var/lib/eclair, the mount point of the
 # data volume (SQLite database and local temporary storage). /tmp and /var/tmp are read-only, so
 # every binary goes through TMPDIR, which the entry point sets to ECLAIR_TMP_DIR.
