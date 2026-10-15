@@ -92,9 +92,18 @@ jobs:
                     --health-interval 5s
                     --health-timeout 5s
                     --health-retries 30
+            # An S3-compatible service for the s3 storages and the temporary storage.
+            s3:
+                image: adobe/s3mock:5.2.3
+                env:
+                    COM_ADOBE_TESTING_S3MOCK_STORE_INITIAL_BUCKETS: eclair-test
+                ports:
+                    - 9090:9090
         env:
             DATABASE_URL: ${{ matrix.database.url }}
             ECLAIR_TEST_DIALECT: ${{ matrix.database.dialect }}
+            ECLAIR_TEST_S3_ENDPOINT: http://127.0.0.1:9090
+            ECLAIR_TEST_S3_BUCKET: eclair-test
         steps:
             - uses: actions/checkout@v5
 
@@ -105,6 +114,15 @@ jobs:
 
             - name: Install dependencies
               run: npm ci
+
+            - name: Wait for the S3 service
+              run: |
+                  for attempt in $(seq 1 60); do
+                      curl -fs -o /dev/null "$ECLAIR_TEST_S3_ENDPOINT/eclair-test" && exit 0
+                      sleep 2
+                  done
+                  echo 'The S3 service did not start.' >&2
+                  exit 1
 
             - name: Test
               run: npm test

@@ -9,6 +9,7 @@ import { ConflictError, NotFoundError } from '../errors.ts';
 import { BUILT_IN_PLUGINS, OperationRegistry, PluginError } from '../operations/registry.ts';
 import { createServices } from '../services.ts';
 import type { Services } from '../services.ts';
+import { TemporaryStorage } from '../storages/temporary.ts';
 import { InvalidValueError } from '../validation.ts';
 
 export interface CliIo {
@@ -116,10 +117,7 @@ export async function withServices<T>(
     const operations = await loadOperations(config);
     const database = await openMigratedDatabase(config.databaseUrl ?? '');
     try {
-        return await run(
-            createServices(database, config.secretKey ?? Buffer.alloc(0), operations),
-            config,
-        );
+        return await run(createServicesFor(database, config, operations), config);
     } catch (error) {
         if (error instanceof NotFoundError || error instanceof ConflictError) {
             throw new CliExit(EXIT.failure, error.message);
@@ -146,4 +144,24 @@ export async function loadOperations(config: Config): Promise<OperationRegistry>
         }
         throw error;
     }
+}
+
+/** The repositories, with the configuration's temporary storage and limits. */
+export function createServicesFor(
+    database: Database,
+    config: Config,
+    operations: OperationRegistry | undefined,
+): Services {
+    return createServices({
+        database,
+        secretKey: config.secretKey ?? Buffer.alloc(0),
+        temporary: TemporaryStorage.fromConfig(config),
+        limits: {
+            tempRetention: config.tempRetention,
+            tempMaxRetention: config.tempMaxRetention,
+            maxInputSize: config.maxInputSize,
+            tmpDir: config.tmpDir,
+        },
+        operations,
+    });
 }

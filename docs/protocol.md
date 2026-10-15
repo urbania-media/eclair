@@ -198,7 +198,7 @@ Eclair-Job: job_01J…
 Eclair-Signature: t=…,v1=…
 ```
 
-The signature covers the timestamp, the path and the SHA-256 of the body (sent in `Eclair-Content-Sha256`). Inputs are read with a signed `GET` on the same endpoint, where the body's SHA-256 is that of an empty body.
+The signature covers the timestamp, the path and the SHA-256 of the body (sent in `Eclair-Content-Sha256`): the HMAC-SHA256 of `{t}.{path}.{sha256}`, where `path` is the storage path as the job names it, without URL encoding. Inputs are read with a signed `GET` on the same endpoint, where the body's SHA-256 is that of an empty body.
 
 ## Admin API
 

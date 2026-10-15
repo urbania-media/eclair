@@ -3,7 +3,19 @@ import type { OperationRegistry } from './operations/registry.ts';
 import { Presets } from './presets/presets.ts';
 import { ApiKeys } from './projects/api-keys.ts';
 import { Projects } from './projects/projects.ts';
+import { StorageResolver } from './storages/resolver.ts';
 import { Storages } from './storages/storages.ts';
+import type { TemporaryStorage } from './storages/temporary.ts';
+import { Uploads } from './uploads/uploads.ts';
+import type { UploadLimits } from './uploads/uploads.ts';
+
+/** Server-wide limits that the repositories apply, from the configuration. */
+export interface ServerLimits extends UploadLimits {
+    /** Largest input, in bytes, when the project doesn't set one. */
+    maxInputSize: number;
+    /** Directory for files received by the API before they are stored. */
+    tmpDir: string;
+}
 
 /** The repositories of the server, sharing one database connection. */
 export interface Services {
@@ -12,19 +24,28 @@ export interface Services {
     apiKeys: ApiKeys;
     storages: Storages;
     presets: Presets;
+    uploads: Uploads;
+    resolver: StorageResolver;
+    limits: ServerLimits;
     operations: OperationRegistry | undefined;
 }
 
-/**
- * Creates the repositories. With the operations, presets check their operations and options;
- * without them (tests, CLI commands that don't need them), presets only check the protocol's schema.
- */
-export function createServices(
-    database: Database,
-    secretKey: Buffer,
-    operations?: OperationRegistry,
-): Services {
+export interface ServicesOptions {
+    database: Database;
+    secretKey: Buffer;
+    temporary: TemporaryStorage;
+    limits: ServerLimits;
+    /**
+     * With the operations, presets check their operations and options; without them (CLI commands
+     * that don't need them), presets only check the protocol's schema.
+     */
+    operations?: OperationRegistry | undefined;
+}
+
+export function createServices(options: ServicesOptions): Services {
+    const { database, secretKey, temporary, limits, operations } = options;
     const projects = new Projects(database, secretKey);
+    const storages = new Storages(database, projects, secretKey);
     const presets = new Presets(database);
     if (operations !== undefined) {
         presets.setTaskChecker(async (tasks, pointer, projectId) => {
@@ -37,8 +58,11 @@ export function createServices(
         database,
         projects,
         apiKeys: new ApiKeys(database, projects),
-        storages: new Storages(database, projects, secretKey),
+        storages,
         presets,
+        uploads: new Uploads(database, temporary, limits),
+        resolver: new StorageResolver(storages, projects, temporary),
+        limits,
         operations,
     };
 }

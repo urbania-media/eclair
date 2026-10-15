@@ -2,6 +2,7 @@ import type { Migration } from 'kysely/migration';
 
 import type { Dialect } from '../dialect.ts';
 import { initial } from './0001-initial.ts';
+import { uploadParts } from './0002-upload-parts.ts';
 
 /**
  * Every migration, in order. A migration is never changed once released: changes to the schema
@@ -10,5 +11,6 @@ import { initial } from './0001-initial.ts';
 export function migrations(dialect: Dialect): Record<string, Migration> {
     return {
         '0001-initial': initial(dialect),
+        '0002-upload-parts': uploadParts(dialect),
     };
 }

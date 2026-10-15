@@ -112,6 +112,21 @@ describe('loadConfig', () => {
     });
 });
 
+describe('the temporary storage', () => {
+    it('needs credentials for a bucket', () => {
+        expect(problemsOf({ ECLAIR_TEMP_STORAGE: 's3://bucket/eclair' })).toEqual([
+            'ECLAIR_TEMP_S3_ACCESS_KEY_ID and ECLAIR_TEMP_S3_SECRET_ACCESS_KEY are required with an s3:// ECLAIR_TEMP_STORAGE.',
+        ]);
+        expect(
+            loadConfig({
+                ECLAIR_TEMP_STORAGE: 's3://bucket/eclair',
+                ECLAIR_TEMP_S3_ACCESS_KEY_ID: 'id',
+                ECLAIR_TEMP_S3_SECRET_ACCESS_KEY: 'secret',
+            }).tempStorageCredentials,
+        ).toEqual({ accessKeyId: 'id', secretAccessKey: 'secret' });
+    });
+});
+
 describe('requireSettings', () => {
     it('lists the missing settings', () => {
         const config = loadConfig({ REDIS_URL: 'redis://localhost' });
