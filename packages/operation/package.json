@@ -19,6 +19,11 @@
             "types": "./dist/index.d.ts",
             "default": "./dist/index.js"
         },
+        "./testing": {
+            "@eclair-js/source": "./src/testing.ts",
+            "types": "./dist/testing.d.ts",
+            "default": "./dist/testing.js"
+        },
         "./package.json": "./package.json"
     },
     "files": [
@@ -30,5 +35,12 @@
     },
     "publishConfig": {
         "access": "public"
+    },
+    "dependencies": {
+        "@eclair-js/protocol": "^0.0.0",
+        "ajv": "^8.20.0",
+        "ajv-formats": "^3.0.1",
+        "file-type": "^22.2.0",
+        "typebox": "^1.3.37"
     }
 }

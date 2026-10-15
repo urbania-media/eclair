@@ -50,15 +50,15 @@ See [`docs/protocol.md`](docs/protocol.md) for the API and [`docs/operations.md`
 
 ## Packages
 
-| Package                                          | Content                                                                  |
-| ------------------------------------------------ | ------------------------------------------------------------------------ |
-| `@eclair-js/server`                              | API, workers and the `eclair` CLI                                        |
-| `@eclair-js/protocol`                            | OpenAPI document, JSON Schemas and TypeScript types                      |
-| `@eclair-js/operation`                           | Interface and helpers to write operations                                |
-| `@eclair-js/operations-*`                        | Built-in operations: `image`, `video`, `audio`, `document`, `font`, `ai` |
-| `@eclair-js/client`                              | JavaScript client and webhook verification                               |
-| [`folklore/laravel-eclair`](docs/mediatheque.md) | PHP client for Laravel, and the bridge to `laravel-mediatheque`          |
-| `ghcr.io/urbania-media/eclair`                   | Docker image with every binary the built-in operations need              |
+| Package                                          | Content                                                                                    |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------------ |
+| `@eclair-js/server`                              | API, workers and the `eclair` CLI                                                          |
+| `@eclair-js/protocol`                            | OpenAPI document, JSON Schemas and TypeScript types                                        |
+| `@eclair-js/operation`                           | Interface and helpers to write operations                                                  |
+| `@eclair-js/operations-*`                        | Built-in operations: `core` (`probe`), `image`, `video`, `audio`, `document`, `font`, `ai` |
+| `@eclair-js/client`                              | JavaScript client and webhook verification                                                 |
+| [`folklore/laravel-eclair`](docs/mediatheque.md) | PHP client for Laravel, and the bridge to `laravel-mediatheque`                            |
+| `ghcr.io/urbania-media/eclair`                   | Docker image with every binary the built-in operations need                                |
 
 ## Deploying
 

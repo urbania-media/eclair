@@ -14,6 +14,7 @@
     "workspaces": [
         "packages/protocol",
         "packages/operation",
+        "packages/operations-core",
         "packages/client",
         "packages/server"
     ],

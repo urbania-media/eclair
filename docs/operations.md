@@ -60,7 +60,7 @@ A plugin is an npm package that exports one or more operations. The server loads
 
 **1.0** marks what ships in 1.0. The others come in 1.x, in the order of the [roadmap](roadmap.md).
 
-### Probe
+### Probe (`@eclair-js/operations-core`)
 
 | Operation | Output                                                                                                                                                                       | 1.0 |
 | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --- |

@@ -70,6 +70,25 @@ jobs:
                       -v "$PWD/docker/smoke-test.sh:/smoke-test.sh:ro" \
                       "$TEST_TAG" sh /smoke-test.sh > /dev/null
 
+            - uses: actions/setup-node@v5
+              with:
+                  node-version-file: .nvmrc
+                  cache: npm
+
+            - name: Install dependencies
+              run: npm ci
+
+            # Operations run their real binaries: the image's, with the tests of the repository.
+            # ECLAIR_TEST_BINARIES makes a missing binary fail instead of skipping its tests.
+            - name: Operation tests in the image
+              run: |
+                  mkdir -p .tmp
+                  docker run --rm --user "$(id -u):$(id -g)" --entrypoint node \
+                      -e ECLAIR_TEST_BINARIES=1 -e HOME=/src/.tmp -e TMPDIR=/src/.tmp \
+                      -e MAGICK_TEMPORARY_PATH=/src/.tmp \
+                      -v "$PWD:/src" -w /src "$TEST_TAG" \
+                      node_modules/vitest/vitest.mjs run --project operations-core
+
             - name: Summary
               if: ${{ !cancelled() && steps.build.outcome == 'success' }}
               run: |

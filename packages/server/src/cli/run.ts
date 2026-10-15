@@ -11,7 +11,14 @@ import { buildApp } from '../http/app.ts';
 import { createServices } from '../services.ts';
 import { VERSION } from '../version.ts';
 import { ADMIN_COMMANDS } from './admin.ts';
-import { CliExit, EXIT, configWith, errorMessage, openMigratedDatabase } from './command.ts';
+import {
+    CliExit,
+    EXIT,
+    configWith,
+    errorMessage,
+    loadOperations,
+    openMigratedDatabase,
+} from './command.ts';
 import type { CliIo, Command, CommandContext } from './command.ts';
 
 export { EXIT } from './command.ts';
@@ -19,9 +26,10 @@ export type { CliIo } from './command.ts';
 
 async function startApi(io: CliIo, role: 'api' | 'all'): Promise<number> {
     const config = configWith(io, ['DATABASE_URL', 'ECLAIR_SECRET_KEY']);
+    const operations = await loadOperations(config);
     const database = await openMigratedDatabase(config.databaseUrl ?? '');
     const app = buildApp({
-        services: createServices(database, config.secretKey ?? Buffer.alloc(0)),
+        services: createServices(database, config.secretKey ?? Buffer.alloc(0), operations),
         version: VERSION,
         logger: {
             level: config.logLevel,
@@ -130,7 +138,8 @@ async function doctor(io: CliIo): Promise<number> {
     }
 
     // A worker only needs the binaries of the operations it runs: a missing one is a warning.
-    for (const binary of await checkBinaries(config.binaries)) {
+    const binaries = await checkBinaries(config.binaries);
+    for (const binary of binaries) {
         if (binary.status === 'ok') {
             line('ok', `${binary.name}: ${binary.output ?? binary.path}`);
         } else if (binary.status === 'missing') {
@@ -138,6 +147,25 @@ async function doctor(io: CliIo): Promise<number> {
         } else {
             line('warn', `${binary.name}: doesn't run (${binary.output ?? binary.path})`);
         }
+    }
+
+    try {
+        const operations = await loadOperations(config);
+        const working = new Set(
+            binaries
+                .filter((binary) => binary.status === 'ok')
+                .map((binary) => binary.name as string),
+        );
+        for (const operation of operations.list()) {
+            const missing = operation.binaries.filter((binary) => !working.has(binary));
+            if (missing.length === 0) {
+                line('ok', `operation ${operation.key} (${operation.capability})`);
+            } else {
+                line('warn', `operation ${operation.key} can't run here: no ${missing.join(', ')}`);
+            }
+        }
+    } catch (error) {
+        line('error', error instanceof CliExit ? error.message : errorMessage(error));
     }
 
     return failed ? EXIT.failure : EXIT.ok;
