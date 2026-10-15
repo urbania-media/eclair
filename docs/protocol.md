@@ -202,4 +202,4 @@ The signature covers the timestamp, the path and the SHA-256 of the body (sent i
 
 ## Admin API
 
-Under `/admin/v1`, with the admin token. It manages projects, keys, storages, global presets and limits, and reads usage. The `eclair` CLI uses it.
+Under `/admin/v1`, with the admin token. It manages projects, keys, storages, global presets and limits, and reads usage, for tools such as a dashboard. The `eclair` CLI does the same directly on the database, where it runs next to the server.

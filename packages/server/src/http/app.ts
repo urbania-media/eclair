@@ -5,8 +5,23 @@ import { STATUS_CODES } from 'node:http';
 
 import { jsonSchema } from '@eclair-js/protocol';
 
-import { createAjv } from '../validation.ts';
+import { ConflictError, NotFoundError } from '../errors.ts';
+import type { Services } from '../services.ts';
+import { InvalidValueError, createAjv, groupErrors } from '../validation.ts';
 import { HttpProblem, problems } from './problem.ts';
+import { v1 } from './v1/index.ts';
+
+export interface RouteSummary {
+    method: string;
+    url: string;
+}
+
+declare module 'fastify' {
+    interface FastifyInstance {
+        /** Every route of the app, in the order they were added. */
+        eclairRoutes: RouteSummary[];
+    }
+}
 
 /** A dependency that `/ready` checks: the database, Redis, the binaries… */
 export interface ReadinessCheck {
@@ -22,32 +37,11 @@ export interface AppOptions {
     checks?: ReadinessCheck[];
     /** How long a readiness check may take, in milliseconds. */
     checkTimeout?: number;
+    /** The repositories. Without them, only `/health` and `/ready` exist (tests). */
+    services?: Services;
 }
 
 const PROBLEM_CONTENT_TYPE = 'application/problem+json; charset=utf-8';
-
-function escapePointerToken(token: string): string {
-    return token.replaceAll('~', '~0').replaceAll('/', '~1');
-}
-
-/** Groups Ajv errors by JSON pointer, pointing at a missing or unexpected property itself. */
-function toProblemErrors(validation: ErrorObject[]): Record<string, string[]> {
-    const errors: Record<string, string[]> = {};
-    for (const error of validation) {
-        const params = error.params as Record<string, unknown>;
-        const property = params['missingProperty'] ?? params['additionalProperty'];
-        const pointer =
-            typeof property === 'string'
-                ? `${error.instancePath}/${escapePointerToken(property)}`
-                : error.instancePath;
-        const messages = (errors[pointer] ??= []);
-        const message = error.message ?? 'is invalid';
-        if (!messages.includes(message)) {
-            messages.push(message);
-        }
-    }
-    return errors;
-}
 
 function sendProblem(reply: FastifyReply, problem: HttpProblem): FastifyReply {
     return reply
@@ -57,20 +51,35 @@ function sendProblem(reply: FastifyReply, problem: HttpProblem): FastifyReply {
         .send(problem.toJSON());
 }
 
-function toHttpProblem(error: FastifyError): HttpProblem | undefined {
+function toHttpProblem(error: FastifyError | Error): HttpProblem | undefined {
     if (error instanceof HttpProblem) {
         return error;
     }
-    if (error.validation !== undefined) {
+    if (error instanceof NotFoundError) {
+        return problems.notFound(error.message);
+    }
+    if (error instanceof ConflictError) {
+        return problems.conflict(error.message);
+    }
+    if (error instanceof InvalidValueError) {
+        return problems.invalid(error.errors, error.message);
+    }
+    // Only Fastify's own errors become client errors: another library's statusCode could leak
+    // its message.
+    const code = (error as FastifyError).code;
+    if (typeof code !== 'string' || !code.startsWith('FST_')) {
+        return undefined;
+    }
+    if ('validation' in error && error.validation !== undefined) {
         const context = error.validationContext ?? 'body';
         return problems.invalid(
-            toProblemErrors(error.validation as ErrorObject[]),
+            groupErrors(error.validation as ErrorObject[]),
             context === 'body'
                 ? 'The request body is invalid.'
                 : `The request ${context} is invalid.`,
         );
     }
-    const status = error.statusCode;
+    const status = (error as FastifyError).statusCode;
     if (status !== undefined && status >= 400 && status < 500) {
         // Fastify's own client errors (bad JSON, unsupported content type, body too large) have
         // messages meant for the client.
@@ -105,6 +114,15 @@ export function buildApp(options: AppOptions): FastifyInstance {
     });
 
     app.setValidatorCompiler(({ schema }) => ajv.compile(schema));
+
+    // Every route, for the test that compares them with the OpenAPI document (decision 0013).
+    const routes: RouteSummary[] = [];
+    app.decorate('eclairRoutes', routes);
+    app.addHook('onRoute', ({ method, url }) => {
+        for (const verb of Array.isArray(method) ? method : [method]) {
+            routes.push({ method: verb, url });
+        }
+    });
 
     app.setErrorHandler((error: FastifyError, request, reply) => {
         const problem = toHttpProblem(error);
@@ -141,6 +159,10 @@ export function buildApp(options: AppOptions): FastifyInstance {
             .code(ready ? 200 : 503)
             .send({ status: ready ? 'ready' : 'unready', checks: Object.fromEntries(results) });
     });
+
+    if (options.services !== undefined) {
+        void app.register(v1, { prefix: '/v1', services: options.services });
+    }
 
     return app;
 }
