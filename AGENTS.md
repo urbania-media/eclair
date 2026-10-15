@@ -67,7 +67,7 @@ npx changeset       # describe a change for the changelog
 npm run generate -w @eclair-js/protocol   # after changing the OpenAPI document
 ```
 
-Database tests run on the database in `DATABASE_URL` and are skipped without it. CI runs them on MySQL 8.4, PostgreSQL 15 and SQLite. To run them locally:
+Database tests run on the database in `DATABASE_URL`, or on SQLite in memory without it (`createTestDatabase()` in `src/database/testing.ts` empties the database and runs the migrations). The server's test files run one after the other because they share that database. CI runs them on MySQL 8.4, PostgreSQL 15 and SQLite. To run them on another database locally:
 
 ```bash
 DATABASE_URL=sqlite:///tmp/eclair-test.db npm test
