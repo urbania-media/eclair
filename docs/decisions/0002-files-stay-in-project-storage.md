@@ -1,6 +1,6 @@
 # 0002: Files stay in the project's storage
 
-- Status: accepted
+- Status: accepted, amended by [0011](0011-temporary-storage.md)
 - Date: 2026-10-15
 
 ## Context

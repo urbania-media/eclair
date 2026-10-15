@@ -46,20 +46,33 @@ Applications can also poll `GET /v1/jobs/{id}`, or follow progress with server-s
 
 ## Storage
 
-Eclair never keeps media. A project registers one or more **storages**:
+Eclair doesn't keep media beyond a retention period. A project registers one or more **storages**, and every project can also use Eclair's **temporary storage**:
 
-| Kind   | Read inputs | Write outputs | Notes                                                                                     |
-| ------ | ----------- | ------------- | ----------------------------------------------------------------------------------------- |
-| `s3`   | yes         | yes           | Any S3-compatible service. Credentials scoped to a bucket and prefix, encrypted at rest. |
-| `http` | yes         | yes           | Outputs are uploaded to an endpoint of the application, signed like webhooks. For applications that store files on their own disk. `laravel-eclair` provides this endpoint. |
+| Kind     | Read inputs | Write outputs | Notes                                                                                     |
+| -------- | ----------- | ------------- | ----------------------------------------------------------------------------------------- |
+| `s3`     | yes         | yes           | Any S3-compatible service. Credentials scoped to a bucket and prefix, encrypted at rest. |
+| `http`   | yes         | yes           | Outputs are uploaded to an endpoint of the application, signed like webhooks. For applications that store files on their own disk. `laravel-eclair` provides this endpoint. |
+| `eclair` | yes         | yes           | Eclair's temporary storage, under the reserved name `eclair`. Holds uploads (`POST /v1/uploads`) and outputs until they expire (24 hours by default). The application downloads outputs with signed URLs. See [decision 0011](decisions/0011-temporary-storage.md). |
 
 An input can also be a plain `https` URL (for example a presigned URL), fetched through the SSRF guard.
 
-Outputs are written under `{prefix}{task}/{file}` by default (for example `videos/42/hls/master.m3u8`). The job can override the path pattern. Intermediate outputs that the application doesn't need (`"keep": false`) are written under a temporary prefix and deleted when the job ends.
+The temporary storage's backend is a local directory on a single server, or an S3-compatible bucket owned by the operator when there are several servers. Files are stored under the project's id and can't be listed. A cleaner deletes expired files and marks them as expired on their job.
+
+Outputs are written under `{prefix}{task}/{file}` by default (for example `videos/42/hls/master.m3u8`). The job can override the path pattern. Intermediate outputs that the application doesn't need (`"keep": false`) are written to the temporary storage and deleted when the job ends. Workers on different servers pass files to each other the same way.
+
+## Synchronous probe
+
+`POST /v1/probe` returns a file's metadata in the response, so applications have it at upload time ([decision 0012](decisions/0012-synchronous-probe.md)):
+
+1. The API stores a `probe` task and puts it on the `probe` queue, with the highest priority.
+2. A worker runs it. ffprobe and the image readers read only what they need, with HTTP range requests on URLs and storages, so large files aren't downloaded.
+3. The API waits for the result up to a timeout (10 seconds by default) and returns it. If the probe takes longer, the API answers `202` with a job to poll.
+
+Every worker serves the `probe` queue by default, with reserved slots, so transcodes never delay probes.
 
 ## Queues and scaling
 
-- Each operation declares the **capability** it needs: `cpu` (default), `video` (long transcodes), `gpu`, `ai`. Each capability is a BullMQ queue.
+- Each operation declares the **capability** it needs: `cpu` (default), `video` (long transcodes), `gpu`, `ai`. Each capability is a BullMQ queue. Probes have their own `probe` queue.
 - Each worker lists the capabilities it serves (`ECLAIR_QUEUES=cpu,video`) and its concurrency per queue. Adding capacity means starting another worker with the same configuration on another server.
 - Projects have a priority and a concurrency limit, so one project's backlog doesn't starve the others.
 - Workers only need Redis, the database and the project storages. They don't need to share a disk.
@@ -71,11 +84,12 @@ Outputs are written under `{prefix}{task}/{file}` by default (for example `video
 | `projects`  | Name, slug, priority, limits, allowed operations and providers, webhook secret                   |
 | `api_keys`  | Hashed key, prefix for display, project, scopes, last use, revocation                            |
 | `storages`  | Project, name, kind, encrypted configuration                                                     |
+| `uploads`   | Project, temporary storage path, size, mime, checksum, expiry                                     |
 | `presets`   | Name, optional project (global presets have none), pipeline definition, version                 |
 | `jobs`      | Project, status, input, output, resolved pipeline, webhook, client metadata, timestamps         |
 | `tasks`     | Job, name, operation and version, options, dependencies, status, attempts, progress, error      |
-| `outputs`   | Task, kind (file or metadata), storage path, mime, size, checksum, data                         |
-| `usage`     | Project, task, operation, CPU seconds, media seconds, bytes in and out, provider cost if known   |
+| `outputs`   | Task, kind (file or metadata), storage, path, mime, size, checksum, data, expiry for temporary files |
+| `usage`     | Project, task, operation, CPU seconds, media seconds, bytes in and out, bytes kept in temporary storage, provider cost if known |
 | `webhook_deliveries` | Job, attempt, status code, next retry                                                   |
 
 Old jobs are pruned after a configurable retention. Usage is aggregated per project and per day before pruning.
@@ -102,4 +116,3 @@ To settle in Phase 0, each with a decision record:
 
 - HTTP framework (Fastify is the likely choice: JSON Schema validation and OpenAPI support) and database access (a query builder that supports MySQL and PostgreSQL, such as Kysely, with migrations written with its schema API; see [decision 0007](decisions/0007-sql-database-and-redis.md)).
 - Library for options schemas (one that produces JSON Schema, so schemas end up in the OpenAPI document).
-- How intermediate files move between workers on different servers when the project storage is `http` only.

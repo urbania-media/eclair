@@ -14,7 +14,8 @@ Eclair moves this work to one service that several applications share:
 
 - **One place to optimize.** Workers are sized and tuned for media work, and scale out by adding servers.
 - **Lighter applications.** Web servers no longer need ffmpeg or ImageMagick.
-- **Files stay where they are.** Eclair doesn't keep media. It reads from and writes to each application's storage.
+- **Files stay where they are.** Eclair reads from and writes to each application's storage. Applications without one can upload files to Eclair and pick up outputs from its temporary storage before they expire.
+- **Metadata right away.** A synchronous probe returns a file's type, dimensions and duration in seconds, so applications have them at upload time.
 - **Extensible.** Every operation is a typed plugin. New conversions and extractions are added as npm packages.
 
 ## How it works

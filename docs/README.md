@@ -15,7 +15,7 @@ Eclair must be:
 
 ## Non-goals
 
-- **Storing or serving media.** Files stay in each project's storage, and delivery stays with the project's CDN.
+- **Storing or serving media.** Files stay in each project's storage, and delivery stays with the project's CDN. Eclair's temporary storage only holds uploads and outputs until the application picks them up.
 - **On-the-fly image URLs.** Resizing images per request is the job of [`laravel-image`](https://github.com/folkloreinc/laravel-image) or an image proxy. Eclair runs asynchronous jobs.
 - **A media library.** Eclair doesn't know about media items, tags or usages. That's the application's job, for example with `laravel-mediatheque`.
 
@@ -24,7 +24,7 @@ Eclair must be:
 | Term          | Meaning                                                                                                        |
 | ------------- | -------------------------------------------------------------------------------------------------------------- |
 | **Project**   | An application that uses Eclair. It has API keys, storages, presets, webhooks, limits and usage.              |
-| **Storage**   | A place where a project's files live (an S3-compatible bucket, or an HTTP endpoint for uploads).               |
+| **Storage**   | A place where a project's files live (an S3-compatible bucket, or an HTTP endpoint), or Eclair's temporary storage (`eclair`). |
 | **Job**       | One request: an input, a destination and a pipeline. It ends `completed`, `failed` or `canceled`.             |
 | **Pipeline**  | A graph of named tasks. A task reads the input or another task's output.                                      |
 | **Task**      | One run of an operation inside a job.                                                                          |

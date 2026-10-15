@@ -14,7 +14,7 @@ Eclair is in its design phase. Read [`docs/`](docs/README.md) before writing cod
 ## Rules
 
 1. **The protocol is the contract.** The HTTP API, the job format and the webhook payloads are defined in `@eclair-js/protocol` (OpenAPI and JSON Schema) before they are implemented. Clients only rely on the protocol. Version 1 of the protocol (`/v1`) only changes additively.
-2. **Eclair doesn't keep media.** Inputs are read from the project's storage or an URL, outputs are written to the project's storage. Local files are temporary and deleted when a task ends, whether it succeeds or fails.
+2. **Eclair doesn't keep media beyond a retention period.** Inputs are read from the project's storage, a URL or an upload; outputs are written to the project's storage or to Eclair's temporary storage, where they expire ([0011](docs/decisions/0011-temporary-storage.md)). Local files on workers are deleted when a task ends, whether it succeeds or fails.
 3. **Projects are isolated.** Every row, queue entry, temporary directory, log line and metric is scoped to a project. A task never reads another project's files, credentials or results.
 4. **Operations are plugins.** Built-in operations implement the same `@eclair-js/operation` interface as third-party ones, and the server never imports an operation directly. An operation declares its options schema, the inputs it accepts, the binaries and capabilities it needs, and what it outputs.
 5. **Tasks are safe to retry.** A task can run twice (worker crash, queue retry). It writes outputs to deterministic paths, never duplicates files or webhooks, cleans up its temporary files and reports failure to its job.
