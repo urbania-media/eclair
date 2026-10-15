@@ -1,5 +1,7 @@
 import { randomBytes } from 'node:crypto';
+import { hostname } from 'node:os';
 import { parseArgs } from 'node:util';
+import { pino } from 'pino';
 
 import { checkBinaries } from '../binaries.ts';
 import { ConfigError, loadConfig } from '../config/config.ts';
@@ -11,6 +13,10 @@ import { buildApp } from '../http/app.ts';
 import { TaskQueues } from '../jobs/queues.ts';
 import { createRedis } from '../redis.ts';
 import { VERSION } from '../version.ts';
+import { CancelBus } from '../workers/cancel.ts';
+import { TaskRunner } from '../workers/runner.ts';
+import { ProjectSlots } from '../workers/slots.ts';
+import { TaskWorkers } from '../workers/workers.ts';
 import { ADMIN_COMMANDS } from './admin.ts';
 import {
     CliExit,
@@ -26,38 +32,75 @@ import type { CliIo, Command, CommandContext } from './command.ts';
 export { EXIT } from './command.ts';
 export type { CliIo } from './command.ts';
 
-async function startApi(io: CliIo, role: 'api' | 'all'): Promise<number> {
+/** Starts the API, workers, or both (`eclair all`), until the process is asked to stop. */
+async function start(io: CliIo, roles: { api: boolean; worker: boolean }): Promise<number> {
     const config = configWith(io, ['DATABASE_URL', 'REDIS_URL', 'ECLAIR_SECRET_KEY']);
     const operations = await loadOperations(config);
     const database = await openMigratedDatabase(config.databaseUrl ?? '');
-    const redis = createRedis(config.redisUrl ?? '', 'eclair-api');
+    const name = roles.api && roles.worker ? 'all' : roles.api ? 'api' : 'worker';
+    const redis = createRedis(config.redisUrl ?? '', `eclair-${name}`);
     const queues = new TaskQueues(redis);
-    const app = buildApp({
-        services: createServicesFor(database, config, operations, queues),
-        version: VERSION,
-        logger: {
-            level: config.logLevel,
-            redact: ['req.headers.authorization', 'req.headers.cookie'],
-        },
-        checks: [
-            { name: 'database', check: () => database.ping() },
-            {
-                name: 'redis',
-                check: async () => {
-                    await redis.ping();
-                },
-            },
-        ],
+    const cancel = new CancelBus(redis);
+    const services = createServicesFor(database, config, operations, queues);
+    services.scheduler?.onCancelRunning((taskIds) => cancel.publish(taskIds));
+    const logger = pino({
+        level: config.logLevel,
+        redact: ['req.headers.authorization', 'req.headers.cookie'],
     });
+
+    let workers: TaskWorkers | undefined;
+    let app: ReturnType<typeof buildApp> | undefined;
     try {
-        if (role === 'all') {
-            app.log.warn('Workers are not implemented yet: this process only runs the API.');
+        if (roles.worker && services.scheduler !== undefined) {
+            const runner = new TaskRunner({
+                database,
+                scheduler: services.scheduler,
+                operations,
+                projects: services.projects,
+                resolver: services.resolver,
+                uploads: services.uploads,
+                config,
+                worker: `${hostname()}:${process.pid}`,
+                logger,
+            });
+            workers = new TaskWorkers({
+                connection: redis,
+                queues: config.queues,
+                runner,
+                slots: new ProjectSlots(redis),
+                cancel,
+                projects: services.projects,
+                logger,
+            });
+            await workers.start();
+            logger.info(
+                { queues: config.queues.map(({ name, concurrency }) => `${name}:${concurrency}`) },
+                'Worker started',
+            );
         }
-        await app.listen({ host: config.host, port: config.port });
+        if (roles.api) {
+            app = buildApp({
+                services,
+                version: VERSION,
+                loggerInstance: logger,
+                checks: [
+                    { name: 'database', check: () => database.ping() },
+                    {
+                        name: 'redis',
+                        check: async () => {
+                            await redis.ping();
+                        },
+                    },
+                ],
+            });
+            await app.listen({ host: config.host, port: config.port });
+        }
         await io.waitForStop();
-        app.log.info('Stopping');
+        logger.info('Stopping');
     } finally {
-        await app.close();
+        await app?.close();
+        // Running tasks end first: a worker that stops takes no new task.
+        await workers?.close();
         await queues.close();
         redis.disconnect();
         await database.close();
@@ -202,20 +245,15 @@ async function doctor(io: CliIo): Promise<number> {
 const COMMANDS: Record<string, Command> = {
     api: {
         description: 'Start the API',
-        run: ({ io }) => startApi(io, 'api'),
+        run: ({ io }) => start(io, { api: true, worker: false }),
     },
     worker: {
         description: 'Start a worker for the queues in ECLAIR_QUEUES',
-        run: async () => {
-            throw new CliExit(
-                EXIT.unavailable,
-                'Workers are not implemented yet: they come with the job queue.',
-            );
-        },
+        run: ({ io }) => start(io, { api: false, worker: true }),
     },
     all: {
         description: 'Start the API and a worker, for a single machine',
-        run: ({ io }) => startApi(io, 'all'),
+        run: ({ io }) => start(io, { api: true, worker: true }),
     },
     migrate: {
         usage: '[--status]',

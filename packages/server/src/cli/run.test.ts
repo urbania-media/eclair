@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { BINARIES, loadConfig } from '../config/config.ts';
@@ -134,10 +135,96 @@ describe('runCli', () => {
         },
     );
 
-    it('says that workers are not available yet', async () => {
-        const { io } = createIo();
-        expect(await runCli(['worker'], io)).toBe(EXIT.unavailable);
+    it('needs a database, Redis and the secret key to start a worker', async () => {
+        const { io, output } = createIo();
+        expect(await runCli(['worker'], io)).toBe(EXIT.config);
+        expect(output.stderr).toContain('REDIS_URL is required.');
     });
+
+    it.runIf(RUNS_WITH_REDIS)(
+        'runs a job end to end with eclair all: upload, job, worker, result',
+        async () => {
+            const directory = mkdtempSync(join(tmpdir(), 'eclair-all-'));
+            directories.push(directory);
+            const port = 40_000 + Math.floor(Math.random() * 20_000);
+            const env = {
+                DATABASE_URL: `sqlite://${join(directory, 'eclair.db')}`,
+                REDIS_URL: testRedisUrl() ?? '',
+                ECLAIR_SECRET_KEY: SECRET_KEY,
+                ECLAIR_HOST: '127.0.0.1',
+                ECLAIR_PORT: String(port),
+                ECLAIR_LOG_LEVEL: 'silent',
+                ECLAIR_QUEUES: 'cpu:1',
+                ECLAIR_TMP_DIR: join(directory, 'tmp'),
+                ECLAIR_TEMP_STORAGE: pathToFileURL(join(directory, 'storage')).href,
+            };
+            expect(await runCli(['migrate'], createIo(env).io)).toBe(EXIT.ok);
+            expect(await runCli(['projects:create', 'niche'], createIo(env).io)).toBe(EXIT.ok);
+            const key = createIo(env);
+            await runCli(['keys:create', 'niche'], key.io);
+            const token = /ek_[\w-]+/.exec(key.output.stdout)?.[0] ?? '';
+
+            let stop = () => {};
+            const stopped = new Promise<void>((resolve) => {
+                stop = resolve;
+            });
+            const all = createIo(env, stopped);
+            const running = runCli(['all'], all.io);
+            const base = `http://127.0.0.1:${port}`;
+            const headers = { authorization: `Bearer ${token}` };
+            try {
+                // Wait for the API.
+                const deadline = Date.now() + 10_000;
+                while (
+                    !(await fetch(`${base}/health`).then(
+                        (response) => response.ok,
+                        () => false,
+                    ))
+                ) {
+                    expect(Date.now(), all.output.stderr).toBeLessThan(deadline);
+                    await new Promise((resolve) => setTimeout(resolve, 50));
+                }
+
+                const upload = await fetch(`${base}/v1/uploads`, {
+                    method: 'POST',
+                    headers: { ...headers, 'content-type': 'application/octet-stream' },
+                    body: 'plain text, probed without a binary',
+                }).then((response) => response.json() as Promise<{ id: string }>);
+
+                const created = await fetch(`${base}/v1/jobs`, {
+                    method: 'POST',
+                    headers: { ...headers, 'content-type': 'application/json' },
+                    body: JSON.stringify({
+                        input: { upload: upload.id },
+                        tasks: { probe: { op: 'probe' } },
+                    }),
+                });
+                expect(created.status).toBe(202);
+                const { id } = (await created.json()) as { id: string };
+
+                let job: {
+                    status: string;
+                    tasks: Record<string, { outputs?: { metadata?: unknown } }>;
+                };
+                do {
+                    await new Promise((resolve) => setTimeout(resolve, 50));
+                    job = (await fetch(`${base}/v1/jobs/${id}`, { headers }).then((response) =>
+                        response.json(),
+                    )) as typeof job;
+                } while (job.status === 'pending' || job.status === 'running');
+                expect(job.status).toBe('completed');
+                expect(job.tasks['probe']?.outputs?.metadata).toEqual({
+                    kind: 'other',
+                    mime: 'application/octet-stream',
+                    size: 35,
+                });
+            } finally {
+                stop();
+                expect(await running).toBe(EXIT.ok);
+            }
+        },
+        30_000,
+    );
 
     it('reports the configuration problems in doctor', async () => {
         const { io, output } = createIo({ ECLAIR_QUEUES: 'turbo' });
