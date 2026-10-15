@@ -1,0 +1,10 @@
+# Build context of docker/Dockerfile: the repository root, without what the image builds itself.
+**/node_modules
+**/dist
+**/coverage
+**/*.tsbuildinfo
+**/.env
+.git
+.github
+.changeset
+docs

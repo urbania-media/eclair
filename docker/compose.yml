@@ -1,0 +1,71 @@
+# Eclair on a single server, with PostgreSQL and Redis (see docs/deployment.md). From this directory:
+#
+#   cp .env.example .env    # then fill in the empty values
+#   docker compose up -d
+#   docker compose exec eclair eclair migrate
+#
+# compose.mysql.yml does the same with MySQL. Put a reverse proxy with TLS in front of the API.
+
+name: eclair
+
+services:
+    eclair:
+        image: ghcr.io/urbania-media/eclair:${ECLAIR_VERSION:-latest}
+        build:
+            context: ..
+            dockerfile: docker/Dockerfile
+        command: all
+        restart: unless-stopped
+        env_file: .env
+        environment:
+            DATABASE_URL: postgres://eclair:${DATABASE_PASSWORD:?set DATABASE_PASSWORD in .env}@postgres:5432/eclair
+            REDIS_URL: redis://redis:6379
+        ports:
+            - 127.0.0.1:${ECLAIR_PORT:-8080}:${ECLAIR_PORT:-8080}
+        volumes:
+            - data:/var/lib/eclair
+            - tmp:/tmp/eclair
+        read_only: true
+        cap_drop: [ALL]
+        security_opt: [no-new-privileges:true]
+        # A worker finishes its running tasks when it stops.
+        stop_grace_period: 5m
+        depends_on:
+            postgres:
+                condition: service_healthy
+            redis:
+                condition: service_healthy
+
+    postgres:
+        image: postgres:18
+        restart: unless-stopped
+        environment:
+            POSTGRES_DB: eclair
+            POSTGRES_USER: eclair
+            POSTGRES_PASSWORD: ${DATABASE_PASSWORD:?set DATABASE_PASSWORD in .env}
+        volumes:
+            - postgres:/var/lib/postgresql
+        healthcheck:
+            test: [CMD, pg_isready, --username, eclair, --dbname, eclair]
+            interval: 5s
+            timeout: 5s
+            retries: 30
+
+    redis:
+        image: redis:8
+        restart: unless-stopped
+        # BullMQ needs Redis to keep every key.
+        command: [redis-server, --appendonly, 'yes', --maxmemory-policy, noeviction]
+        volumes:
+            - redis:/data
+        healthcheck:
+            test: [CMD, redis-cli, ping]
+            interval: 5s
+            timeout: 5s
+            retries: 30
+
+volumes:
+    data:
+    tmp:
+    postgres:
+    redis:

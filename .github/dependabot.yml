@@ -1,0 +1,13 @@
+version: 2
+updates:
+    # The Node base image of docker/Dockerfile, pinned by digest.
+    - package-ecosystem: docker
+      directory: /docker
+      schedule:
+          interval: weekly
+
+    # GitHub Actions, some of them pinned to a commit.
+    - package-ecosystem: github-actions
+      directory: /
+      schedule:
+          interval: weekly
