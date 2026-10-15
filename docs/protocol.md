@@ -150,14 +150,14 @@ Stores a file in the temporary storage ([decision 0011](decisions/0011-temporary
 
 ```json
 {
-    "id": "upl_01J…",
+    "id": "upl_01JA2Y9F3K8M2R6T4V7W9X1Z3B",
     "size": 48213904,
     "expiresAt": "2026-10-16T14:00:00Z",
     "metadata": { "kind": "video", "mime": "video/quicktime", "duration": 184.2 }
 }
 ```
 
-`?probe=1` probes the file in the same request and adds `metadata`. The upload id is then used as a job or probe input: `{ "upload": "upl_01J…" }`.
+`?probe=1` probes the file in the same request and adds `metadata`. The upload id is then used as a job or probe input: `{ "upload": "upl_01JA2Y9F3K8M2R6T4V7W9X1Z3B" }`.
 
 - `GET /v1/uploads/{id}` and `DELETE /v1/uploads/{id}`.
 

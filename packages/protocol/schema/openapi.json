@@ -22,6 +22,14 @@
             "description": "Run a pipeline of operations on one input."
         },
         {
+            "name": "Probe",
+            "description": "Read a file's metadata in the response."
+        },
+        {
+            "name": "Uploads",
+            "description": "Send files to Eclair's temporary storage."
+        },
+        {
             "name": "Presets",
             "description": "Named pipelines, global or of the project."
         },
@@ -337,6 +345,482 @@
                 }
             }
         },
+        "/v1/jobs/{id}/files": {
+            "parameters": [
+                {
+                    "$ref": "#/components/parameters/JobId"
+                }
+            ],
+            "get": {
+                "operationId": "listJobFiles",
+                "tags": ["Jobs"],
+                "summary": "List a job's files",
+                "description": "Every file of the job, parts included (HLS segments, thumbnail series), with fresh signed URLs for files in the temporary storage.",
+                "security": [
+                    {
+                        "apiKey": ["jobs:read"]
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "task",
+                        "in": "query",
+                        "description": "Only the files of this task.",
+                        "schema": {
+                            "$ref": "#/components/schemas/TaskName"
+                        }
+                    },
+                    {
+                        "$ref": "#/components/parameters/Cursor"
+                    },
+                    {
+                        "$ref": "#/components/parameters/Limit"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "A page of files.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/JobFileList"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthorized"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/Forbidden"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFound"
+                    }
+                }
+            }
+        },
+        "/v1/probe": {
+            "post": {
+                "operationId": "probe",
+                "tags": ["Probe"],
+                "summary": "Probe a file",
+                "description": "Returns the file's metadata in the response, as the `probe` operation does. The input is a URL, a storage path or an upload (JSON body), or the file itself. The file, as `multipart/form-data` (a `file` part) or as the raw body with its `Content-Type`. With a file body, `timeout` and `checksum` are query parameters.",
+                "security": [
+                    {
+                        "apiKey": ["jobs:write"]
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "timeout",
+                        "in": "query",
+                        "description": "With a file body: seconds to wait before answering `202`.",
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 30,
+                            "default": 10
+                        }
+                    },
+                    {
+                        "name": "checksum",
+                        "in": "query",
+                        "description": "With a file body: add a SHA-256 of the whole file.",
+                        "schema": {
+                            "type": "boolean",
+                            "default": false
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ProbeRequest"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "type": "object",
+                                "required": ["file"],
+                                "properties": {
+                                    "file": {
+                                        "type": "string",
+                                        "contentMediaType": "application/octet-stream"
+                                    }
+                                }
+                            }
+                        },
+                        "*/*": {
+                            "schema": {
+                                "type": "string",
+                                "contentMediaType": "application/octet-stream"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "The metadata.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProbeResult"
+                                }
+                            }
+                        }
+                    },
+                    "202": {
+                        "description": "The probe takes longer than `timeout`. Follow the job: its `probe` task gives the metadata, and its webhook is sent when it ends.",
+                        "headers": {
+                            "Location": {
+                                "description": "URL of the job.",
+                                "schema": {
+                                    "type": "string",
+                                    "format": "uri-reference"
+                                }
+                            }
+                        },
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Job"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthorized"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/Forbidden"
+                    },
+                    "413": {
+                        "$ref": "#/components/responses/PayloadTooLarge"
+                    },
+                    "422": {
+                        "description": "The request is invalid, the file can't be read, or its type isn't supported.",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Problem"
+                                }
+                            }
+                        }
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/TooManyRequests"
+                    }
+                }
+            }
+        },
+        "/v1/uploads": {
+            "post": {
+                "operationId": "createUpload",
+                "tags": ["Uploads"],
+                "summary": "Upload a file",
+                "description": "Stores a file in the temporary storage, until it expires. The file, as `multipart/form-data` (a `file` part) or as the raw body with its `Content-Type`.\n\nLarger files use a resumable upload, following the tus protocol 1.0 (core, creation and termination): send this request with `Tus-Resumable` and `Upload-Length` and no body, then `PATCH` the chunks to the `Location` it returns.",
+                "security": [
+                    {
+                        "apiKey": ["jobs:write"]
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "probe",
+                        "in": "query",
+                        "description": "Probe the file in the same request and add `metadata` to the upload. Not for resumable uploads.",
+                        "schema": {
+                            "type": "boolean",
+                            "default": false
+                        }
+                    },
+                    {
+                        "name": "Tus-Resumable",
+                        "in": "header",
+                        "description": "For a resumable upload: the tus protocol version.",
+                        "schema": {
+                            "type": "string",
+                            "const": "1.0.0"
+                        }
+                    },
+                    {
+                        "name": "Upload-Length",
+                        "in": "header",
+                        "description": "For a resumable upload: the file's size in bytes.",
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 0
+                        }
+                    },
+                    {
+                        "name": "Upload-Metadata",
+                        "in": "header",
+                        "description": "For a resumable upload: tus metadata (`filename`, `filetype`), base64-encoded. Hints only.",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "description": "The file, except for a resumable upload.",
+                    "content": {
+                        "multipart/form-data": {
+                            "schema": {
+                                "type": "object",
+                                "required": ["file"],
+                                "properties": {
+                                    "file": {
+                                        "type": "string",
+                                        "contentMediaType": "application/octet-stream"
+                                    }
+                                }
+                            }
+                        },
+                        "*/*": {
+                            "schema": {
+                                "type": "string",
+                                "contentMediaType": "application/octet-stream"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "The upload is created. For a direct upload, the body is the upload. For a resumable upload, the body is empty and `Location` is where to send the chunks.",
+                        "headers": {
+                            "Location": {
+                                "description": "URL of the upload.",
+                                "schema": {
+                                    "type": "string",
+                                    "format": "uri-reference"
+                                }
+                            },
+                            "Tus-Resumable": {
+                                "description": "For a resumable upload.",
+                                "schema": {
+                                    "type": "string"
+                                }
+                            }
+                        },
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Upload"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthorized"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/Forbidden"
+                    },
+                    "413": {
+                        "$ref": "#/components/responses/PayloadTooLarge"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/Invalid"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/TooManyRequests"
+                    }
+                }
+            }
+        },
+        "/v1/uploads/{id}": {
+            "parameters": [
+                {
+                    "$ref": "#/components/parameters/UploadId"
+                }
+            ],
+            "get": {
+                "operationId": "getUpload",
+                "tags": ["Uploads"],
+                "summary": "Show an upload",
+                "security": [
+                    {
+                        "apiKey": ["jobs:read"]
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The upload.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Upload"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthorized"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/Forbidden"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFound"
+                    }
+                }
+            },
+            "head": {
+                "operationId": "getUploadOffset",
+                "tags": ["Uploads"],
+                "summary": "Resume an upload (tus)",
+                "description": "Returns how many bytes of a resumable upload were received, in `Upload-Offset`.",
+                "security": [
+                    {
+                        "apiKey": ["jobs:write"]
+                    }
+                ],
+                "parameters": [
+                    {
+                        "$ref": "#/components/parameters/TusResumable"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The upload's progress.",
+                        "headers": {
+                            "Upload-Offset": {
+                                "schema": {
+                                    "type": "integer",
+                                    "minimum": 0
+                                }
+                            },
+                            "Upload-Length": {
+                                "schema": {
+                                    "type": "integer",
+                                    "minimum": 0
+                                }
+                            },
+                            "Tus-Resumable": {
+                                "schema": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthorized"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/Forbidden"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFound"
+                    }
+                }
+            },
+            "patch": {
+                "operationId": "appendUpload",
+                "tags": ["Uploads"],
+                "summary": "Send a chunk (tus)",
+                "description": "Appends a chunk to a resumable upload, at `Upload-Offset`. The last chunk completes the upload: its file type is then detected.",
+                "security": [
+                    {
+                        "apiKey": ["jobs:write"]
+                    }
+                ],
+                "parameters": [
+                    {
+                        "$ref": "#/components/parameters/TusResumable"
+                    },
+                    {
+                        "name": "Upload-Offset",
+                        "in": "header",
+                        "required": true,
+                        "description": "Bytes received so far, as returned by `HEAD`.",
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 0
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/offset+octet-stream": {
+                            "schema": {
+                                "type": "string",
+                                "contentMediaType": "application/octet-stream"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "204": {
+                        "description": "The chunk is stored.",
+                        "headers": {
+                            "Upload-Offset": {
+                                "description": "Bytes received so far.",
+                                "schema": {
+                                    "type": "integer",
+                                    "minimum": 0
+                                }
+                            },
+                            "Tus-Resumable": {
+                                "schema": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthorized"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/Forbidden"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFound"
+                    },
+                    "409": {
+                        "description": "`Upload-Offset` doesn't match the bytes received.",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Problem"
+                                }
+                            }
+                        }
+                    },
+                    "413": {
+                        "$ref": "#/components/responses/PayloadTooLarge"
+                    }
+                }
+            },
+            "delete": {
+                "operationId": "deleteUpload",
+                "tags": ["Uploads"],
+                "summary": "Delete an upload",
+                "description": "Deletes the file now instead of when it expires. Jobs that already read it are not affected. Also the tus termination extension.",
+                "security": [
+                    {
+                        "apiKey": ["jobs:write"]
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "The upload was deleted."
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthorized"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/Forbidden"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFound"
+                    }
+                }
+            }
+        },
         "/v1/presets": {
             "get": {
                 "operationId": "listPresets",
@@ -639,7 +1123,7 @@
             "apiKey": {
                 "type": "http",
                 "scheme": "bearer",
-                "description": "A project's API key: `Authorization: Bearer <key>`. Keys have scopes: `jobs:read`, `jobs:write`, `presets:write`."
+                "description": "A project's API key: `Authorization: Bearer <key>`. Keys have scopes: `jobs:read`, `jobs:write` (also for probes and uploads), `presets:write`."
             }
         },
         "parameters": {
@@ -742,6 +1226,24 @@
                 "description": "`t=<unix time>,v1=<hex>`: the HMAC-SHA256 of `{t}.{path}.{sha256 of the body}` with the project's webhook secret. Refuse timestamps older than five minutes.",
                 "schema": {
                     "$ref": "#/components/schemas/Signature"
+                }
+            },
+            "UploadId": {
+                "name": "id",
+                "in": "path",
+                "required": true,
+                "schema": {
+                    "$ref": "#/components/schemas/UploadId"
+                }
+            },
+            "TusResumable": {
+                "name": "Tus-Resumable",
+                "in": "header",
+                "required": true,
+                "description": "tus protocol version.",
+                "schema": {
+                    "type": "string",
+                    "const": "1.0.0"
                 }
             }
         },
@@ -852,6 +1354,16 @@
             },
             "WebhookReceived": {
                 "description": "Received. Any other answer is retried."
+            },
+            "PayloadTooLarge": {
+                "description": "The file is larger than the project's limit for direct uploads. Use a resumable upload, or a URL or storage input.",
+                "content": {
+                    "application/problem+json": {
+                        "schema": {
+                            "$ref": "#/components/schemas/Problem"
+                        }
+                    }
+                }
             }
         },
         "schemas": {
@@ -881,7 +1393,7 @@
                 "examples": ["web-video", "mediatheque/video"]
             },
             "StorageName": {
-                "description": "Name of one of the project's storages.",
+                "description": "Name of one of the project's storages. `eclair` is Eclair's temporary storage, available to every project.",
                 "type": "string",
                 "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
                 "examples": ["media"]
@@ -939,13 +1451,16 @@
                 }
             },
             "Input": {
-                "description": "The file to process: a URL, or a path in one of the project's storages.",
+                "description": "The file to process: a URL, a path in one of the project's storages, or an upload.",
                 "oneOf": [
                     {
                         "$ref": "#/components/schemas/UrlInput"
                     },
                     {
                         "$ref": "#/components/schemas/StorageInput"
+                    },
+                    {
+                        "$ref": "#/components/schemas/UploadInput"
                     }
                 ]
             },
@@ -1201,6 +1716,20 @@
                         "description": "For files with many parts (HLS segments, a thumbnail series): how many parts are not listed.",
                         "type": "integer",
                         "minimum": 0
+                    },
+                    "url": {
+                        "description": "Signed download URL, for files in the temporary storage (`eclair`). Not for end users: it expires with the file.",
+                        "type": "string",
+                        "format": "uri"
+                    },
+                    "expiresAt": {
+                        "description": "When a file in the temporary storage is deleted.",
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "expired": {
+                        "description": "`true` once a file in the temporary storage was deleted. It then has no `url`.",
+                        "type": "boolean"
                     }
                 }
             },
@@ -1208,7 +1737,7 @@
                 "type": "object",
                 "properties": {
                     "metadata": {
-                        "description": "Data extracted by the task. Its shape depends on the operation.",
+                        "description": "Data extracted by the task. Its shape depends on the operation: `probe` gives a `ProbeMetadata`.",
                         "type": "object"
                     },
                     "files": {
@@ -1538,6 +2067,210 @@
                                 "type": "string"
                             }
                         }
+                    }
+                }
+            },
+            "UploadId": {
+                "description": "Prefixed ULID.",
+                "type": "string",
+                "pattern": "^upl_[0-9A-HJKMNP-TV-Z]{26}$",
+                "examples": ["upl_01JA2Y9F3K8M2R6T4V7W9X1Z3B"]
+            },
+            "UploadInput": {
+                "type": "object",
+                "required": ["upload"],
+                "additionalProperties": false,
+                "properties": {
+                    "upload": {
+                        "$ref": "#/components/schemas/UploadId",
+                        "description": "A file sent with `POST /v1/uploads`."
+                    },
+                    "mime": {
+                        "$ref": "#/components/schemas/MimeHint"
+                    },
+                    "size": {
+                        "$ref": "#/components/schemas/SizeHint"
+                    }
+                }
+            },
+            "JobFile": {
+                "description": "A file of a job, with the task that wrote it.",
+                "allOf": [
+                    {
+                        "$ref": "#/components/schemas/OutputFile"
+                    },
+                    {
+                        "type": "object",
+                        "required": ["task"],
+                        "properties": {
+                            "task": {
+                                "$ref": "#/components/schemas/TaskName"
+                            }
+                        }
+                    }
+                ]
+            },
+            "JobFileList": {
+                "type": "object",
+                "required": ["data", "nextCursor"],
+                "properties": {
+                    "data": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/JobFile"
+                        }
+                    },
+                    "nextCursor": {
+                        "$ref": "#/components/schemas/NextCursor"
+                    }
+                }
+            },
+            "ProbeMetadata": {
+                "description": "What `probe` reads from a file. Only what applies to the file's kind is present.",
+                "type": "object",
+                "required": ["kind", "mime"],
+                "properties": {
+                    "kind": {
+                        "$ref": "#/components/schemas/Kind"
+                    },
+                    "mime": {
+                        "description": "Detected from the content.",
+                        "type": "string"
+                    },
+                    "extension": {
+                        "description": "Usual extension for the mime type, without the dot.",
+                        "type": "string"
+                    },
+                    "size": {
+                        "description": "Bytes.",
+                        "type": "integer",
+                        "minimum": 0
+                    },
+                    "checksum": {
+                        "description": "SHA-256 of the whole file, in hex, when asked for.",
+                        "type": "string",
+                        "pattern": "^[0-9a-f]{64}$"
+                    },
+                    "width": {
+                        "type": "integer",
+                        "minimum": 0
+                    },
+                    "height": {
+                        "type": "integer",
+                        "minimum": 0
+                    },
+                    "rotation": {
+                        "description": "Degrees, clockwise.",
+                        "type": "integer",
+                        "enum": [0, 90, 180, 270]
+                    },
+                    "duration": {
+                        "description": "Seconds.",
+                        "type": "number",
+                        "minimum": 0
+                    },
+                    "frameRate": {
+                        "type": "number",
+                        "minimum": 0
+                    },
+                    "bitrate": {
+                        "description": "Bits per second.",
+                        "type": "integer",
+                        "minimum": 0
+                    },
+                    "videoCodec": {
+                        "type": "string",
+                        "examples": ["h264", "hevc", "vp9"]
+                    },
+                    "audioCodec": {
+                        "type": "string",
+                        "examples": ["aac", "opus", "mp3"]
+                    },
+                    "audioChannels": {
+                        "type": "integer",
+                        "minimum": 0
+                    },
+                    "pageCount": {
+                        "type": "integer",
+                        "minimum": 0
+                    },
+                    "fontNames": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "animated": {
+                        "type": "boolean"
+                    },
+                    "exif": {
+                        "description": "A summary of the EXIF data. GPS data is never included.",
+                        "type": "object"
+                    }
+                }
+            },
+            "ProbeRequest": {
+                "type": "object",
+                "required": ["input"],
+                "additionalProperties": false,
+                "properties": {
+                    "input": {
+                        "$ref": "#/components/schemas/Input"
+                    },
+                    "timeout": {
+                        "description": "Seconds to wait for the result before answering `202` with a job.",
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 30,
+                        "default": 10
+                    },
+                    "checksum": {
+                        "description": "Add a SHA-256 of the whole file. It reads all of it, so it can take longer.",
+                        "type": "boolean",
+                        "default": false
+                    }
+                }
+            },
+            "ProbeResult": {
+                "type": "object",
+                "required": ["metadata"],
+                "properties": {
+                    "metadata": {
+                        "$ref": "#/components/schemas/ProbeMetadata"
+                    }
+                }
+            },
+            "Upload": {
+                "type": "object",
+                "required": ["id", "size", "expiresAt"],
+                "properties": {
+                    "id": {
+                        "$ref": "#/components/schemas/UploadId"
+                    },
+                    "size": {
+                        "description": "Bytes.",
+                        "type": "integer",
+                        "minimum": 0
+                    },
+                    "mime": {
+                        "description": "Detected from the content, once the upload is complete.",
+                        "type": "string"
+                    },
+                    "complete": {
+                        "description": "`false` while a resumable upload is in progress.",
+                        "type": "boolean"
+                    },
+                    "createdAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "expiresAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "metadata": {
+                        "$ref": "#/components/schemas/ProbeMetadata",
+                        "description": "With `?probe=1`."
                     }
                 }
             }

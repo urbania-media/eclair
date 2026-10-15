@@ -42,7 +42,7 @@
             ]
         },
         "StorageName": {
-            "description": "Name of one of the project's storages.",
+            "description": "Name of one of the project's storages. `eclair` is Eclair's temporary storage, available to every project.",
             "type": "string",
             "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
             "examples": [
@@ -118,13 +118,16 @@
             }
         },
         "Input": {
-            "description": "The file to process: a URL, or a path in one of the project's storages.",
+            "description": "The file to process: a URL, a path in one of the project's storages, or an upload.",
             "oneOf": [
                 {
                     "$ref": "#/$defs/UrlInput"
                 },
                 {
                     "$ref": "#/$defs/StorageInput"
+                },
+                {
+                    "$ref": "#/$defs/UploadInput"
                 }
             ]
         },
@@ -404,6 +407,20 @@
                     "description": "For files with many parts (HLS segments, a thumbnail series): how many parts are not listed.",
                     "type": "integer",
                     "minimum": 0
+                },
+                "url": {
+                    "description": "Signed download URL, for files in the temporary storage (`eclair`). Not for end users: it expires with the file.",
+                    "type": "string",
+                    "format": "uri"
+                },
+                "expiresAt": {
+                    "description": "When a file in the temporary storage is deleted.",
+                    "type": "string",
+                    "format": "date-time"
+                },
+                "expired": {
+                    "description": "`true` once a file in the temporary storage was deleted. It then has no `url`.",
+                    "type": "boolean"
                 }
             }
         },
@@ -411,7 +428,7 @@
             "type": "object",
             "properties": {
                 "metadata": {
-                    "description": "Data extracted by the task. Its shape depends on the operation.",
+                    "description": "Data extracted by the task. Its shape depends on the operation: `probe` gives a `ProbeMetadata`.",
                     "type": "object"
                 },
                 "files": {
@@ -804,6 +821,243 @@
                             "type": "string"
                         }
                     }
+                }
+            }
+        },
+        "UploadId": {
+            "description": "Prefixed ULID.",
+            "type": "string",
+            "pattern": "^upl_[0-9A-HJKMNP-TV-Z]{26}$",
+            "examples": [
+                "upl_01JA2Y9F3K8M2R6T4V7W9X1Z3B"
+            ]
+        },
+        "UploadInput": {
+            "type": "object",
+            "required": [
+                "upload"
+            ],
+            "additionalProperties": false,
+            "properties": {
+                "upload": {
+                    "$ref": "#/$defs/UploadId",
+                    "description": "A file sent with `POST /v1/uploads`."
+                },
+                "mime": {
+                    "$ref": "#/$defs/MimeHint"
+                },
+                "size": {
+                    "$ref": "#/$defs/SizeHint"
+                }
+            }
+        },
+        "JobFile": {
+            "description": "A file of a job, with the task that wrote it.",
+            "allOf": [
+                {
+                    "$ref": "#/$defs/OutputFile"
+                },
+                {
+                    "type": "object",
+                    "required": [
+                        "task"
+                    ],
+                    "properties": {
+                        "task": {
+                            "$ref": "#/$defs/TaskName"
+                        }
+                    }
+                }
+            ]
+        },
+        "JobFileList": {
+            "type": "object",
+            "required": [
+                "data",
+                "nextCursor"
+            ],
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/$defs/JobFile"
+                    }
+                },
+                "nextCursor": {
+                    "$ref": "#/$defs/NextCursor"
+                }
+            }
+        },
+        "ProbeMetadata": {
+            "description": "What `probe` reads from a file. Only what applies to the file's kind is present.",
+            "type": "object",
+            "required": [
+                "kind",
+                "mime"
+            ],
+            "properties": {
+                "kind": {
+                    "$ref": "#/$defs/Kind"
+                },
+                "mime": {
+                    "description": "Detected from the content.",
+                    "type": "string"
+                },
+                "extension": {
+                    "description": "Usual extension for the mime type, without the dot.",
+                    "type": "string"
+                },
+                "size": {
+                    "description": "Bytes.",
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "checksum": {
+                    "description": "SHA-256 of the whole file, in hex, when asked for.",
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                },
+                "width": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "height": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "rotation": {
+                    "description": "Degrees, clockwise.",
+                    "type": "integer",
+                    "enum": [
+                        0,
+                        90,
+                        180,
+                        270
+                    ]
+                },
+                "duration": {
+                    "description": "Seconds.",
+                    "type": "number",
+                    "minimum": 0
+                },
+                "frameRate": {
+                    "type": "number",
+                    "minimum": 0
+                },
+                "bitrate": {
+                    "description": "Bits per second.",
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "videoCodec": {
+                    "type": "string",
+                    "examples": [
+                        "h264",
+                        "hevc",
+                        "vp9"
+                    ]
+                },
+                "audioCodec": {
+                    "type": "string",
+                    "examples": [
+                        "aac",
+                        "opus",
+                        "mp3"
+                    ]
+                },
+                "audioChannels": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "pageCount": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "fontNames": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "animated": {
+                    "type": "boolean"
+                },
+                "exif": {
+                    "description": "A summary of the EXIF data. GPS data is never included.",
+                    "type": "object"
+                }
+            }
+        },
+        "ProbeRequest": {
+            "type": "object",
+            "required": [
+                "input"
+            ],
+            "additionalProperties": false,
+            "properties": {
+                "input": {
+                    "$ref": "#/$defs/Input"
+                },
+                "timeout": {
+                    "description": "Seconds to wait for the result before answering `202` with a job.",
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 30,
+                    "default": 10
+                },
+                "checksum": {
+                    "description": "Add a SHA-256 of the whole file. It reads all of it, so it can take longer.",
+                    "type": "boolean",
+                    "default": false
+                }
+            }
+        },
+        "ProbeResult": {
+            "type": "object",
+            "required": [
+                "metadata"
+            ],
+            "properties": {
+                "metadata": {
+                    "$ref": "#/$defs/ProbeMetadata"
+                }
+            }
+        },
+        "Upload": {
+            "type": "object",
+            "required": [
+                "id",
+                "size",
+                "expiresAt"
+            ],
+            "properties": {
+                "id": {
+                    "$ref": "#/$defs/UploadId"
+                },
+                "size": {
+                    "description": "Bytes.",
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "mime": {
+                    "description": "Detected from the content, once the upload is complete.",
+                    "type": "string"
+                },
+                "complete": {
+                    "description": "`false` while a resumable upload is in progress.",
+                    "type": "boolean"
+                },
+                "createdAt": {
+                    "type": "string",
+                    "format": "date-time"
+                },
+                "expiresAt": {
+                    "type": "string",
+                    "format": "date-time"
+                },
+                "metadata": {
+                    "$ref": "#/$defs/ProbeMetadata",
+                    "description": "With `?probe=1`."
                 }
             }
         }

@@ -25,12 +25,14 @@ const job = {
 
 describe('the examples of the docs', () => {
     it('validate in docs/protocol.md', () => {
-        const [jobRequest, taskRequest, jobResponse, ...others] =
+        const [jobRequest, taskRequest, jobResponse, probeRequest, upload, ...others] =
             readJsonExamples('docs/protocol.md');
         expect(others).toEqual([]);
         expect(validate('JobRequest', jobRequest)).toMatchObject({ valid: true });
         expect(validate('TaskRequest', taskRequest)).toMatchObject({ valid: true });
         expect(validate('Job', jobResponse)).toMatchObject({ valid: true });
+        expect(validate('ProbeRequest', probeRequest)).toMatchObject({ valid: true });
+        expect(validate('Upload', upload)).toMatchObject({ valid: true });
     });
 
     it('validate in the README', () => {
@@ -121,6 +123,44 @@ describe('JobRequest', () => {
         const value = structuredClone(job);
         validate('JobRequest', value);
         expect(value).toEqual(job);
+    });
+});
+
+describe('temporary storage', () => {
+    const upload = 'upl_01JA2Y9F3K8M2R6T4V7W9X1Z3B';
+
+    it('takes an upload as input', () => {
+        expect(pointers('JobRequest', { ...job, input: { upload } })).toEqual([]);
+        expect(
+            pointers('JobRequest', { ...job, input: { upload: 'job_01JA2Y8C6W4N5V7TQ3H9XK0B2M' } }),
+        ).not.toEqual([]);
+        expect(pointers('ProbeRequest', { input: { upload }, timeout: 5, checksum: true })).toEqual(
+            [],
+        );
+    });
+
+    it('limits the probe timeout to 30 seconds', () => {
+        expect(pointers('ProbeRequest', { input: { upload }, timeout: 31 })).toContain('/timeout');
+    });
+
+    it('describes signed and expired output files', () => {
+        const file = {
+            name: 'master',
+            path: 'videos/42/hls/master.m3u8',
+            mime: 'application/vnd.apple.mpegurl',
+            size: 512,
+        };
+        expect(
+            pointers('OutputFile', {
+                ...file,
+                url: 'https://eclair.example.com/files/abc?signature=def',
+                expiresAt: '2026-10-16T14:00:00Z',
+            }),
+        ).toEqual([]);
+        expect(
+            pointers('OutputFile', { ...file, expired: true, expiresAt: '2026-10-16T14:00:00Z' }),
+        ).toEqual([]);
+        expect(pointers('JobFile', file)).toContain('/task');
     });
 });
 

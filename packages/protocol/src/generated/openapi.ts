@@ -110,6 +110,101 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/jobs/{id}/files": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["JobId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * List a job's files
+         * @description Every file of the job, parts included (HLS segments, thumbnail series), with fresh signed URLs for files in the temporary storage.
+         */
+        get: operations["listJobFiles"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/probe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Probe a file
+         * @description Returns the file's metadata in the response, as the `probe` operation does. The input is a URL, a storage path or an upload (JSON body), or the file itself. The file, as `multipart/form-data` (a `file` part) or as the raw body with its `Content-Type`. With a file body, `timeout` and `checksum` are query parameters.
+         */
+        post: operations["probe"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/uploads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Upload a file
+         * @description Stores a file in the temporary storage, until it expires. The file, as `multipart/form-data` (a `file` part) or as the raw body with its `Content-Type`.
+         *
+         *     Larger files use a resumable upload, following the tus protocol 1.0 (core, creation and termination): send this request with `Tus-Resumable` and `Upload-Length` and no body, then `PATCH` the chunks to the `Location` it returns.
+         */
+        post: operations["createUpload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/uploads/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["UploadId"];
+            };
+            cookie?: never;
+        };
+        /** Show an upload */
+        get: operations["getUpload"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete an upload
+         * @description Deletes the file now instead of when it expires. Jobs that already read it are not affected. Also the tus termination extension.
+         */
+        delete: operations["deleteUpload"];
+        options?: never;
+        /**
+         * Resume an upload (tus)
+         * @description Returns how many bytes of a resumable upload were received, in `Upload-Offset`.
+         */
+        head: operations["getUploadOffset"];
+        /**
+         * Send a chunk (tus)
+         * @description Appends a chunk to a resumable upload, at `Upload-Offset`. The last chunk completes the upload: its file type is then detected.
+         */
+        patch: operations["appendUpload"];
+        trace?: never;
+    };
     "/v1/presets": {
         parameters: {
             query?: never;
@@ -316,7 +411,7 @@ export interface components {
          */
         PresetName: string;
         /**
-         * @description Name of one of the project's storages.
+         * @description Name of one of the project's storages. `eclair` is Eclair's temporary storage, available to every project.
          * @example media
          */
         StorageName: string;
@@ -344,8 +439,8 @@ export interface components {
             mime?: components["schemas"]["MimeHint"];
             size?: components["schemas"]["SizeHint"];
         };
-        /** @description The file to process: a URL, or a path in one of the project's storages. */
-        Input: components["schemas"]["UrlInput"] | components["schemas"]["StorageInput"];
+        /** @description The file to process: a URL, a path in one of the project's storages, or an upload. */
+        Input: components["schemas"]["UrlInput"] | components["schemas"]["StorageInput"] | components["schemas"]["UploadInput"];
         /** @description Path in a storage, without a leading `/`. */
         StoragePath: string;
         /** @description The mime type the client expects. A hint: Eclair detects the real one from the content. */
@@ -452,9 +547,21 @@ export interface components {
             role?: string;
             /** @description For files with many parts (HLS segments, a thumbnail series): how many parts are not listed. */
             count?: number;
+            /**
+             * Format: uri
+             * @description Signed download URL, for files in the temporary storage (`eclair`). Not for end users: it expires with the file.
+             */
+            url?: string;
+            /**
+             * Format: date-time
+             * @description When a file in the temporary storage is deleted.
+             */
+            expiresAt?: string;
+            /** @description `true` once a file in the temporary storage was deleted. It then has no `url`. */
+            expired?: boolean;
         };
         TaskOutputs: {
-            /** @description Data extracted by the task. Its shape depends on the operation. */
+            /** @description Data extracted by the task. Its shape depends on the operation: `probe` gives a `ProbeMetadata`. */
             metadata?: Record<string, never>;
             files?: components["schemas"]["OutputFile"][];
         };
@@ -586,6 +693,98 @@ export interface components {
                 [key: string]: string[];
             };
         };
+        /**
+         * @description Prefixed ULID.
+         * @example upl_01JA2Y9F3K8M2R6T4V7W9X1Z3B
+         */
+        UploadId: string;
+        UploadInput: {
+            /** @description A file sent with `POST /v1/uploads`. */
+            upload: components["schemas"]["UploadId"];
+            mime?: components["schemas"]["MimeHint"];
+            size?: components["schemas"]["SizeHint"];
+        };
+        /** @description A file of a job, with the task that wrote it. */
+        JobFile: components["schemas"]["OutputFile"] & {
+            task: components["schemas"]["TaskName"];
+        };
+        JobFileList: {
+            data: components["schemas"]["JobFile"][];
+            nextCursor: components["schemas"]["NextCursor"];
+        };
+        /** @description What `probe` reads from a file. Only what applies to the file's kind is present. */
+        ProbeMetadata: {
+            kind: components["schemas"]["Kind"];
+            /** @description Detected from the content. */
+            mime: string;
+            /** @description Usual extension for the mime type, without the dot. */
+            extension?: string;
+            /** @description Bytes. */
+            size?: number;
+            /** @description SHA-256 of the whole file, in hex, when asked for. */
+            checksum?: string;
+            width?: number;
+            height?: number;
+            /**
+             * @description Degrees, clockwise.
+             * @enum {integer}
+             */
+            rotation?: 0 | 90 | 180 | 270;
+            /** @description Seconds. */
+            duration?: number;
+            frameRate?: number;
+            /** @description Bits per second. */
+            bitrate?: number;
+            /**
+             * @example h264
+             * @example hevc
+             * @example vp9
+             */
+            videoCodec?: string;
+            /**
+             * @example aac
+             * @example opus
+             * @example mp3
+             */
+            audioCodec?: string;
+            audioChannels?: number;
+            pageCount?: number;
+            fontNames?: string[];
+            animated?: boolean;
+            /** @description A summary of the EXIF data. GPS data is never included. */
+            exif?: Record<string, never>;
+        };
+        ProbeRequest: {
+            input: components["schemas"]["Input"];
+            /**
+             * @description Seconds to wait for the result before answering `202` with a job.
+             * @default 10
+             */
+            timeout?: number;
+            /**
+             * @description Add a SHA-256 of the whole file. It reads all of it, so it can take longer.
+             * @default false
+             */
+            checksum?: boolean;
+        };
+        ProbeResult: {
+            metadata: components["schemas"]["ProbeMetadata"];
+        };
+        Upload: {
+            id: components["schemas"]["UploadId"];
+            /** @description Bytes. */
+            size: number;
+            /** @description Detected from the content, once the upload is complete. */
+            mime?: string;
+            /** @description `false` while a resumable upload is in progress. */
+            complete?: boolean;
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            expiresAt: string;
+            /** @description With `?probe=1`. */
+            metadata?: components["schemas"]["ProbeMetadata"];
+        };
     };
     responses: {
         /** @description No API key, or an unknown or revoked one. */
@@ -651,6 +850,15 @@ export interface components {
             };
             content?: never;
         };
+        /** @description The file is larger than the project's limit for direct uploads. Use a resumable upload, or a URL or storage input. */
+        PayloadTooLarge: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
     };
     parameters: {
         JobId: components["schemas"]["JobId"];
@@ -673,6 +881,9 @@ export interface components {
         EclairContentSha256: string;
         /** @description `t=<unix time>,v1=<hex>`: the HMAC-SHA256 of `{t}.{path}.{sha256 of the body}` with the project's webhook secret. Refuse timestamps older than five minutes. */
         EclairStorageSignature: components["schemas"]["Signature"];
+        UploadId: components["schemas"]["UploadId"];
+        /** @description tus protocol version. */
+        TusResumable: "1.0.0";
     };
     requestBodies: never;
     headers: never;
@@ -900,6 +1111,264 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    listJobFiles: {
+        parameters: {
+            query?: {
+                /** @description Only the files of this task. */
+                task?: components["schemas"]["TaskName"];
+                /** @description The `nextCursor` of the previous page. */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description Items per page. */
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path: {
+                id: components["parameters"]["JobId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of files. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobFileList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    probe: {
+        parameters: {
+            query?: {
+                /** @description With a file body: seconds to wait before answering `202`. */
+                timeout?: number;
+                /** @description With a file body: add a SHA-256 of the whole file. */
+                checksum?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProbeRequest"];
+                "multipart/form-data": {
+                    file: string;
+                };
+                "*/*": string;
+            };
+        };
+        responses: {
+            /** @description The metadata. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProbeResult"];
+                };
+            };
+            /** @description The probe takes longer than `timeout`. Follow the job: its `probe` task gives the metadata, and its webhook is sent when it ends. */
+            202: {
+                headers: {
+                    /** @description URL of the job. */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Job"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            413: components["responses"]["PayloadTooLarge"];
+            /** @description The request is invalid, the file can't be read, or its type isn't supported. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    createUpload: {
+        parameters: {
+            query?: {
+                /** @description Probe the file in the same request and add `metadata` to the upload. Not for resumable uploads. */
+                probe?: boolean;
+            };
+            header?: {
+                /** @description For a resumable upload: the tus protocol version. */
+                "Tus-Resumable"?: "1.0.0";
+                /** @description For a resumable upload: the file's size in bytes. */
+                "Upload-Length"?: number;
+                /** @description For a resumable upload: tus metadata (`filename`, `filetype`), base64-encoded. Hints only. */
+                "Upload-Metadata"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The file, except for a resumable upload. */
+        requestBody?: {
+            content: {
+                "multipart/form-data": {
+                    file: string;
+                };
+                "*/*": string;
+            };
+        };
+        responses: {
+            /** @description The upload is created. For a direct upload, the body is the upload. For a resumable upload, the body is empty and `Location` is where to send the chunks. */
+            201: {
+                headers: {
+                    /** @description URL of the upload. */
+                    Location?: string;
+                    /** @description For a resumable upload. */
+                    "Tus-Resumable"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Upload"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            413: components["responses"]["PayloadTooLarge"];
+            422: components["responses"]["Invalid"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    getUpload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["UploadId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The upload. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Upload"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteUpload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["UploadId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The upload was deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getUploadOffset: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description tus protocol version. */
+                "Tus-Resumable": components["parameters"]["TusResumable"];
+            };
+            path: {
+                id: components["parameters"]["UploadId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The upload's progress. */
+            200: {
+                headers: {
+                    "Upload-Offset"?: number;
+                    "Upload-Length"?: number;
+                    "Tus-Resumable"?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    appendUpload: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description tus protocol version. */
+                "Tus-Resumable": components["parameters"]["TusResumable"];
+                /** @description Bytes received so far, as returned by `HEAD`. */
+                "Upload-Offset": number;
+            };
+            path: {
+                id: components["parameters"]["UploadId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/offset+octet-stream": string;
+            };
+        };
+        responses: {
+            /** @description The chunk is stored. */
+            204: {
+                headers: {
+                    /** @description Bytes received so far. */
+                    "Upload-Offset"?: number;
+                    "Tus-Resumable"?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description `Upload-Offset` doesn't match the bytes received. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            413: components["responses"]["PayloadTooLarge"];
         };
     };
     listPresets: {
