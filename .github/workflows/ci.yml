@@ -1,0 +1,103 @@
+name: CI
+
+on:
+    push:
+        branches: [main]
+    pull_request:
+        branches: [main]
+
+concurrency:
+    group: ${{ github.workflow }}-${{ github.ref }}
+    cancel-in-progress: true
+
+permissions:
+    contents: read
+
+jobs:
+    checks:
+        name: Format, lint, typecheck and build
+        runs-on: ubuntu-24.04
+        steps:
+            - uses: actions/checkout@v5
+              with:
+                  fetch-depth: 0
+
+            - uses: actions/setup-node@v5
+              with:
+                  node-version-file: .nvmrc
+                  cache: npm
+
+            - name: Install dependencies
+              run: npm ci
+
+            - name: Check formatting
+              run: npm run format:check
+
+            - name: Lint
+              run: npm run lint
+
+            - name: Typecheck
+              run: npm run typecheck
+
+            - name: Build
+              run: npm run build
+
+            - name: Check for a changeset
+              if: github.event_name == 'pull_request'
+              run: npx changeset status --since=origin/${{ github.base_ref }}
+
+    test:
+        name: Test on ${{ matrix.database.name }}
+        runs-on: ubuntu-24.04
+        strategy:
+            fail-fast: false
+            matrix:
+                # The oldest supported version of each database (see decision 0007).
+                database:
+                    - name: MySQL 8.4
+                      dialect: mysql
+                      image: mysql:8.4
+                      port: 3306
+                      url: mysql://eclair:eclair@127.0.0.1:3306/eclair
+                      health: mysqladmin ping --host 127.0.0.1 --user eclair --password=eclair
+                    - name: PostgreSQL 15
+                      dialect: postgres
+                      image: postgres:15
+                      port: 5432
+                      url: postgres://eclair:eclair@127.0.0.1:5432/eclair
+                      health: pg_isready --host 127.0.0.1 --username eclair --dbname eclair
+        services:
+            database:
+                image: ${{ matrix.database.image }}
+                # Each image ignores the other's variables.
+                env:
+                    MYSQL_DATABASE: eclair
+                    MYSQL_USER: eclair
+                    MYSQL_PASSWORD: eclair
+                    MYSQL_ROOT_PASSWORD: root
+                    POSTGRES_DB: eclair
+                    POSTGRES_USER: eclair
+                    POSTGRES_PASSWORD: eclair
+                ports:
+                    - ${{ matrix.database.port }}:${{ matrix.database.port }}
+                options: >-
+                    --health-cmd "${{ matrix.database.health }}"
+                    --health-interval 5s
+                    --health-timeout 5s
+                    --health-retries 30
+        env:
+            DATABASE_URL: ${{ matrix.database.url }}
+            ECLAIR_TEST_DIALECT: ${{ matrix.database.dialect }}
+        steps:
+            - uses: actions/checkout@v5
+
+            - uses: actions/setup-node@v5
+              with:
+                  node-version-file: .nvmrc
+                  cache: npm
+
+            - name: Install dependencies
+              run: npm ci
+
+            - name: Test
+              run: npm test
