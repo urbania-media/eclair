@@ -205,17 +205,13 @@ check '/var/lib/eclair (data volume) is writable' writable /var/lib/eclair
 for directory in / /app /app/node_modules /etc/ImageMagick-7 /tmp /var/tmp /usr/local/bin; do
     refuse "$directory is read-only" writable "$directory"
 done
-if command -v eclair >/dev/null 2>&1; then
-    check 'the entry point runs the eclair CLI' eclair-entrypoint eclair --help
-else
-    eclair-entrypoint api >"$work/output" 2>&1
-    status=$?
-    if [ "$status" = 69 ] && grep -q 'no eclair CLI yet' "$work/output"; then
-        pass 'the entry point explains that the server is missing'
-    else
-        fail "the entry point exits with $status without the server"
-    fi
-fi
+check 'the eclair CLI is on PATH' command -v eclair
+check 'the entry point runs the eclair CLI' eclair-entrypoint eclair --help
+check 'eclair --version runs' eclair --version
+# The doctor fails without a database and Redis, but it must find every binary of the image.
+eclair doctor >"$work/doctor" 2>&1
+check 'eclair doctor runs' grep -Eq '^ok +configuration' "$work/doctor"
+refuse 'eclair doctor finds every binary' grep -Eq '^warn +[a-z-]+: (not found|doesn.t run)' "$work/doctor"
 
 printf '| Binary | Version |\n| --- | --- |\n'
 cat "$work/versions.md"
