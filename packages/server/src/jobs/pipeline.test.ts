@@ -5,7 +5,7 @@ import { findCycle, mergeTasks, parseSource, resolvePipeline } from './pipeline.
 import { testRegistry } from './testing.ts';
 
 const registry = testRegistry();
-const settings = { concurrency: 4, maxDirectUpload: 1, probesPerMinute: 1 };
+const settings = { concurrency: 4, maxDirectUpload: 1, probesPerMinute: 1, taskWebhooks: false };
 
 function errorsOf(run: () => unknown): Record<string, string[]> {
     try {

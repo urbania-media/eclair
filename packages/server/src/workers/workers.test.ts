@@ -262,6 +262,8 @@ describe.skipIf(!RUNS_WITH_REDIS)('workers', () => {
             mime: 'text/plain',
             checksum: expect.stringMatching(/^[0-9a-f]{64}$/),
             expiresAt: expect.any(String),
+            // A local temporary storage: a signed link on ECLAIR_PUBLIC_URL.
+            url: expect.stringMatching(/^https:\/\/eclair\.test\/v1\/files\/[\w-]+\.[\w-]+$/),
         });
 
         const stored = join(services.temporaryRoot, project.id, 'out', 'shout', 'shout.txt');

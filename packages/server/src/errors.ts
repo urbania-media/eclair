@@ -13,3 +13,14 @@ export class ConflictError extends Error {
         this.name = 'ConflictError';
     }
 }
+
+/** A project reached one of its limits. The client can try again after `retryAfter` seconds. */
+export class RateLimitedError extends Error {
+    readonly retryAfter: number;
+
+    constructor(message: string, retryAfter: number) {
+        super(message);
+        this.name = 'RateLimitedError';
+        this.retryAfter = retryAfter;
+    }
+}

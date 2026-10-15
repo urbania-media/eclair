@@ -58,6 +58,11 @@ export async function createTestServices(
         },
         operations: options.operations,
         queues,
+        redis,
+        publicUrl: 'https://eclair.test',
+        // Webhooks go to local receivers in tests, and retry fast.
+        guard: { allowHttp: true, allowPrivateAddresses: true },
+        webhookBackoff: () => 50,
     });
     return {
         ...services,
@@ -65,6 +70,8 @@ export async function createTestServices(
         temporaryRoot,
         redis,
         async close() {
+            await services.webhooks?.close();
+            await services.events?.close();
             await queues?.close();
             redis?.disconnect();
             await database.close();

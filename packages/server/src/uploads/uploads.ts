@@ -312,6 +312,21 @@ export class Uploads {
         return upload.received;
     }
 
+    /** Records what `probe` read from an upload. */
+    async setMetadata(
+        projectId: string,
+        id: string,
+        metadata: ProbeMetadata,
+    ): Promise<UploadRecord> {
+        await this.#database.kysely
+            .updateTable('uploads')
+            .set({ metadata: toJson(metadata), updated_at: new Date() })
+            .where('project_id', '=', projectId)
+            .where('id', '=', id)
+            .execute();
+        return this.get(projectId, id);
+    }
+
     /** Deletes an upload and its files. */
     async delete(projectId: string, id: string): Promise<void> {
         const upload = await this.get(projectId, id);

@@ -8,10 +8,13 @@ import { join } from 'node:path';
 import type { Readable } from 'node:stream';
 import { finished } from 'node:stream/promises';
 
-import type { Upload } from '@eclair-js/protocol';
+import { toProblemErrors, validate } from '@eclair-js/protocol';
+import type { Input, ProbeResult, Upload } from '@eclair-js/protocol';
 
+import type { Project } from '../../projects/projects.ts';
 import type { Services } from '../../services.ts';
 import { toUploadResponse } from '../../uploads/uploads.ts';
+import type { UploadRecord } from '../../uploads/uploads.ts';
 import { authOf } from '../auth.ts';
 import { HttpProblem, problems } from '../problem.ts';
 
@@ -76,6 +79,45 @@ function integerHeader(request: FastifyRequest, name: string): number | undefine
     return Number(value);
 }
 
+function flag(value: unknown): boolean {
+    return value === 'true' || value === '1';
+}
+
+/** The `timeout` of a probe, from 1 to 30 seconds, 10 by default. */
+function probeTimeout(value: unknown): number {
+    if (value === undefined) {
+        return 10;
+    }
+    const timeout = Number(value);
+    if (!Number.isInteger(timeout) || timeout < 1 || timeout > 30) {
+        throw problems.invalid(
+            { '?timeout': ['must be an integer from 1 to 30'] },
+            'The query is invalid.',
+        );
+    }
+    return timeout;
+}
+
+/** Reads a small JSON body, without a parser in this scope. */
+async function readJsonBody(stream: Readable, maxSize = 64 * 1024): Promise<unknown> {
+    const chunks: Buffer[] = [];
+    let size = 0;
+    for await (const chunk of stream as AsyncIterable<Buffer>) {
+        size += chunk.length;
+        if (size > maxSize) {
+            throw new HttpProblem(413, 'Content Too Large', {
+                detail: `A JSON body is at most ${maxSize} bytes.`,
+            });
+        }
+        chunks.push(chunk);
+    }
+    try {
+        return JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown;
+    } catch {
+        throw new HttpProblem(400, 'Bad Request', { detail: 'The body is not valid JSON.' });
+    }
+}
+
 function uploadIdOf(params: unknown): string {
     return (params as { id: string }).id;
 }
@@ -88,28 +130,108 @@ export async function uploadRoutes(
     app: FastifyInstance,
     options: { services: Services },
 ): Promise<void> {
-    const { uploads, limits } = options.services;
+    const { uploads, limits, probes } = options.services;
 
     // In this scope, bodies stay streams: an upload of a JSON file is still a file.
     app.removeAllContentTypeParsers();
     app.addContentTypeParser('*', (_request, _payload, done) => done(null));
     await app.register(multipart, { limits: { files: 1, fields: 10 } });
 
+    /** Stores the file of a raw or multipart body as an upload of the project. */
+    const storeBody = async (request: FastifyRequest, project: Project): Promise<UploadRecord> => {
+        const maxSize = project.settings.maxDirectUpload;
+        const declared = integerHeader(request, 'content-length');
+        if (declared !== undefined && !request.isMultipart() && declared > maxSize) {
+            throw tooLarge(maxSize);
+        }
+        let stream: Readable = request.raw;
+        if (request.isMultipart()) {
+            const file = await request.file();
+            if (file === undefined) {
+                throw problems.invalid({ '': ['the multipart body has no file'] });
+            }
+            stream = file.file;
+        }
+        const spooled = await spool(stream, limits.tmpDir, maxSize);
+        try {
+            if (spooled.size === 0) {
+                throw problems.invalid({ '': ['the file is empty'] });
+            }
+            return await uploads.createFromFile(
+                project,
+                spooled.path,
+                spooled.size,
+                spooled.sha256,
+            );
+        } finally {
+            await rm(spooled.path, { force: true });
+        }
+    };
+
+    /** Runs a synchronous probe, or explains why it can't. */
+    const runProbe = (
+        project: Project,
+        input: Input,
+        options: { timeout: number; checksum: boolean },
+    ) => {
+        if (probes === undefined) {
+            throw new HttpProblem(503, 'Service Unavailable', {
+                detail: 'This server has no job queue.',
+            });
+        }
+        return probes.probe(project, input, options);
+    };
+
+    // POST /v1/probe: metadata in the response (decision 0012).
+    app.post('/probe', { config: { scope: 'jobs:write' } }, async (request, reply) => {
+        const { project } = authOf(request);
+        const query = request.query as Record<string, unknown>;
+        let input: Input;
+        let timeout: number;
+        let checksum: boolean;
+        if (request.headers['content-type']?.split(';')[0]?.trim() === 'application/json') {
+            const result = validate('ProbeRequest', await readJsonBody(request.raw));
+            if (!result.valid) {
+                throw problems.invalid(
+                    toProblemErrors(result.errors),
+                    'The request body is invalid.',
+                );
+            }
+            input = result.value.input;
+            timeout = result.value.timeout ?? 10;
+            checksum = result.value.checksum ?? false;
+        } else {
+            timeout = probeTimeout(query['timeout']);
+            checksum = flag(query['checksum']);
+            input = { upload: (await storeBody(request, project)).id };
+        }
+
+        const outcome = await runProbe(project, input, { timeout, checksum });
+        if (outcome.status === 'completed') {
+            return reply.code(200).send({ metadata: outcome.metadata } satisfies ProbeResult);
+        }
+        if (outcome.status === 'failed') {
+            throw problems.invalid({ '': [outcome.error.message] }, outcome.error.message);
+        }
+        return reply.code(202).header('location', `/v1/jobs/${outcome.job.id}`).send(outcome.job);
+    });
+
     app.post(
         '/uploads',
         { config: { scope: 'jobs:write' } },
         async (request, reply): Promise<Upload> => {
             const { project } = authOf(request);
-            const query = request.query as { probe?: string };
-            if (query.probe === 'true' || query.probe === '1') {
-                throw problems.invalid(
-                    { '': ['?probe=1 is not available yet'] },
-                    'Probing an upload comes with the synchronous probe. Probe the upload with a job meanwhile.',
-                );
-            }
+            const query = request.query as Record<string, unknown>;
+            const probe = flag(query['probe']);
 
             const tus = request.headers['tus-resumable'];
             if (tus !== undefined) {
+                if (probe) {
+                    throw problems.invalid(
+                        { '?probe': ['is not for resumable uploads'] },
+                        'Probe a resumable upload once it is complete, with POST /v1/probe.',
+                    );
+                }
                 if (tus !== TUS_VERSION) {
                     throw problems.invalid({ '': [`Tus-Resumable must be ${TUS_VERSION}`] });
                 }
@@ -132,37 +254,21 @@ export async function uploadRoutes(
                     .send(toUploadResponse(upload));
             }
 
-            const maxSize = project.settings.maxDirectUpload;
-            const declared = integerHeader(request, 'content-length');
-            if (declared !== undefined && request.isMultipart() === false && declared > maxSize) {
-                throw tooLarge(maxSize);
-            }
-            let stream: Readable = request.raw;
-            if (request.isMultipart()) {
-                const file = await request.file();
-                if (file === undefined) {
-                    throw problems.invalid({ '': ['the multipart body has no file'] });
-                }
-                stream = file.file;
-            }
-            const spooled = await spool(stream, limits.tmpDir, maxSize);
-            try {
-                if (spooled.size === 0) {
-                    throw problems.invalid({ '': ['the file is empty'] });
-                }
-                const upload = await uploads.createFromFile(
+            let upload = await storeBody(request, project);
+            if (probe) {
+                const outcome = await runProbe(
                     project,
-                    spooled.path,
-                    spooled.size,
-                    spooled.sha256,
+                    { upload: upload.id },
+                    { timeout: probeTimeout(query['timeout']), checksum: flag(query['checksum']) },
                 );
-                return reply
-                    .code(201)
-                    .headers({ location: `/v1/uploads/${upload.id}` })
-                    .send(toUploadResponse(upload));
-            } finally {
-                await rm(spooled.path, { force: true });
+                if (outcome.status === 'completed') {
+                    upload = await uploads.setMetadata(project.id, upload.id, outcome.metadata);
+                }
             }
+            return reply
+                .code(201)
+                .headers({ location: `/v1/uploads/${upload.id}` })
+                .send(toUploadResponse(upload));
         },
     );
 

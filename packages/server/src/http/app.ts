@@ -5,9 +5,10 @@ import { STATUS_CODES } from 'node:http';
 
 import { jsonSchema } from '@eclair-js/protocol';
 
-import { ConflictError, NotFoundError } from '../errors.ts';
+import { ConflictError, NotFoundError, RateLimitedError } from '../errors.ts';
 import type { Services } from '../services.ts';
 import { InvalidValueError, createAjv, groupErrors } from '../validation.ts';
+import { fileRoutes } from './files.ts';
 import { HttpProblem, problems } from './problem.ts';
 import { v1 } from './v1/index.ts';
 
@@ -66,6 +67,9 @@ function toHttpProblem(error: FastifyError | Error): HttpProblem | undefined {
     if (error instanceof InvalidValueError) {
         return problems.invalid(error.errors, error.message);
     }
+    if (error instanceof RateLimitedError) {
+        return problems.tooManyRequests(error.retryAfter, error.message);
+    }
     // Only Fastify's own errors become client errors: another library's statusCode could leak
     // its message.
     const code = (error as FastifyError).code;
@@ -115,6 +119,8 @@ export function buildApp(options: AppOptions): FastifyInstance {
             : { loggerInstance: options.loggerInstance }),
         // Ids in logs come from Fastify; clients can't choose them.
         requestIdHeader: false,
+        // Download tokens are longer than the default of 100 characters.
+        routerOptions: { maxParamLength: 4096 },
     });
 
     app.setValidatorCompiler(({ schema }) => ajv.compile(schema));
@@ -166,6 +172,8 @@ export function buildApp(options: AppOptions): FastifyInstance {
 
     if (options.services !== undefined) {
         void app.register(v1, { prefix: '/v1', services: options.services });
+        // Without an API key: the signed token is the authorization.
+        void app.register(fileRoutes, { prefix: '/v1', links: options.services.links });
     }
 
     return app;

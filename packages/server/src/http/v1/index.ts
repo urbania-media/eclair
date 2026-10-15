@@ -15,8 +15,8 @@ export async function v1(app: FastifyInstance, options: { services: Services }):
     if (services.operations !== undefined) {
         operationRoutes(app, services.operations);
     }
-    if (services.jobs !== undefined) {
-        jobRoutes(app, services.jobs);
+    if (services.jobs !== undefined && services.events !== undefined) {
+        jobRoutes(app, services.jobs, services.events);
     }
     await app.register(uploadRoutes, { services });
 }

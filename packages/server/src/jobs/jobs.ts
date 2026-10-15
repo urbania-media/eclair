@@ -15,6 +15,7 @@ import { isUniqueViolation } from '../database/errors.ts';
 import { jsonText } from '../database/json.ts';
 import { toJson } from '../database/values.ts';
 import { ConflictError, NotFoundError } from '../errors.ts';
+import type { FileLinks } from '../files/links.ts';
 import { createId, isId } from '../ids.ts';
 import { BlockedUrlError, checkUrl } from '../net/ssrf.ts';
 import type { OperationRegistry } from '../operations/registry.ts';
@@ -38,6 +39,8 @@ export interface JobsOptions {
     uploads: Uploads;
     operations: OperationRegistry;
     scheduler: Scheduler;
+    /** Signs the download URLs of files in the temporary storage. */
+    links?: FileLinks | undefined;
 }
 
 export interface JobFilters {
@@ -141,8 +144,10 @@ export class Jobs {
     readonly #uploads: Uploads;
     readonly #operations: OperationRegistry;
     readonly #scheduler: Scheduler;
+    readonly #links: FileLinks | undefined;
 
     constructor(options: JobsOptions) {
+        this.#links = options.links;
         this.#database = options.database;
         this.#presets = options.presets;
         this.#storages = options.storages;
@@ -392,6 +397,30 @@ export class Jobs {
         return toJobRecord(row);
     }
 
+    /** The download URL of a file of the temporary storage, when there can be one. */
+    async #withUrl<F extends OutputFile>(
+        projectId: string,
+        output: OutputRecord,
+        file: F,
+    ): Promise<F> {
+        if (
+            this.#links === undefined ||
+            output.storage !== TEMPORARY_STORAGE ||
+            output.expired ||
+            output.expiresAt === undefined ||
+            output.path === undefined
+        ) {
+            return file;
+        }
+        const url = await this.#links.url({
+            projectId,
+            path: output.path,
+            mime: output.mime ?? 'application/octet-stream',
+            expiresAt: output.expiresAt,
+        });
+        return url === undefined ? file : { ...file, url };
+    }
+
     async #responses(records: JobRecord[]): Promise<Job[]> {
         if (records.length === 0) {
             return [];
@@ -413,13 +442,41 @@ export class Jobs {
         ]);
         const taskRecords = tasks.map(toTaskRecord);
         const outputRecords = outputs.map(toOutputRecord);
-        return records.map((job) =>
+        const responses = records.map((job) =>
             toJob(
                 job,
                 taskRecords.filter(({ jobId }) => jobId === job.id),
                 outputRecords.filter(({ jobId }) => jobId === job.id),
             ),
         );
+        // Add the download URLs of the files in the temporary storage.
+        for (const [index, response] of responses.entries()) {
+            const job = records[index];
+            for (const [name, task] of Object.entries(response.tasks)) {
+                const record = taskRecords.find(
+                    (candidate) => candidate.jobId === response.id && candidate.name === name,
+                );
+                const files = task.outputs?.files;
+                if (job === undefined || record === undefined || files === undefined) {
+                    continue;
+                }
+                const taskOutputs = outputRecords.filter(
+                    ({ taskId, kind }) => taskId === record.id && kind === 'file',
+                );
+                task.outputs = {
+                    ...task.outputs,
+                    files: await Promise.all(
+                        files.map((file, position) => {
+                            const output = taskOutputs[position];
+                            return output === undefined
+                                ? file
+                                : this.#withUrl(job.projectId, output, file);
+                        }),
+                    ),
+                };
+            }
+        }
+        return responses;
     }
 
     async get(projectId: string, id: string): Promise<Job> {
@@ -483,10 +540,15 @@ export class Jobs {
         const rows = await query.execute();
         const page = rows.slice(0, filters.limit);
         return {
-            data: page.map((row): JobFile => ({
-                ...toOutputFile(toOutputRecord(row)),
-                task: row.task_name,
-            })),
+            data: await Promise.all(
+                page.map((row) => {
+                    const output = toOutputRecord(row);
+                    return this.#withUrl<JobFile>(job.projectId, output, {
+                        ...toOutputFile(output),
+                        task: row.task_name,
+                    });
+                }),
+            ),
             nextCursor: rows.length > filters.limit ? (page.at(-1)?.id ?? null) : null,
         };
     }

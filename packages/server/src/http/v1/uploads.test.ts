@@ -232,15 +232,3 @@ describe('expired uploads', () => {
         );
     });
 });
-
-describe('?probe=1', () => {
-    it('is not available yet', async () => {
-        const response = await app.inject({
-            method: 'POST',
-            url: '/v1/uploads?probe=1',
-            headers: { ...auth(), 'content-type': 'application/octet-stream' },
-            payload: PNG,
-        });
-        expect(response.statusCode).toBe(422);
-    });
-});

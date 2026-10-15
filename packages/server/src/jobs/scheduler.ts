@@ -1,8 +1,9 @@
-import type { JobStatus, TaskError, TaskStatus } from '@eclair-js/protocol';
+import type { JobEvent, JobStatus, TaskError, TaskStatus } from '@eclair-js/protocol';
 
 import type { Database } from '../database/connection.ts';
 import { toJson } from '../database/values.ts';
 import type { Projects } from '../projects/projects.ts';
+import type { JobEvents } from './events.ts';
 import type { TaskQueues } from './queues.ts';
 import { taskPriority } from './queues.ts';
 import { ENDED_JOB_STATUSES, ENDED_TASK_STATUSES, toJobRecord, toTaskRecord } from './records.ts';
@@ -26,6 +27,7 @@ export class Scheduler {
     readonly #projects: Projects;
     #onJobEnded: JobEndedListener | undefined;
     #cancelRunning: CancelRunningTasks | undefined;
+    #events: JobEvents | undefined;
 
     constructor(database: Database, queues: TaskQueues, projects: Projects) {
         this.#database = database;
@@ -43,6 +45,16 @@ export class Scheduler {
 
     onCancelRunning(cancel: CancelRunningTasks): void {
         this.#cancelRunning = cancel;
+    }
+
+    /** Publishes the status changes it makes, for `GET /v1/jobs/{id}/events`. */
+    setEvents(events: JobEvents): void {
+        this.#events = events;
+    }
+
+    /** Publishes an event of a job. The runner uses it for what it changes. */
+    async emit(event: JobEvent): Promise<void> {
+        await this.#events?.publish(event);
     }
 
     async loadJob(jobId: string): Promise<JobRecord | undefined> {
@@ -91,6 +103,7 @@ export class Scheduler {
         task.status = status;
         task.error = error ?? task.error;
         task.endedAt = now;
+        await this.emit({ type: 'task.status', job: task.jobId, task: task.name, status });
         return true;
     }
 
@@ -176,6 +189,12 @@ export class Scheduler {
                 continue;
             }
             task.status = 'queued';
+            await this.emit({
+                type: 'task.status',
+                job: job.id,
+                task: task.name,
+                status: 'queued',
+            });
             await this.#queues.enqueue(
                 task.queue,
                 { taskId: task.id, jobId: job.id, projectId: job.projectId },
@@ -220,6 +239,7 @@ export class Scheduler {
             .where('ended_at', 'is', null)
             .executeTakeFirst();
         if (result.numUpdatedRows > 0n) {
+            await this.emit({ type: 'job.status', job: job.id, status });
             await this.#onJobEnded?.({ ...job, status, endedAt: now });
         }
     }
@@ -278,6 +298,11 @@ export class Scheduler {
                 })
                 .where('id', '=', jobId)
                 .execute();
+        });
+        await this.emit({
+            type: 'job.status',
+            job: jobId,
+            status: tasks.some(({ status }) => status === 'completed') ? 'running' : 'pending',
         });
         await this.advance(jobId);
         return true;

@@ -119,7 +119,11 @@ function agentFor(options: GuardOptions): Dispatcher | undefined {
 }
 
 export interface GuardedRequestOptions extends GuardOptions {
-    method?: 'GET' | 'HEAD';
+    /** A `POST` never follows redirects: the response is returned as it is. */
+    method?: 'GET' | 'HEAD' | 'POST';
+    body?: string;
+    /** Milliseconds to wait for the whole body of the response. */
+    bodyTimeout?: number;
     headers?: Record<string, string>;
     signal?: AbortSignal;
     /** Redirects followed, each checked again. */
@@ -161,12 +165,19 @@ export async function guardedRequest(
                 signal: options.signal,
                 dispatcher: agentFor(options),
                 headersTimeout: options.headersTimeout ?? 30_000,
+                ...(options.bodyTimeout === undefined ? {} : { bodyTimeout: options.bodyTimeout }),
+                ...(options.body === undefined ? {} : { body: options.body }),
             });
         } catch (error) {
             throw blockedCause(error) ?? error;
         }
         const location = response.headers['location'];
-        if (response.statusCode >= 300 && response.statusCode < 400 && location !== undefined) {
+        if (
+            options.method !== 'POST' &&
+            response.statusCode >= 300 &&
+            response.statusCode < 400 &&
+            location !== undefined
+        ) {
             await response.body.dump();
             if (redirects >= maxRedirects) {
                 throw new BlockedUrlError(`More than ${maxRedirects} redirects.`);

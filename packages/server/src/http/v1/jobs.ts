@@ -1,13 +1,25 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 
 import { JSON_SCHEMA_ID } from '@eclair-js/protocol';
-import type { Job, JobFileList, JobList, JobRequest, JobStatus } from '@eclair-js/protocol';
+import type {
+    Job,
+    JobEvent,
+    JobFileList,
+    JobList,
+    JobRequest,
+    JobStatus,
+} from '@eclair-js/protocol';
 
 import { JSON_KEY_PATTERN } from '../../database/json.ts';
 import { isId } from '../../ids.ts';
+import type { JobEvents } from '../../jobs/events.ts';
 import type { Jobs } from '../../jobs/jobs.ts';
 import { authOf } from '../auth.ts';
 import { problems } from '../problem.ts';
+
+const ENDED: readonly string[] = ['completed', 'failed', 'canceled'];
+/** Milliseconds between the comments that keep an event stream open through proxies. */
+const PING_INTERVAL = 15_000;
 
 const JOB_STATUSES: readonly JobStatus[] = [
     'pending',
@@ -42,7 +54,7 @@ function page(
 }
 
 /** `/v1/jobs` (decision 0004). */
-export function jobRoutes(app: FastifyInstance, jobs: Jobs): void {
+export function jobRoutes(app: FastifyInstance, jobs: Jobs, events: JobEvents): void {
     app.post(
         '/jobs',
         {
@@ -124,6 +136,60 @@ export function jobRoutes(app: FastifyInstance, jobs: Jobs): void {
             });
         },
     );
+
+    // Server-sent events: the current statuses, then every change, until the job ends.
+    app.get('/jobs/:id/events', { config: { scope: 'jobs:read' } }, async (request, reply) => {
+        const { project } = authOf(request);
+        const id = idOf(request);
+        await jobs.get(project.id, id);
+
+        reply.hijack();
+        const raw = reply.raw;
+        raw.writeHead(200, {
+            'content-type': 'text/event-stream; charset=utf-8',
+            'cache-control': 'no-store',
+            connection: 'keep-alive',
+            // nginx would buffer the stream otherwise.
+            'x-accel-buffering': 'no',
+        });
+        const send = (event: JobEvent) => {
+            raw.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
+        };
+
+        let closed = false;
+        // Set once subscribed; `close` can run before.
+        const subscription: { unsubscribe?: () => Promise<void> } = {};
+        const ping = setInterval(() => raw.write(': ping\n\n'), PING_INTERVAL);
+        const close = async () => {
+            if (closed) {
+                return;
+            }
+            closed = true;
+            clearInterval(ping);
+            await subscription.unsubscribe?.();
+            raw.end();
+        };
+        request.raw.on('close', () => void close());
+
+        // Subscribe first, then send the current statuses: no change falls in between.
+        subscription.unsubscribe = await events.subscribe(id, (event) => {
+            if (closed) {
+                return;
+            }
+            send(event);
+            if (event.type === 'job.status' && ENDED.includes(event.status ?? '')) {
+                void close();
+            }
+        });
+        const job = await jobs.get(project.id, id);
+        send({ type: 'job.status', job: id, status: job.status });
+        for (const [name, task] of Object.entries(job.tasks)) {
+            send({ type: 'task.status', job: id, task: name, status: task.status });
+        }
+        if (ENDED.includes(job.status)) {
+            await close();
+        }
+    });
 
     app.post(
         '/jobs/:id/cancel',
