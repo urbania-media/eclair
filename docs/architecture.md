@@ -5,7 +5,7 @@
 ```
                     ┌──────────────────────────── Eclair ─────────────────────────────┐
                     │                                                                  │
- Application ──────▶│  API ──────────── PostgreSQL (projects, jobs, tasks, usage)      │
+ Application ──────▶│  API ──────── MySQL or PostgreSQL (projects, jobs, usage)        │
   (REST, key)       │   │                                                              │
                     │   └─ scheduler ── Redis / BullMQ ──┬──▶ worker [cpu]            │
  Application ◀──────│  webhooks                          ├──▶ worker [cpu, video]     │
@@ -26,8 +26,8 @@ All processes come from one package (`@eclair-js/server`) and one Docker image. 
 | **Scheduler** | Resolves presets, builds the task graph, enqueues tasks whose dependencies are done, ends jobs, sends webhooks. It runs inside the API processes, with a lock in Redis so only one acts on a given job at a time. |
 | **Worker**    | Pulls tasks from the queues it is configured for, downloads inputs, runs the operation, uploads outputs, records usage. |
 | **CLI**       | `eclair`: migrations, projects, keys, storages, presets, jobs (list, inspect, retry, cancel), `doctor`.      |
-| **PostgreSQL**| Durable state: projects, hashed keys, encrypted credentials, presets, jobs, tasks, outputs, usage.            |
-| **Redis**     | BullMQ queues, progress, locks and rate limits. Losing Redis loses queued work, not jobs: the scheduler re-enqueues from PostgreSQL. |
+| **Database**  | MySQL or PostgreSQL. Durable state: projects, hashed keys, encrypted credentials, presets, jobs, tasks, outputs, usage.            |
+| **Redis**     | BullMQ queues, progress, locks and rate limits. Losing Redis loses queued work, not jobs: the scheduler re-enqueues from the database. |
 
 ## Life of a job
 
@@ -62,7 +62,7 @@ Outputs are written under `{prefix}{task}/{file}` by default (for example `video
 - Each operation declares the **capability** it needs: `cpu` (default), `video` (long transcodes), `gpu`, `ai`. Each capability is a BullMQ queue.
 - Each worker lists the capabilities it serves (`ECLAIR_QUEUES=cpu,video`) and its concurrency per queue. Adding capacity means starting another worker with the same configuration on another server.
 - Projects have a priority and a concurrency limit, so one project's backlog doesn't starve the others.
-- Workers only need Redis, PostgreSQL and the project storages. They don't need to share a disk.
+- Workers only need Redis, the database and the project storages. They don't need to share a disk.
 
 ## Data model
 
@@ -93,13 +93,13 @@ Old jobs are pruned after a configurable retention. Usage is aggregated per proj
 
 - Structured JSON logs (pino) with the project, job and task ids on every line.
 - Prometheus metrics on `/metrics`: queue depth and wait time per queue, task duration and failures per operation, usage per project.
-- `GET /health` (process) and `GET /ready` (PostgreSQL, Redis, binaries).
+- `GET /health` (process) and `GET /ready` (database, Redis, binaries).
 - `eclair doctor` checks binaries and their versions, models, queues and storages.
 
 ## Open choices
 
 To settle in Phase 0, each with a decision record:
 
-- HTTP framework (Fastify is the likely choice: JSON Schema validation and OpenAPI support) and database access (a query builder such as Kysely, with plain SQL migrations).
+- HTTP framework (Fastify is the likely choice: JSON Schema validation and OpenAPI support) and database access (a query builder that supports MySQL and PostgreSQL, such as Kysely, with migrations written with its schema API; see [decision 0007](decisions/0007-sql-database-and-redis.md)).
 - Library for options schemas (one that produces JSON Schema, so schemas end up in the OpenAPI document).
 - How intermediate files move between workers on different servers when the project storage is `http` only.

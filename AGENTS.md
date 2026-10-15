@@ -45,7 +45,8 @@ docs/                  Architecture, protocol, operations, deployment, decisions
 
 - Node 24 (`.nvmrc`), npm workspaces, ESM only.
 - TypeScript, `strict` with `noUncheckedIndexedAccess`.
-- PostgreSQL for projects, jobs and usage. Redis with BullMQ for queues and progress.
+- MySQL 8.4+ or PostgreSQL 15+ for projects, jobs and usage, through a query builder. Redis with BullMQ for queues and progress.
+- **Both databases are first-class.** Write portable queries and migrations: no raw SQL outside the dialect module, no dialect-only types or features (see [decision 0007](docs/decisions/0007-sql-database-and-redis.md)). Tests run on both.
 - Tests use Vitest. Test files sit next to the code: `*.test.ts`. Operation tests run the real binaries on fixtures in the Docker image.
 - Lint with ESLint (flat config, typescript-eslint `strict`). Format with Prettier.
 - Versions and changelogs with changesets. All `@eclair-js/*` packages and the Docker image share one version.

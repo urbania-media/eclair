@@ -1,6 +1,6 @@
 # Deployment
 
-Eclair runs from one Docker image, `ghcr.io/urbania-media/eclair`, next to PostgreSQL and Redis. Start with everything on one server, then add worker servers as the load grows.
+Eclair runs from one Docker image, `ghcr.io/urbania-media/eclair`, next to MySQL or PostgreSQL, and Redis. Start with everything on one server, then add worker servers as the load grows.
 
 ## The image
 
@@ -21,7 +21,7 @@ docker run ghcr.io/urbania-media/eclair eclair …  # CLI
 
 ## One server
 
-`docker/compose.yml` runs Eclair in `all` mode with PostgreSQL and Redis:
+`docker/compose.yml` runs Eclair in `all` mode with PostgreSQL and Redis. `docker/compose.mysql.yml` does the same with MySQL:
 
 ```bash
 cp .env.example .env            # set ECLAIR_SECRET_KEY, ECLAIR_ADMIN_TOKEN, ECLAIR_PUBLIC_URL
@@ -36,16 +36,16 @@ Put a reverse proxy with TLS in front of the API. The temporary directory should
 ## Many servers
 
 ```
- server A: api (×2) + PostgreSQL + Redis
+ server A: api (×2) + MySQL or PostgreSQL + Redis
  server B: worker  ECLAIR_QUEUES=cpu,video
  server C: worker  ECLAIR_QUEUES=cpu,video
  server D: worker  ECLAIR_QUEUES=gpu,ai     (image eclair:<version>-gpu)
 ```
 
 - API processes are stateless. Run several behind the reverse proxy.
-- Workers only need PostgreSQL, Redis and access to the project storages. They don't share a disk.
+- Workers only need the database, Redis and access to the project storages. They don't share a disk.
 - Each operation runs on its capability's queue. A server without a GPU never serves `gpu`, so GPU work waits for a GPU worker instead of failing.
-- PostgreSQL and Redis can be managed services.
+- The database and Redis can be managed services. Use the database you already run: MySQL 8.4+ or PostgreSQL 15+.
 - A worker that stops gracefully (`SIGTERM`) finishes its running tasks, up to a timeout, and takes no new ones. A worker that dies has its tasks retried by another worker.
 
 ## Configuration
@@ -54,7 +54,7 @@ Environment variables, with defaults in `.env.example`:
 
 | Variable                  | Content                                                                    |
 | ------------------------- | -------------------------------------------------------------------------- |
-| `DATABASE_URL`            | PostgreSQL connection                                                      |
+| `DATABASE_URL`            | Database connection: `mysql://…` or `postgres://…`                         |
 | `REDIS_URL`               | Redis connection                                                           |
 | `ECLAIR_SECRET_KEY`       | Key that encrypts storage credentials and provider keys. Keep it safe: losing it means registering storages again. |
 | `ECLAIR_ADMIN_TOKEN`      | Token for the admin API and the CLI                                        |
@@ -81,5 +81,5 @@ Supported but not the default: install Node 24, `npm install -g @eclair-js/serve
 
 ## Backups and monitoring
 
-- Back up PostgreSQL. Redis only holds queues and can be rebuilt by the scheduler.
+- Back up the database. Redis only holds queues and can be rebuilt by the scheduler.
 - Scrape `/metrics` with Prometheus. Alert on queue wait time, task failure rate per operation, webhook delivery failures and free space in the temporary directory.

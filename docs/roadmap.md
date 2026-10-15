@@ -5,7 +5,7 @@ The plan is tracked in [#1](https://github.com/urbania-media/eclair/issues/1). E
 ## Phase 0: foundation
 
 - Project docs: README, `AGENTS.md`, architecture, protocol, operations, deployment, decisions (this page).
-- Tooling: npm workspaces, TypeScript `strict`, Vitest, ESLint and Prettier, changesets, GitHub Actions CI, `.nvmrc`.
+- Tooling: npm workspaces, TypeScript `strict`, Vitest, ESLint and Prettier, changesets, GitHub Actions CI (tests on MySQL and PostgreSQL), `.nvmrc`.
 - Settle the open choices: HTTP framework, database access, options schema library (one decision record each).
 - `@eclair-js/protocol`: first OpenAPI document and JSON Schemas for jobs, tasks, webhooks and errors.
 - Docker image with the binaries, built and scanned in CI.
@@ -13,7 +13,7 @@ The plan is tracked in [#1](https://github.com/urbania-media/eclair/issues/1). E
 
 ## Phase 1: core
 
-- PostgreSQL schema and migrations. Projects, API keys, storages and presets, with the CLI and the admin API.
+- Database schema and migrations, on MySQL and PostgreSQL. Projects, API keys, storages and presets, with the CLI and the admin API.
 - `POST /v1/jobs`, `GET /v1/jobs/{id}`, list, cancel, retry, server-sent events.
 - Scheduler and workers on BullMQ: dependencies, retries, timeouts, capabilities, per-project priority and concurrency.
 - Storages: `https` inputs with the SSRF guard, `s3` inputs and outputs, `http` storages.
@@ -21,7 +21,7 @@ The plan is tracked in [#1](https://github.com/urbania-media/eclair/issues/1). E
 - `@eclair-js/operation`: interface, context, plugin loading, test helpers.
 - `probe`.
 - Usage records, Prometheus metrics, health checks, `eclair doctor`.
-- `docker/compose.yml` for a single server.
+- `docker/compose.yml` (PostgreSQL) and `docker/compose.mysql.yml` (MySQL) for a single server.
 
 ## Phase 2: mediatheque parity
 
