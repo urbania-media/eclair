@@ -36,6 +36,8 @@ export const ProjectSettingsSchema = Type.Object(
         ),
         /** Probes per minute, synchronous or not. */
         probesPerMinute: Type.Integer({ minimum: 1, default: 600 }),
+        /** Sends a `task.completed` webhook for each task, besides the job's. */
+        taskWebhooks: Type.Boolean({ default: false }),
     },
     { additionalProperties: false },
 );

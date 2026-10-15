@@ -30,6 +30,7 @@ import { fetchInput } from '../storages/inputs.ts';
 import type { StorageResolver } from '../storages/resolver.ts';
 import { TEMPORARY_STORAGE } from '../storages/storages.ts';
 import type { Uploads } from '../uploads/uploads.ts';
+import type { Webhooks } from '../webhooks/webhooks.ts';
 
 /** What happened to a task. `retry`: it failed for a reason that may pass, and has attempts left. */
 export type RunOutcome = 'completed' | 'failed' | 'skipped' | 'canceled' | 'ignored' | 'retry';
@@ -62,6 +63,8 @@ export interface TaskRunnerOptions {
     logger: RunnerLogger;
     /** Only for tests, to read inputs from a local server. */
     guard?: Pick<GuardOptions, 'allowHttp' | 'allowPrivateAddresses'>;
+    /** Sends `task.completed` webhooks, for projects with `taskWebhooks`. */
+    webhooks?: Webhooks | undefined;
 }
 
 export interface RunOptions {
@@ -224,7 +227,16 @@ export class TaskRunner {
             .where('status', '=', 'running')
             .where('worker', '=', this.#options.worker)
             .executeTakeFirst();
-        return result.numUpdatedRows > 0n;
+        if (result.numUpdatedRows === 0n) {
+            return false;
+        }
+        await this.#options.scheduler.emit({
+            type: 'task.status',
+            job: task.jobId,
+            task: task.name,
+            status,
+        });
+        return true;
     }
 
     /** Runs a task. Never throws for a failure of the task: it reports it and returns the outcome. */
@@ -271,12 +283,21 @@ export class TaskRunner {
         if (started.numUpdatedRows === 0n) {
             return 'ignored';
         }
-        await database.kysely
+        await scheduler.emit({
+            type: 'task.status',
+            job: job.id,
+            task: task.name,
+            status: 'running',
+        });
+        const jobStarted = await database.kysely
             .updateTable('jobs')
             .set({ status: 'running', started_at: now, updated_at: now })
             .where('id', '=', job.id)
             .where('status', '=', 'pending')
-            .execute();
+            .executeTakeFirst();
+        if (jobStarted.numUpdatedRows > 0n) {
+            await scheduler.emit({ type: 'job.status', job: job.id, status: 'running' });
+        }
 
         const project = await this.#options.projects.get(job.projectId);
         await mkdir(this.#options.config.tmpDir, { recursive: true });
@@ -349,6 +370,9 @@ export class TaskRunner {
             if (!(await this.#end(task, 'completed'))) {
                 return 'canceled';
             }
+            if (project.settings.taskWebhooks) {
+                await this.#options.webhooks?.send(job, 'task.completed');
+            }
             await this.#recordUsage(
                 task,
                 project,
@@ -389,6 +413,12 @@ export class TaskRunner {
                     .where('id', '=', task.id)
                     .where('status', '=', 'running')
                     .execute();
+                await scheduler.emit({
+                    type: 'task.status',
+                    job: job.id,
+                    task: task.name,
+                    status: 'queued',
+                });
                 return 'retry';
             }
             return this.#fail(task, taskError);
@@ -408,6 +438,12 @@ export class TaskRunner {
             .where('status', 'in', ['queued', 'running'])
             .executeTakeFirst();
         if (result.numUpdatedRows > 0n) {
+            await this.#options.scheduler.emit({
+                type: 'task.status',
+                job: task.jobId,
+                task: task.name,
+                status: 'failed',
+            });
             await this.#options.scheduler.advance(task.jobId);
         }
         return 'failed';
@@ -512,6 +548,12 @@ export class TaskRunner {
                 lastProgress = now;
                 const progress = Math.min(1, Math.max(0, ratio));
                 options.onProgress?.(progress);
+                void this.#options.scheduler.emit({
+                    type: 'task.progress',
+                    job: task.jobId,
+                    task: task.name,
+                    progress,
+                });
                 void this.#options.database.kysely
                     .updateTable('tasks')
                     .set({ progress })

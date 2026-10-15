@@ -41,12 +41,12 @@ async function start(io: CliIo, roles: { api: boolean; worker: boolean }): Promi
     const redis = createRedis(config.redisUrl ?? '', `eclair-${name}`);
     const queues = new TaskQueues(redis);
     const cancel = new CancelBus(redis);
-    const services = createServicesFor(database, config, operations, queues);
-    services.scheduler?.onCancelRunning((taskIds) => cancel.publish(taskIds));
     const logger = pino({
         level: config.logLevel,
         redact: ['req.headers.authorization', 'req.headers.cookie'],
     });
+    const services = createServicesFor(database, config, operations, { queues, redis, logger });
+    services.scheduler?.onCancelRunning((taskIds) => cancel.publish(taskIds));
 
     let workers: TaskWorkers | undefined;
     let app: ReturnType<typeof buildApp> | undefined;
@@ -62,6 +62,7 @@ async function start(io: CliIo, roles: { api: boolean; worker: boolean }): Promi
                 config,
                 worker: `${hostname()}:${process.pid}`,
                 logger,
+                webhooks: services.webhooks,
             });
             workers = new TaskWorkers({
                 connection: redis,
@@ -79,6 +80,8 @@ async function start(io: CliIo, roles: { api: boolean; worker: boolean }): Promi
             );
         }
         if (roles.api) {
+            // The processes that run the API send the webhooks.
+            await services.webhooks?.start();
             app = buildApp({
                 services,
                 version: VERSION,
@@ -101,6 +104,8 @@ async function start(io: CliIo, roles: { api: boolean; worker: boolean }): Promi
         await app?.close();
         // Running tasks end first: a worker that stops takes no new task.
         await workers?.close();
+        await services.webhooks?.close();
+        await services.events?.close();
         await queues.close();
         redis.disconnect();
         await database.close();

@@ -12,6 +12,11 @@ export class LocalDriver implements StorageDriver {
         this.#root = resolve(root);
     }
 
+    /** The local path of a storage path, to stream it. */
+    localPath(path: string): string {
+        return this.#resolve(path);
+    }
+
     /** The local path of a storage path, which can't leave the root. */
     #resolve(path: string): string {
         const full = resolve(join(this.#root, checkStoragePath(path)));

@@ -115,6 +115,7 @@ describe('OperationRegistry', () => {
                     concurrency: 4,
                     maxDirectUpload: 1,
                     probesPerMinute: 1,
+                    taskWebhooks: false,
                     operations: ['image.palette'],
                 },
             );
@@ -150,6 +151,7 @@ describe('OperationRegistry', () => {
                 concurrency: 4,
                 maxDirectUpload: 1,
                 probesPerMinute: 1,
+                taskWebhooks: false,
                 operations: ['image.blurhash'],
             }),
         ).toHaveLength(1);

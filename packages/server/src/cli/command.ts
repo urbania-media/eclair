@@ -1,3 +1,4 @@
+import type { Redis } from 'ioredis';
 import type { ParseArgsOptionsConfig } from 'node:util';
 
 import { ConfigError, loadConfig, requireSettings } from '../config/config.ts';
@@ -12,6 +13,7 @@ import { createServices } from '../services.ts';
 import type { Services } from '../services.ts';
 import { TemporaryStorage } from '../storages/temporary.ts';
 import { InvalidValueError } from '../validation.ts';
+import type { RunnerLogger } from '../workers/runner.ts';
 
 export interface CliIo {
     stdout: (text: string) => void;
@@ -152,7 +154,7 @@ export function createServicesFor(
     database: Database,
     config: Config,
     operations: OperationRegistry | undefined,
-    queues?: TaskQueues,
+    runtime: { queues?: TaskQueues; redis?: Redis; logger?: RunnerLogger } = {},
 ): Services {
     return createServices({
         database,
@@ -164,7 +166,8 @@ export function createServicesFor(
             maxInputSize: config.maxInputSize,
             tmpDir: config.tmpDir,
         },
+        publicUrl: config.publicUrl,
         operations,
-        queues,
+        ...runtime,
     });
 }
