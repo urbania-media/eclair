@@ -58,23 +58,27 @@ Put a reverse proxy with TLS in front of the API. The temporary directory should
 
 Environment variables, with defaults in [`docker/.env.example`](../docker/.env.example):
 
-| Variable                    | Content                                                                                                                                          |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `DATABASE_URL`              | Database connection: `mysql://…` or `postgres://…`, or `sqlite:///path/to/eclair.db` on a single server                                          |
-| `REDIS_URL`                 | Redis connection                                                                                                                                 |
-| `ECLAIR_SECRET_KEY`         | Key that encrypts storage credentials and provider keys. Keep it safe: losing it means registering storages again.                               |
-| `ECLAIR_ADMIN_TOKEN`        | Token for the admin API and the CLI                                                                                                              |
-| `ECLAIR_PUBLIC_URL`         | Public URL of the API                                                                                                                            |
-| `ECLAIR_PORT`               | Port the API listens on (`8080`)                                                                                                                 |
-| `ECLAIR_QUEUES`             | Queues a worker serves, with optional concurrency: `cpu:4,video:1`. Every worker also serves `probe` with reserved slots, unless `probe:0`       |
-| `ECLAIR_TMP_DIR`            | Temporary directory for tasks                                                                                                                    |
-| `ECLAIR_TEMP_STORAGE`       | Temporary storage backend: a local path (`file:///data/eclair`) on a single server, or an S3-compatible bucket (`s3://…`) when there are several |
-| `ECLAIR_TEMP_RETENTION`     | Default retention of temporary files (`24h`), and `ECLAIR_TEMP_MAX_RETENTION` for the per-project maximum                                        |
-| `ECLAIR_PLUGINS`            | Extra operation packages to load                                                                                                                 |
-| `ECLAIR_MAX_INPUT_SIZE`     | Default input size limit, overridable per project                                                                                                |
-| `ECLAIR_TASK_TIMEOUT`       | Default task timeout, overridable per operation and per project                                                                                  |
-| `ECLAIR_JOB_RETENTION`      | How long ended jobs are kept                                                                                                                     |
-| `FFMPEG_BIN`, `MAGICK_BIN`… | Binary paths, when not on `PATH`                                                                                                                 |
+| Variable                    | Content                                                                                                                                                                               |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DATABASE_URL`              | Database connection: `mysql://…` or `postgres://…`, or `sqlite:///path/to/eclair.db` on a single server                                                                               |
+| `REDIS_URL`                 | Redis connection                                                                                                                                                                      |
+| `ECLAIR_SECRET_KEY`         | 32 random bytes in base64 (`eclair key:generate`) that encrypt storage credentials and provider keys. Keep it safe: losing it means registering storages again.                       |
+| `ECLAIR_ADMIN_TOKEN`        | Token for the admin API and the CLI                                                                                                                                                   |
+| `ECLAIR_PUBLIC_URL`         | Public URL of the API                                                                                                                                                                 |
+| `ECLAIR_PORT`               | Port the API listens on (`8080`)                                                                                                                                                      |
+| `ECLAIR_HOST`               | Address the API listens on (`0.0.0.0`)                                                                                                                                                |
+| `ECLAIR_LOG_LEVEL`          | `fatal`, `error`, `warn`, `info` (default), `debug`, `trace` or `silent`                                                                                                              |
+| `ECLAIR_QUEUES`             | Queues a worker serves, with optional concurrency: `cpu:4,video:1`. Every worker also serves `probe` with reserved slots, unless `probe:0`                                            |
+| `ECLAIR_TMP_DIR`            | Temporary directory for tasks                                                                                                                                                         |
+| `ECLAIR_TEMP_STORAGE`       | Temporary storage backend: a local path (`file:///data/eclair`) on a single server, or an S3-compatible bucket (`s3://…`) when there are several                                      |
+| `ECLAIR_TEMP_RETENTION`     | Default retention of temporary files (`24h`), and `ECLAIR_TEMP_MAX_RETENTION` for the per-project maximum                                                                             |
+| `ECLAIR_PLUGINS`            | Extra operation packages to load                                                                                                                                                      |
+| `ECLAIR_MAX_INPUT_SIZE`     | Default input size limit (`2GB`; KB, MB, GB and TB are multiples of 1024), overridable per project                                                                                    |
+| `ECLAIR_TASK_TIMEOUT`       | Default task timeout, overridable per operation and per project                                                                                                                       |
+| `ECLAIR_JOB_RETENTION`      | How long ended jobs are kept                                                                                                                                                          |
+| `FFMPEG_BIN`, `MAGICK_BIN`… | Binary paths, when not on `PATH`: `FFMPEG_BIN`, `FFPROBE_BIN`, `MAGICK_BIN`, `VIPS_BIN`, `GS_BIN`, `PDFINFO_BIN`, `PDFTOPPM_BIN`, `AUDIOWAVEFORM_BIN`, `FONTTOOLS_BIN`, `WHISPER_BIN` |
+
+Empty variables count as unset. Durations use `ms`, `s`, `m`, `h` or `d` (`1h`, `7d`). An invalid configuration stops the process with the list of every problem, and `eclair doctor` reports them too.
 
 Projects, keys, storages, presets and limits live in the database and are managed with the CLI or the admin API.
 
