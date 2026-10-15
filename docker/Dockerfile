@@ -96,9 +96,11 @@ FROM node AS runtime
 
 ARG DEBIAN_FRONTEND=noninteractive
 
-# Yarn and Corepack come with the Node image, and Eclair doesn't use them.
-RUN rm -rf /opt/yarn-* /usr/local/bin/yarn /usr/local/bin/yarnpkg /usr/local/bin/corepack \
-        /usr/local/lib/node_modules/corepack
+# npm, Yarn and Corepack come with the Node image. Eclair doesn't run them, and they bring their own
+# dependencies to keep patched. An image with extra operation packages installs them in a build stage.
+RUN rm -rf /usr/local/lib/node_modules /usr/local/bin/npm /usr/local/bin/npx \
+        /usr/local/bin/corepack /opt/yarn-* /usr/local/bin/yarn /usr/local/bin/yarnpkg \
+        /usr/local/bin/docker-entrypoint.sh
 
 RUN apt-get update \
     && apt-get upgrade -y \
