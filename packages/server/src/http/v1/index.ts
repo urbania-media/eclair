@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 
 import type { Services } from '../../services.ts';
 import { authenticateWithApiKeys } from '../auth.ts';
+import { operationRoutes } from './operations.ts';
 import { presetRoutes } from './presets.ts';
 
 /** The `/v1` API of the protocol, for projects. */
@@ -9,4 +10,7 @@ export async function v1(app: FastifyInstance, options: { services: Services }):
     const { services } = options;
     authenticateWithApiKeys(app, services.apiKeys);
     presetRoutes(app, services.presets);
+    if (services.operations !== undefined) {
+        operationRoutes(app, services.operations);
+    }
 }

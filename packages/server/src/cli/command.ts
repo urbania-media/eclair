@@ -6,6 +6,7 @@ import { createDatabase } from '../database/connection.ts';
 import type { Database } from '../database/connection.ts';
 import { pendingMigrations } from '../database/migrate.ts';
 import { ConflictError, NotFoundError } from '../errors.ts';
+import { BUILT_IN_PLUGINS, OperationRegistry, PluginError } from '../operations/registry.ts';
 import { createServices } from '../services.ts';
 import type { Services } from '../services.ts';
 import { InvalidValueError } from '../validation.ts';
@@ -112,9 +113,13 @@ export async function withServices<T>(
     run: (services: Services, config: Config) => Promise<T>,
 ): Promise<T> {
     const config = configWith(io, ['DATABASE_URL', 'ECLAIR_SECRET_KEY']);
+    const operations = await loadOperations(config);
     const database = await openMigratedDatabase(config.databaseUrl ?? '');
     try {
-        return await run(createServices(database, config.secretKey ?? Buffer.alloc(0)), config);
+        return await run(
+            createServices(database, config.secretKey ?? Buffer.alloc(0), operations),
+            config,
+        );
     } catch (error) {
         if (error instanceof NotFoundError || error instanceof ConflictError) {
             throw new CliExit(EXIT.failure, error.message);
@@ -128,5 +133,17 @@ export async function withServices<T>(
         throw error;
     } finally {
         await database.close();
+    }
+}
+
+/** Loads the built-in operations and the plugins of `ECLAIR_PLUGINS`. */
+export async function loadOperations(config: Config): Promise<OperationRegistry> {
+    try {
+        return await OperationRegistry.load([...BUILT_IN_PLUGINS, ...config.plugins]);
+    } catch (error) {
+        if (error instanceof PluginError) {
+            throw new CliExit(EXIT.config, `${error.message}\n  ${errorMessage(error.cause)}`);
+        }
+        throw error;
     }
 }

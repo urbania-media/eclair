@@ -14,8 +14,15 @@ import { InvalidValueError } from '../validation.ts';
 /** The scope of the presets that every project can use. */
 export const GLOBAL_SCOPE = 'global';
 
-/** Checks the tasks of a preset beyond the protocol's schema (operations, options). Throws an `InvalidValueError`. */
-export type TaskChecker = (tasks: Record<string, TaskRequest>, pointer: string) => void;
+/**
+ * Checks the tasks of a preset beyond the protocol's schema: operations, options, what the project
+ * may use. `projectId` is `undefined` for a global preset. Throws an `InvalidValueError`.
+ */
+export type TaskChecker = (
+    tasks: Record<string, TaskRequest>,
+    pointer: string,
+    projectId: string | undefined,
+) => void | Promise<void>;
 
 export interface StoredPreset extends Preset {
     id: string;
@@ -72,7 +79,7 @@ export class Presets {
             throw new InvalidValueError(toProblemErrors(result.errors), 'The preset is invalid.');
         }
         const { description, tasks } = result.value as PresetRequest;
-        this.#checkTasks?.(tasks, '/tasks');
+        await this.#checkTasks?.(tasks, '/tasks', projectId);
 
         const scope = projectId ?? GLOBAL_SCOPE;
         const now = new Date();

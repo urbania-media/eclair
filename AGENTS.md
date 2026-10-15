@@ -36,6 +36,7 @@ packages/
   operation/           @eclair-js/operation: operation interface, context, test helpers
   server/              @eclair-js/server: API, scheduler, workers, storage, webhooks, `eclair` CLI
   client/              @eclair-js/client: JS client and webhook verification
+  operations-core/     @eclair-js/operations-core: probe
   operations-image/    @eclair-js/operations-image (and -video, -audio, -document, -font, -ai)
 docker/                Dockerfile and docker compose examples
 config/                Shared Vitest config of the packages

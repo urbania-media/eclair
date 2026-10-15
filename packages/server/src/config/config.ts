@@ -7,8 +7,8 @@ import { CAPABILITIES } from '@eclair-js/operation';
 import { createAjv } from '../validation.ts';
 import { DURATION_PATTERN, SIZE_PATTERN, parseDuration, parseSize } from './units.ts';
 
-/** Queues a worker can serve: one per capability, plus the probe queue (decision 0012). */
-export const QUEUE_NAMES = [...CAPABILITIES, 'probe'] as const;
+/** Queues a worker can serve: one per capability, the probe queue included (decision 0012). */
+export const QUEUE_NAMES = CAPABILITIES;
 
 export type QueueName = (typeof QUEUE_NAMES)[number];
 
