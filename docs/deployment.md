@@ -52,22 +52,22 @@ Put a reverse proxy with TLS in front of the API. The temporary directory should
 
 Environment variables, with defaults in `.env.example`:
 
-| Variable                  | Content                                                                    |
-| ------------------------- | -------------------------------------------------------------------------- |
-| `DATABASE_URL`            | Database connection: `mysql://…` or `postgres://…`                         |
-| `REDIS_URL`               | Redis connection                                                           |
-| `ECLAIR_SECRET_KEY`       | Key that encrypts storage credentials and provider keys. Keep it safe: losing it means registering storages again. |
-| `ECLAIR_ADMIN_TOKEN`      | Token for the admin API and the CLI                                        |
-| `ECLAIR_PUBLIC_URL`       | Public URL of the API                                                      |
-| `ECLAIR_QUEUES`           | Queues a worker serves, with optional concurrency: `cpu:4,video:1`. Every worker also serves `probe` with reserved slots, unless `probe:0` |
-| `ECLAIR_TMP_DIR`          | Temporary directory for tasks                                              |
-| `ECLAIR_TEMP_STORAGE`     | Temporary storage backend: a local path (`file:///data/eclair`) on a single server, or an S3-compatible bucket (`s3://…`) when there are several |
-| `ECLAIR_TEMP_RETENTION`   | Default retention of temporary files (`24h`), and `ECLAIR_TEMP_MAX_RETENTION` for the per-project maximum |
-| `ECLAIR_PLUGINS`          | Extra operation packages to load                                           |
-| `ECLAIR_MAX_INPUT_SIZE`   | Default input size limit, overridable per project                          |
-| `ECLAIR_TASK_TIMEOUT`     | Default task timeout, overridable per operation and per project            |
-| `ECLAIR_JOB_RETENTION`    | How long ended jobs are kept                                               |
-| `FFMPEG_BIN`, `MAGICK_BIN`… | Binary paths, when not on `PATH`                                         |
+| Variable                    | Content                                                                                                                                          |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `DATABASE_URL`              | Database connection: `mysql://…` or `postgres://…`                                                                                               |
+| `REDIS_URL`                 | Redis connection                                                                                                                                 |
+| `ECLAIR_SECRET_KEY`         | Key that encrypts storage credentials and provider keys. Keep it safe: losing it means registering storages again.                               |
+| `ECLAIR_ADMIN_TOKEN`        | Token for the admin API and the CLI                                                                                                              |
+| `ECLAIR_PUBLIC_URL`         | Public URL of the API                                                                                                                            |
+| `ECLAIR_QUEUES`             | Queues a worker serves, with optional concurrency: `cpu:4,video:1`. Every worker also serves `probe` with reserved slots, unless `probe:0`       |
+| `ECLAIR_TMP_DIR`            | Temporary directory for tasks                                                                                                                    |
+| `ECLAIR_TEMP_STORAGE`       | Temporary storage backend: a local path (`file:///data/eclair`) on a single server, or an S3-compatible bucket (`s3://…`) when there are several |
+| `ECLAIR_TEMP_RETENTION`     | Default retention of temporary files (`24h`), and `ECLAIR_TEMP_MAX_RETENTION` for the per-project maximum                                        |
+| `ECLAIR_PLUGINS`            | Extra operation packages to load                                                                                                                 |
+| `ECLAIR_MAX_INPUT_SIZE`     | Default input size limit, overridable per project                                                                                                |
+| `ECLAIR_TASK_TIMEOUT`       | Default task timeout, overridable per operation and per project                                                                                  |
+| `ECLAIR_JOB_RETENTION`      | How long ended jobs are kept                                                                                                                     |
+| `FFMPEG_BIN`, `MAGICK_BIN`… | Binary paths, when not on `PATH`                                                                                                                 |
 
 Projects, keys, storages, presets and limits live in the database and are managed with the CLI or the admin API.
 

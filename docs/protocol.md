@@ -29,16 +29,16 @@ The protocol is the contract between Eclair and its clients. It is published in 
 }
 ```
 
-| Field      | Content                                                                                                                         |
-| ---------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `input`    | `{ "url": "https://…" }`, `{ "storage": "<name>", "path": "<path>" }` or `{ "upload": "upl_…" }`. Optional `mime` and `size` hints, never trusted. |
+| Field      | Content                                                                                                                                                                            |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `input`    | `{ "url": "https://…" }`, `{ "storage": "<name>", "path": "<path>" }` or `{ "upload": "upl_…" }`. Optional `mime` and `size` hints, never trusted.                                 |
 | `output`   | `{ "storage": "<name>", "prefix": "<prefix>", "path": "<pattern>" }`. `"storage": "eclair"` writes to the temporary storage. Optional when no task writes files (a `probe` alone). |
-| `preset`   | Name of a preset of the project, or of a global preset. Its tasks are merged with `tasks`.                                     |
-| `tasks`    | Named tasks. A name is also the output's name, so it is the handle the application reads.                                      |
-| `webhook`  | URL called when the job ends. Defaults to the project's webhook.                                                               |
-| `metadata` | Free object, returned as is in the job and the webhook. Used to find the application's record.                                 |
-| `priority` | `low`, `normal` or `high`, within the project's limits.                                                                        |
-| `failFast` | Cancel the remaining tasks as soon as one fails. Defaults to `false`.                                                          |
+| `preset`   | Name of a preset of the project, or of a global preset. Its tasks are merged with `tasks`.                                                                                         |
+| `tasks`    | Named tasks. A name is also the output's name, so it is the handle the application reads.                                                                                          |
+| `webhook`  | URL called when the job ends. Defaults to the project's webhook.                                                                                                                   |
+| `metadata` | Free object, returned as is in the job and the webhook. Used to find the application's record.                                                                                     |
+| `priority` | `low`, `normal` or `high`, within the project's limits.                                                                                                                            |
+| `failFast` | Cancel the remaining tasks as soon as one fails. Defaults to `false`.                                                                                                              |
 
 A **task**:
 
@@ -53,14 +53,14 @@ A **task**:
 }
 ```
 
-| Field     | Content                                                                                                         |
-| --------- | --------------------------------------------------------------------------------------------------------------- |
-| `op`      | Operation name, optionally with a major version (`video.hls@1`).                                               |
+| Field     | Content                                                                                                             |
+| --------- | ------------------------------------------------------------------------------------------------------------------- |
+| `op`      | Operation name, optionally with a major version (`video.hls@1`).                                                    |
 | `from`    | Name of the task whose output is this task's input. Defaults to the job input. `"h264:file"` picks one output file. |
-| `options` | Validated against the operation's options schema.                                                              |
-| `after`   | Extra dependencies, for ordering without using an output.                                                      |
-| `keep`    | `false` for an intermediate output that is deleted when the job ends. Defaults to `true`.                      |
-| `when`    | Run only if the probed input matches (kind, mime, minimum duration…). Otherwise the task is `skipped`.        |
+| `options` | Validated against the operation's options schema.                                                                   |
+| `after`   | Extra dependencies, for ordering without using an output.                                                           |
+| `keep`    | `false` for an intermediate output that is deleted when the job ends. Defaults to `true`.                           |
+| `when`    | Run only if the probed input matches (kind, mime, minimum duration…). Otherwise the task is `skipped`.              |
 
 The task graph must be acyclic. The API answers `202` with the job.
 
@@ -78,7 +78,13 @@ The task graph must be acyclic. The API answers `202` with the job.
             "status": "completed",
             "op": "probe@1",
             "outputs": {
-                "metadata": { "kind": "video", "mime": "video/quicktime", "width": 1920, "height": 1080, "duration": 184.2 }
+                "metadata": {
+                    "kind": "video",
+                    "mime": "video/quicktime",
+                    "width": 1920,
+                    "height": 1080,
+                    "duration": 184.2
+                }
             }
         },
         "hls": {
@@ -86,7 +92,13 @@ The task graph must be acyclic. The API answers `202` with the job.
             "op": "video.hls@1",
             "outputs": {
                 "files": [
-                    { "name": "master", "path": "videos/42/hls/master.m3u8", "mime": "application/vnd.apple.mpegurl", "size": 512, "role": "main" }
+                    {
+                        "name": "master",
+                        "path": "videos/42/hls/master.m3u8",
+                        "mime": "application/vnd.apple.mpegurl",
+                        "size": 512,
+                        "role": "main"
+                    }
                 ]
             }
         }
