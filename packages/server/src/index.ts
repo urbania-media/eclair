@@ -17,7 +17,13 @@ export type {
     RequiredSetting,
 } from './config/config.ts';
 export { parseDuration, parseSize } from './config/units.ts';
+export { createDatabase } from './database/connection.ts';
+export type { Database, DatabaseOptions } from './database/connection.ts';
 export { checkDatabase, getDialect, getSqlitePath } from './database/dialect.ts';
+export { migrateToLatest, migrationStatus, pendingMigrations } from './database/migrate.ts';
+export type { MigrationStatus } from './database/migrate.ts';
+export { COLUMNS } from './database/tables.ts';
+export type { Tables } from './database/tables.ts';
 export type { DatabaseStatus, Dialect } from './database/dialect.ts';
 export { isSupportedVersion, MINIMUM_VERSIONS, parseServerVersion } from './database/version.ts';
 export type { ServerVersion } from './database/version.ts';
