@@ -61,6 +61,7 @@ describe('OpenAPI document', () => {
             '/v1/presets',
             '/v1/presets/{name}',
             '/v1/operations',
+            '/v1/files/{token}',
         ]);
         expect(Object.keys(openapi.webhooks)).toEqual([
             'job.completed',

@@ -342,7 +342,7 @@
             ]
         },
         "TaskErrorCode": {
-            "description": "Stable error code: `input_unreadable`, `unsupported_input`, `timeout`, `limit_exceeded`, `operation_failed`, `storage_failed`, `provider_failed`. New codes can be added: treat unknown ones as `operation_failed`.",
+            "description": "Stable error code: `input_unreadable`, `unsupported_input`, `timeout`, `limit_exceeded`, `operation_failed`, `storage_failed`, `provider_failed`, and `dependency_failed` when a task it depends on failed. New codes can be added: treat unknown ones as `operation_failed`.",
             "type": "string",
             "pattern": "^[a-z][a-z0-9_]*$",
             "examples": [
@@ -352,7 +352,8 @@
                 "limit_exceeded",
                 "operation_failed",
                 "storage_failed",
-                "provider_failed"
+                "provider_failed",
+                "dependency_failed"
             ]
         },
         "TaskError": {
@@ -411,7 +412,7 @@
                     "minimum": 0
                 },
                 "url": {
-                    "description": "Signed download URL, for files in the temporary storage (`eclair`). Not for end users: it expires with the file.",
+                    "description": "Signed download URL, for files in the temporary storage (`eclair`): the bucket's presigned URL, or `GET /v1/files/{token}` when the temporary storage is a local directory. Not for end users: it expires with the file.",
                     "type": "string",
                     "format": "uri"
                 },

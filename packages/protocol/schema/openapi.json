@@ -36,6 +36,10 @@
         {
             "name": "Operations",
             "description": "What this server can do."
+        },
+        {
+            "name": "Files",
+            "description": "Download files of the temporary storage."
         }
     ],
     "paths": {
@@ -997,6 +1001,53 @@
                     }
                 }
             }
+        },
+        "/v1/files/{token}": {
+            "get": {
+                "operationId": "downloadFile",
+                "tags": ["Files"],
+                "summary": "Download a file of the temporary storage",
+                "description": "The `url` of an `OutputFile` in the temporary storage, when it's a local directory. The token is signed by the server and expires with the file, so the request needs no API key. An unknown, expired or changed token is a 404.",
+                "security": [],
+                "parameters": [
+                    {
+                        "name": "token",
+                        "in": "path",
+                        "required": true,
+                        "description": "From the `url` of an `OutputFile`.",
+                        "schema": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 4096
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The file. `Content-Type` is its detected type.",
+                        "headers": {
+                            "Content-Length": {
+                                "description": "Bytes.",
+                                "schema": {
+                                    "type": "integer",
+                                    "minimum": 0
+                                }
+                            }
+                        },
+                        "content": {
+                            "*/*": {
+                                "schema": {
+                                    "type": "string",
+                                    "contentMediaType": "application/octet-stream"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFound"
+                    }
+                }
+            }
         }
     },
     "webhooks": {
@@ -1659,7 +1710,7 @@
                 ]
             },
             "TaskErrorCode": {
-                "description": "Stable error code: `input_unreadable`, `unsupported_input`, `timeout`, `limit_exceeded`, `operation_failed`, `storage_failed`, `provider_failed`. New codes can be added: treat unknown ones as `operation_failed`.",
+                "description": "Stable error code: `input_unreadable`, `unsupported_input`, `timeout`, `limit_exceeded`, `operation_failed`, `storage_failed`, `provider_failed`, and `dependency_failed` when a task it depends on failed. New codes can be added: treat unknown ones as `operation_failed`.",
                 "type": "string",
                 "pattern": "^[a-z][a-z0-9_]*$",
                 "examples": [
@@ -1669,7 +1720,8 @@
                     "limit_exceeded",
                     "operation_failed",
                     "storage_failed",
-                    "provider_failed"
+                    "provider_failed",
+                    "dependency_failed"
                 ]
             },
             "TaskError": {
@@ -1720,7 +1772,7 @@
                         "minimum": 0
                     },
                     "url": {
-                        "description": "Signed download URL, for files in the temporary storage (`eclair`). Not for end users: it expires with the file.",
+                        "description": "Signed download URL, for files in the temporary storage (`eclair`): the bucket's presigned URL, or `GET /v1/files/{token}` when the temporary storage is a local directory. Not for end users: it expires with the file.",
                         "type": "string",
                         "format": "uri"
                     },
