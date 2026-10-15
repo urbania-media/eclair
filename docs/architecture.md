@@ -96,7 +96,7 @@ Old jobs are pruned after a configurable retention. Usage is aggregated per proj
 
 ## Security
 
-- **Authentication.** Projects authenticate with bearer API keys. Keys are shown once, stored hashed, and can be scoped (create jobs, read jobs, manage presets). The admin API and the CLI use a separate admin token.
+- **Authentication.** Projects authenticate with bearer API keys. Keys are shown once, stored hashed, and can be scoped (create jobs, read jobs, manage presets). The admin API uses a separate admin token. The CLI runs where the server runs and reads the database directly, with `DATABASE_URL` and `ECLAIR_SECRET_KEY`.
 - **Isolation.** Every query is scoped to the project of the key. Each task runs in its own temporary directory, and an operation only receives the paths it needs.
 - **Inputs.** The SSRF guard resolves the host and refuses private, loopback, link-local and metadata addresses, limits redirects and checks each redirect again. Projects can restrict input hosts to an allow-list. Size and duration limits are checked before and during download.
 - **Binaries.** Called with argument arrays, never through a shell. Each run has a timeout, a memory limit and an output-size limit. ImageMagick and Ghostscript use restrictive policy files. SVG and PDF inputs never load external resources.

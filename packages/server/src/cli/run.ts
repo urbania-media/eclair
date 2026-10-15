@@ -1,114 +1,27 @@
 import { randomBytes } from 'node:crypto';
 import { parseArgs } from 'node:util';
-import type { ParseArgsOptionsConfig } from 'node:util';
 
 import { checkBinaries } from '../binaries.ts';
-import { ConfigError, loadConfig, requireSettings } from '../config/config.ts';
+import { ConfigError, loadConfig } from '../config/config.ts';
 import type { Config } from '../config/config.ts';
 import { createDatabase } from '../database/connection.ts';
-import type { Database } from '../database/connection.ts';
 import { checkDatabase } from '../database/dialect.ts';
 import { migrateToLatest, migrationStatus, pendingMigrations } from '../database/migrate.ts';
 import { buildApp } from '../http/app.ts';
+import { createServices } from '../services.ts';
 import { VERSION } from '../version.ts';
+import { ADMIN_COMMANDS } from './admin.ts';
+import { CliExit, EXIT, configWith, errorMessage, openMigratedDatabase } from './command.ts';
+import type { CliIo, Command, CommandContext } from './command.ts';
 
-export interface CliIo {
-    stdout: (text: string) => void;
-    stderr: (text: string) => void;
-    env: NodeJS.ProcessEnv;
-    /** Resolves when the process is asked to stop (SIGTERM, SIGINT). Only long-running commands call it. */
-    waitForStop: () => Promise<void>;
-}
-
-/** Exit codes from sysexits.h, which the Docker entry point also uses. */
-export const EXIT = {
-    ok: 0,
-    failure: 1,
-    usage: 64,
-    unavailable: 69,
-    config: 78,
-} as const;
-
-interface CommandContext {
-    io: CliIo;
-    values: Record<string, string | boolean | (string | boolean)[] | undefined>;
-    positionals: string[];
-}
-
-interface Command {
-    /** Arguments after the command name, for the help. */
-    usage?: string;
-    description: string;
-    options?: ParseArgsOptionsConfig;
-    /** Positional arguments the command takes. */
-    positionals?: number;
-    run(context: CommandContext): Promise<number>;
-}
-
-/** Thrown by a command to stop with an exit code and a message on stderr. */
-class CliExit extends Error {
-    readonly code: number;
-
-    constructor(code: number, message: string) {
-        super(message);
-        this.code = code;
-    }
-}
-
-function errorMessage(error: unknown): string {
-    return error instanceof Error ? error.message : String(error);
-}
-
-function readConfig(io: CliIo): Config {
-    try {
-        return loadConfig(io.env);
-    } catch (error) {
-        if (error instanceof ConfigError) {
-            throw new CliExit(EXIT.config, error.message);
-        }
-        throw error;
-    }
-}
-
-/** Reads the configuration and checks the settings a command needs. */
-function configWith(io: CliIo, settings: Parameters<typeof requireSettings>[1]): Config {
-    const config = readConfig(io);
-    try {
-        requireSettings(config, settings);
-    } catch (error) {
-        if (error instanceof ConfigError) {
-            throw new CliExit(EXIT.config, error.message);
-        }
-        throw error;
-    }
-    return config;
-}
-
-/** Connects to the database and refuses to go on when a migration hasn't run. */
-async function openMigratedDatabase(databaseUrl: string): Promise<Database> {
-    const database = createDatabase(databaseUrl);
-    try {
-        const pending = await pendingMigrations(database);
-        if (pending.length > 0) {
-            throw new CliExit(
-                EXIT.unavailable,
-                `The database schema is not up to date: run eclair migrate (pending: ${pending.join(', ')}).`,
-            );
-        }
-        return database;
-    } catch (error) {
-        await database.close();
-        if (error instanceof CliExit) {
-            throw error;
-        }
-        throw new CliExit(EXIT.unavailable, `Can't read the database: ${errorMessage(error)}`);
-    }
-}
+export { EXIT } from './command.ts';
+export type { CliIo } from './command.ts';
 
 async function startApi(io: CliIo, role: 'api' | 'all'): Promise<number> {
-    const config = configWith(io, ['DATABASE_URL']);
+    const config = configWith(io, ['DATABASE_URL', 'ECLAIR_SECRET_KEY']);
     const database = await openMigratedDatabase(config.databaseUrl ?? '');
     const app = buildApp({
+        services: createServices(database, config.secretKey ?? Buffer.alloc(0)),
         version: VERSION,
         logger: {
             level: config.logLevel,
@@ -258,6 +171,7 @@ const COMMANDS: Record<string, Command> = {
         description: 'Check the configuration, the database and the binaries',
         run: ({ io }) => doctor(io),
     },
+    ...ADMIN_COMMANDS,
     'key:generate': {
         description: 'Print a new ECLAIR_SECRET_KEY',
         run: async ({ io }) => {
@@ -270,7 +184,7 @@ const COMMANDS: Record<string, Command> = {
 function usage(): string {
     const lines = Object.entries(COMMANDS).map(([name, command]) => {
         const signature = command.usage === undefined ? name : `${name} ${command.usage}`;
-        return `  ${signature.padEnd(24)} ${command.description}`;
+        return `  ${signature}\n      ${command.description}`;
     });
     return `Usage: eclair <command>
 
@@ -278,8 +192,8 @@ Commands:
 ${lines.join('\n')}
 
 Options:
-  -h, --help               Show this help
-  -v, --version            Show the version
+  -h, --help       Show this help
+  -v, --version    Show the version
 
 Configuration comes from environment variables: see docs/deployment.md.
 `;

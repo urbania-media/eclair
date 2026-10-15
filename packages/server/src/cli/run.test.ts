@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -23,6 +24,7 @@ function createIo(env: NodeJS.ProcessEnv = {}, stop: Promise<void> = Promise.res
     return { io, output };
 }
 
+const SECRET_KEY = randomBytes(32).toString('base64');
 const directories: string[] = [];
 
 /** A new SQLite database in a temporary directory. */
@@ -79,16 +81,25 @@ describe('runCli', () => {
         const { io, output } = createIo();
         expect(await runCli(['api'], io)).toBe(EXIT.config);
         expect(output.stderr).toContain('DATABASE_URL is required.');
+        expect(output.stderr).toContain('ECLAIR_SECRET_KEY is required.');
     });
 
     it('refuses to start the API before the migrations', async () => {
-        const { io, output } = createIo({ DATABASE_URL: sqliteUrl() });
+        const { io, output } = createIo({
+            DATABASE_URL: sqliteUrl(),
+            ECLAIR_SECRET_KEY: SECRET_KEY,
+        });
         expect(await runCli(['api'], io)).toBe(EXIT.unavailable);
         expect(output.stderr).toContain('run eclair migrate (pending: 0001-initial)');
     });
 
     it('migrates, then starts the API and stops it on the stop signal', async () => {
-        const env = { DATABASE_URL: sqliteUrl(), ECLAIR_PORT: '0', ECLAIR_LOG_LEVEL: 'silent' };
+        const env = {
+            DATABASE_URL: sqliteUrl(),
+            ECLAIR_SECRET_KEY: SECRET_KEY,
+            ECLAIR_PORT: '0',
+            ECLAIR_LOG_LEVEL: 'silent',
+        };
 
         const status = createIo(env);
         expect(await runCli(['migrate', '--status'], status.io)).toBe(EXIT.ok);
