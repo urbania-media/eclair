@@ -92,6 +92,16 @@ jobs:
                     --health-interval 5s
                     --health-timeout 5s
                     --health-retries 30
+            # The task queues.
+            redis:
+                image: redis:8
+                ports:
+                    - 6379:6379
+                options: >-
+                    --health-cmd "redis-cli ping"
+                    --health-interval 5s
+                    --health-timeout 5s
+                    --health-retries 30
             # An S3-compatible service for the s3 storages and the temporary storage.
             s3:
                 image: adobe/s3mock:5.2.3
@@ -102,6 +112,7 @@ jobs:
         env:
             DATABASE_URL: ${{ matrix.database.url }}
             ECLAIR_TEST_DIALECT: ${{ matrix.database.dialect }}
+            ECLAIR_TEST_REDIS_URL: redis://127.0.0.1:6379
             ECLAIR_TEST_S3_ENDPOINT: http://127.0.0.1:9090
             ECLAIR_TEST_S3_BUCKET: eclair-test
         steps:

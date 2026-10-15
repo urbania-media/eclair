@@ -6,6 +6,7 @@ import { createDatabase } from '../database/connection.ts';
 import type { Database } from '../database/connection.ts';
 import { pendingMigrations } from '../database/migrate.ts';
 import { ConflictError, NotFoundError } from '../errors.ts';
+import type { TaskQueues } from '../jobs/queues.ts';
 import { BUILT_IN_PLUGINS, OperationRegistry, PluginError } from '../operations/registry.ts';
 import { createServices } from '../services.ts';
 import type { Services } from '../services.ts';
@@ -151,6 +152,7 @@ export function createServicesFor(
     database: Database,
     config: Config,
     operations: OperationRegistry | undefined,
+    queues?: TaskQueues,
 ): Services {
     return createServices({
         database,
@@ -163,5 +165,6 @@ export function createServicesFor(
             tmpDir: config.tmpDir,
         },
         operations,
+        queues,
     });
 }

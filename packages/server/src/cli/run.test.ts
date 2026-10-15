@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { BINARIES, loadConfig } from '../config/config.ts';
+import { RUNS_WITH_REDIS, testRedisUrl } from '../testing.ts';
 import { VERSION } from '../version.ts';
 import { EXIT, runCli } from './run.ts';
 import type { CliIo } from './run.ts';
@@ -81,12 +82,15 @@ describe('runCli', () => {
         const { io, output } = createIo();
         expect(await runCli(['api'], io)).toBe(EXIT.config);
         expect(output.stderr).toContain('DATABASE_URL is required.');
+        expect(output.stderr).toContain('REDIS_URL is required.');
         expect(output.stderr).toContain('ECLAIR_SECRET_KEY is required.');
     });
 
     it('refuses to start the API before the migrations', async () => {
         const { io, output } = createIo({
             DATABASE_URL: sqliteUrl(),
+            // Never reached: the migrations are checked first.
+            REDIS_URL: 'redis://127.0.0.1:1',
             ECLAIR_SECRET_KEY: SECRET_KEY,
         });
         expect(await runCli(['api'], io)).toBe(EXIT.unavailable);
@@ -95,36 +99,40 @@ describe('runCli', () => {
         );
     });
 
-    it('migrates, then starts the API and stops it on the stop signal', async () => {
-        const env = {
-            DATABASE_URL: sqliteUrl(),
-            ECLAIR_SECRET_KEY: SECRET_KEY,
-            ECLAIR_PORT: '0',
-            ECLAIR_LOG_LEVEL: 'silent',
-        };
+    it.runIf(RUNS_WITH_REDIS)(
+        'migrates, then starts the API and stops it on the stop signal',
+        async () => {
+            const env = {
+                DATABASE_URL: sqliteUrl(),
+                REDIS_URL: testRedisUrl() ?? 'redis://127.0.0.1:6379',
+                ECLAIR_SECRET_KEY: SECRET_KEY,
+                ECLAIR_PORT: '0',
+                ECLAIR_LOG_LEVEL: 'silent',
+            };
 
-        const status = createIo(env);
-        expect(await runCli(['migrate', '--status'], status.io)).toBe(EXIT.ok);
-        expect(status.output.stdout).toBe('pending 0001-initial\npending 0002-upload-parts\n');
+            const status = createIo(env);
+            expect(await runCli(['migrate', '--status'], status.io)).toBe(EXIT.ok);
+            expect(status.output.stdout).toBe('pending 0001-initial\npending 0002-upload-parts\n');
 
-        const migrate = createIo(env);
-        expect(await runCli(['migrate'], migrate.io)).toBe(EXIT.ok);
-        expect(migrate.output.stdout).toBe('ran 0001-initial\nran 0002-upload-parts\nDone.\n');
+            const migrate = createIo(env);
+            expect(await runCli(['migrate'], migrate.io)).toBe(EXIT.ok);
+            expect(migrate.output.stdout).toBe('ran 0001-initial\nran 0002-upload-parts\nDone.\n');
 
-        const again = createIo(env);
-        expect(await runCli(['migrate'], again.io)).toBe(EXIT.ok);
-        expect(again.output.stdout).toBe('Nothing to migrate.\n');
+            const again = createIo(env);
+            expect(await runCli(['migrate'], again.io)).toBe(EXIT.ok);
+            expect(again.output.stdout).toBe('Nothing to migrate.\n');
 
-        let stop = () => {};
-        const stopped = new Promise<void>((resolve) => {
-            stop = resolve;
-        });
-        const api = createIo(env, stopped);
-        const running = runCli(['api'], api.io);
-        stop();
-        expect(await running).toBe(EXIT.ok);
-        expect(api.output.stderr).toBe('');
-    });
+            let stop = () => {};
+            const stopped = new Promise<void>((resolve) => {
+                stop = resolve;
+            });
+            const api = createIo(env, stopped);
+            const running = runCli(['api'], api.io);
+            stop();
+            expect(await running).toBe(EXIT.ok);
+            expect(api.output.stderr).toBe('');
+        },
+    );
 
     it('says that workers are not available yet', async () => {
         const { io } = createIo();

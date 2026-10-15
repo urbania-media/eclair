@@ -1,4 +1,7 @@
 import type { Database } from './database/connection.ts';
+import { Jobs } from './jobs/jobs.ts';
+import type { TaskQueues } from './jobs/queues.ts';
+import { Scheduler } from './jobs/scheduler.ts';
 import type { OperationRegistry } from './operations/registry.ts';
 import { Presets } from './presets/presets.ts';
 import { ApiKeys } from './projects/api-keys.ts';
@@ -28,6 +31,9 @@ export interface Services {
     resolver: StorageResolver;
     limits: ServerLimits;
     operations: OperationRegistry | undefined;
+    /** With the operations and the queues: the API and the workers. */
+    scheduler: Scheduler | undefined;
+    jobs: Jobs | undefined;
 }
 
 export interface ServicesOptions {
@@ -40,10 +46,12 @@ export interface ServicesOptions {
      * that don't need them), presets only check the protocol's schema.
      */
     operations?: OperationRegistry | undefined;
+    /** The task queues in Redis. Without them, there are no jobs (CLI commands). */
+    queues?: TaskQueues | undefined;
 }
 
 export function createServices(options: ServicesOptions): Services {
-    const { database, secretKey, temporary, limits, operations } = options;
+    const { database, secretKey, temporary, limits, operations, queues } = options;
     const projects = new Projects(database, secretKey);
     const storages = new Storages(database, projects, secretKey);
     const presets = new Presets(database);
@@ -54,15 +62,22 @@ export function createServices(options: ServicesOptions): Services {
             operations.checkTasks(tasks, pointer, settings);
         });
     }
+    const uploads = new Uploads(database, temporary, limits);
+    const scheduler = queues === undefined ? undefined : new Scheduler(database, queues, projects);
     return {
         database,
         projects,
         apiKeys: new ApiKeys(database, projects),
         storages,
         presets,
-        uploads: new Uploads(database, temporary, limits),
+        uploads,
         resolver: new StorageResolver(storages, projects, temporary),
         limits,
         operations,
+        scheduler,
+        jobs:
+            scheduler === undefined || operations === undefined
+                ? undefined
+                : new Jobs({ database, presets, storages, uploads, operations, scheduler }),
     };
 }
