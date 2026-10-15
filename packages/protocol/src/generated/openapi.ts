@@ -273,6 +273,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/files/{token}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download a file of the temporary storage
+         * @description The `url` of an `OutputFile` in the temporary storage, when it's a local directory. The token is signed by the server and expires with the file, so the request needs no API key. An unknown, expired or changed token is a 404.
+         */
+        get: operations["downloadFile"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export interface webhooks {
     "job.completed": {
@@ -522,7 +542,7 @@ export interface components {
         /** @enum {string} */
         TaskStatus: "pending" | "queued" | "running" | "completed" | "failed" | "canceled" | "skipped";
         /**
-         * @description Stable error code: `input_unreadable`, `unsupported_input`, `timeout`, `limit_exceeded`, `operation_failed`, `storage_failed`, `provider_failed`. New codes can be added: treat unknown ones as `operation_failed`.
+         * @description Stable error code: `input_unreadable`, `unsupported_input`, `timeout`, `limit_exceeded`, `operation_failed`, `storage_failed`, `provider_failed`, and `dependency_failed` when a task it depends on failed. New codes can be added: treat unknown ones as `operation_failed`.
          * @example input_unreadable
          * @example unsupported_input
          * @example timeout
@@ -530,6 +550,7 @@ export interface components {
          * @example operation_failed
          * @example storage_failed
          * @example provider_failed
+         * @example dependency_failed
          */
         TaskErrorCode: string;
         TaskError: {
@@ -553,7 +574,7 @@ export interface components {
             count?: number;
             /**
              * Format: uri
-             * @description Signed download URL, for files in the temporary storage (`eclair`). Not for end users: it expires with the file.
+             * @description Signed download URL, for files in the temporary storage (`eclair`): the bucket's presigned URL, or `GET /v1/files/{token}` when the temporary storage is a local directory. Not for end users: it expires with the file.
              */
             url?: string;
             /**
@@ -1512,6 +1533,32 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+        };
+    };
+    downloadFile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description From the `url` of an `OutputFile`. */
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The file. `Content-Type` is its detected type. */
+            200: {
+                headers: {
+                    /** @description Bytes. */
+                    "Content-Length"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": string;
+                };
+            };
+            404: components["responses"]["NotFound"];
         };
     };
     taskCompletedWebhook: {

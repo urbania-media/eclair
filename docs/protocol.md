@@ -107,11 +107,13 @@ The task graph must be acyclic. The API answers `202` with the job.
 }
 ```
 
-Job statuses: `pending`, `running`, `completed`, `failed`, `canceled`. Task statuses add `queued` and `skipped`. A failed task has an `error` with a stable `code` (`input_unreadable`, `unsupported_input`, `timeout`, `limit_exceeded`, `operation_failed`, `storage_failed`, `provider_failed`) and a human `message`.
+Job statuses: `pending`, `running`, `completed`, `failed`, `canceled`. Task statuses add `queued` and `skipped`. A failed task has an `error` with a stable `code` (`input_unreadable`, `unsupported_input`, `timeout`, `limit_exceeded`, `operation_failed`, `storage_failed`, `provider_failed`, and `dependency_failed` when a task it depends on failed) and a human `message`. New codes can be added: clients treat unknown ones as `operation_failed`.
 
 Files with many parts (HLS segments, thumbnail series) report their main files and a `count` of the others, not every segment.
 
 Files in the temporary storage also have a signed `url` and an `expiresAt`. An expired file keeps its entry with `"expired": true` and no `url`. `GET /v1/jobs/{id}/files` lists every file of the job, segments included, with fresh signed URLs.
+
+With a bucket as temporary storage, `url` is the bucket's presigned URL. With a local directory, it is `GET /v1/files/{token}` on Eclair: the token is signed by the server and expires with the file, so the download needs no API key. An unknown, expired or changed token is a 404.
 
 ### Other job endpoints
 
