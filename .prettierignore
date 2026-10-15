@@ -3,3 +3,5 @@ coverage/
 package-lock.json
 CHANGELOG.md
 .changeset/*.md
+packages/protocol/schema/eclair.schema.json
+packages/protocol/src/generated/
