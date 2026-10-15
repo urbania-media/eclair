@@ -4,7 +4,6 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { validate } from '@eclair-js/protocol';
 
 import { BUILT_IN_PLUGINS, OperationRegistry } from '../../operations/registry.ts';
-import { createServices } from '../../services.ts';
 import type { Services } from '../../services.ts';
 import { createTestServices } from '../../testing.ts';
 import { buildApp } from '../app.ts';
@@ -15,12 +14,9 @@ let token: string;
 let limitedToken: string;
 
 beforeAll(async () => {
-    const base = await createTestServices();
-    services = createServices(
-        base.database,
-        base.secretKey,
-        await OperationRegistry.load(BUILT_IN_PLUGINS),
-    );
+    services = await createTestServices({
+        operations: await OperationRegistry.load(BUILT_IN_PLUGINS),
+    });
     await services.projects.create({ slug: 'niche' });
     await services.projects.create({
         slug: 'limited',

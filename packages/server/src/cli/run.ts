@@ -8,13 +8,13 @@ import { createDatabase } from '../database/connection.ts';
 import { checkDatabase } from '../database/dialect.ts';
 import { migrateToLatest, migrationStatus, pendingMigrations } from '../database/migrate.ts';
 import { buildApp } from '../http/app.ts';
-import { createServices } from '../services.ts';
 import { VERSION } from '../version.ts';
 import { ADMIN_COMMANDS } from './admin.ts';
 import {
     CliExit,
     EXIT,
     configWith,
+    createServicesFor,
     errorMessage,
     loadOperations,
     openMigratedDatabase,
@@ -29,7 +29,7 @@ async function startApi(io: CliIo, role: 'api' | 'all'): Promise<number> {
     const operations = await loadOperations(config);
     const database = await openMigratedDatabase(config.databaseUrl ?? '');
     const app = buildApp({
-        services: createServices(database, config.secretKey ?? Buffer.alloc(0), operations),
+        services: createServicesFor(database, config, operations),
         version: VERSION,
         logger: {
             level: config.logLevel,

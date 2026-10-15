@@ -78,6 +78,12 @@ const EnvironmentSchema = Type.Object({
         default: 'file:///var/lib/eclair/storage',
         description: 'a file:// or s3:// URL',
     }),
+    ECLAIR_TEMP_S3_ACCESS_KEY_ID: Type.Optional(
+        Type.String({ minLength: 1, description: 'an access key id' }),
+    ),
+    ECLAIR_TEMP_S3_SECRET_ACCESS_KEY: Type.Optional(
+        Type.String({ minLength: 1, description: 'a secret access key' }),
+    ),
     ECLAIR_TEMP_RETENTION: duration('24h', 'a duration (24h)'),
     ECLAIR_TEMP_MAX_RETENTION: duration('7d', 'a duration (7d)'),
     ECLAIR_PLUGINS: Type.String({ default: '', description: 'package names, comma-separated' }),
@@ -108,7 +114,12 @@ export interface Config {
     adminToken: string | undefined;
     queues: QueueConfig[];
     tmpDir: string;
+    /**
+     * Backend of the temporary storage: `file:///path`, or `s3://bucket/prefix?endpoint=…&region=…`
+     * with the `ECLAIR_TEMP_S3_*` credentials.
+     */
     tempStorage: string;
+    tempStorageCredentials: { accessKeyId: string; secretAccessKey: string } | undefined;
     /** Milliseconds. */
     tempRetention: number;
     /** Milliseconds. */
@@ -211,6 +222,15 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     const queues = parseQueues(environment.ECLAIR_QUEUES, problems);
     const tempRetention = parseDuration(environment.ECLAIR_TEMP_RETENTION);
     const tempMaxRetention = parseDuration(environment.ECLAIR_TEMP_MAX_RETENTION);
+    if (
+        environment.ECLAIR_TEMP_STORAGE.startsWith('s3://') &&
+        (environment.ECLAIR_TEMP_S3_ACCESS_KEY_ID === undefined ||
+            environment.ECLAIR_TEMP_S3_SECRET_ACCESS_KEY === undefined)
+    ) {
+        problems.push(
+            'ECLAIR_TEMP_S3_ACCESS_KEY_ID and ECLAIR_TEMP_S3_SECRET_ACCESS_KEY are required with an s3:// ECLAIR_TEMP_STORAGE.',
+        );
+    }
     if (tempRetention > tempMaxRetention) {
         problems.push('ECLAIR_TEMP_RETENTION must not be longer than ECLAIR_TEMP_MAX_RETENTION.');
     }
@@ -236,6 +256,14 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
         queues,
         tmpDir: environment.ECLAIR_TMP_DIR,
         tempStorage: environment.ECLAIR_TEMP_STORAGE,
+        tempStorageCredentials:
+            environment.ECLAIR_TEMP_S3_ACCESS_KEY_ID === undefined ||
+            environment.ECLAIR_TEMP_S3_SECRET_ACCESS_KEY === undefined
+                ? undefined
+                : {
+                      accessKeyId: environment.ECLAIR_TEMP_S3_ACCESS_KEY_ID,
+                      secretAccessKey: environment.ECLAIR_TEMP_S3_SECRET_ACCESS_KEY,
+                  },
         tempRetention,
         tempMaxRetention,
         plugins: environment.ECLAIR_PLUGINS.split(',')

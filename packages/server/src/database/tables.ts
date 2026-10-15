@@ -161,6 +161,8 @@ export interface UploadsTable {
     checksum: Nullable<string>;
     /** The probe's result, when the upload was probed. */
     metadata: NullableJson;
+    /** Parts of a resumable upload, `[{ offset, size }]`. `null` for an upload sent at once. */
+    parts: NullableJson;
     expires_at: Timestamp;
     completed_at: NullableTimestamp;
     created_at: Timestamp;
@@ -321,6 +323,7 @@ export const COLUMNS = {
         'mime',
         'checksum',
         'metadata',
+        'parts',
         'expires_at',
         'completed_at',
         'created_at',

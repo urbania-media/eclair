@@ -4,6 +4,7 @@ import type { Services } from '../../services.ts';
 import { authenticateWithApiKeys } from '../auth.ts';
 import { operationRoutes } from './operations.ts';
 import { presetRoutes } from './presets.ts';
+import { uploadRoutes } from './uploads.ts';
 
 /** The `/v1` API of the protocol, for projects. */
 export async function v1(app: FastifyInstance, options: { services: Services }): Promise<void> {
@@ -13,4 +14,5 @@ export async function v1(app: FastifyInstance, options: { services: Services }):
     if (services.operations !== undefined) {
         operationRoutes(app, services.operations);
     }
+    await app.register(uploadRoutes, { services });
 }
