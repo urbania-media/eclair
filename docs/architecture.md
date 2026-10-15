@@ -5,7 +5,7 @@
 ```
                     ┌──────────────────────────── Eclair ─────────────────────────────┐
                     │                                                                  │
- Application ──────▶│  API ──────── MySQL or PostgreSQL (projects, jobs, usage)        │
+ Application ──────▶│  API ──────── SQL database (projects, jobs, usage)               │
   (REST, key)       │   │                                                              │
                     │   └─ scheduler ── Redis / BullMQ ──┬──▶ worker [cpu]            │
  Application ◀──────│  webhooks                          ├──▶ worker [cpu, video]     │
@@ -26,7 +26,7 @@ All processes come from one package (`@eclair-js/server`) and one Docker image. 
 | **Scheduler** | Resolves presets, builds the task graph, enqueues tasks whose dependencies are done, ends jobs, sends webhooks. It runs inside the API processes, with a lock in Redis so only one acts on a given job at a time. |
 | **Worker**    | Pulls tasks from the queues it is configured for, downloads inputs, runs the operation, uploads outputs, records usage.                                                                                           |
 | **CLI**       | `eclair`: migrations, projects, keys, storages, presets, jobs (list, inspect, retry, cancel), `doctor`.                                                                                                           |
-| **Database**  | MySQL or PostgreSQL. Durable state: projects, hashed keys, encrypted credentials, presets, jobs, tasks, outputs, usage.                                                                                           |
+| **Database**  | MySQL or PostgreSQL, or SQLite on a single machine. Durable state: projects, hashed keys, encrypted credentials, presets, jobs, tasks, outputs, usage.                                                            |
 | **Redis**     | BullMQ queues, progress, locks and rate limits. Losing Redis loses queued work, not jobs: the scheduler re-enqueues from the database.                                                                            |
 
 ## Life of a job
@@ -110,9 +110,10 @@ Old jobs are pruned after a configurable retention. Usage is aggregated per proj
 - `GET /health` (process) and `GET /ready` (database, Redis, binaries).
 - `eclair doctor` checks binaries and their versions, models, queues and storages.
 
-## Open choices
+## Libraries
 
-To settle in Phase 0, each with a decision record:
+Settled in Phase 0:
 
-- HTTP framework (Fastify is the likely choice: JSON Schema validation and OpenAPI support) and database access (a query builder that supports MySQL and PostgreSQL, such as Kysely, with migrations written with its schema API; see [decision 0007](decisions/0007-sql-database-and-redis.md)).
-- Library for options schemas (one that produces JSON Schema, so schemas end up in the OpenAPI document).
+- HTTP: Fastify ([0013](decisions/0013-fastify.md)).
+- Database access: Kysely, on MySQL, PostgreSQL ([0007](decisions/0007-sql-database-and-redis.md)) and SQLite for single-machine installs ([0016](decisions/0016-sqlite-for-single-machine-installs.md)), with `node:sqlite` as the SQLite driver ([0014](decisions/0014-kysely.md)).
+- Schemas and validation: TypeBox for operation options, Ajv for every validation, and a hand-written OpenAPI document for the protocol ([0015](decisions/0015-typebox-for-options-schemas.md)).
