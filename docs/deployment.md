@@ -63,7 +63,7 @@ Environment variables, with defaults in [`docker/.env.example`](../docker/.env.e
 | `DATABASE_URL`              | Database connection: `mysql://…` or `postgres://…`, or `sqlite:///path/to/eclair.db` on a single server                                                                               |
 | `REDIS_URL`                 | Redis connection                                                                                                                                                                      |
 | `ECLAIR_SECRET_KEY`         | 32 random bytes in base64 (`eclair key:generate`) that encrypt storage credentials and provider keys. Keep it safe: losing it means registering storages again.                       |
-| `ECLAIR_ADMIN_TOKEN`        | Token for the admin API and the CLI                                                                                                                                                   |
+| `ECLAIR_ADMIN_TOKEN`        | Token for the admin API                                                                                                                                                               |
 | `ECLAIR_PUBLIC_URL`         | Public URL of the API                                                                                                                                                                 |
 | `ECLAIR_PORT`               | Port the API listens on (`8080`)                                                                                                                                                      |
 | `ECLAIR_HOST`               | Address the API listens on (`0.0.0.0`)                                                                                                                                                |
@@ -80,7 +80,18 @@ Environment variables, with defaults in [`docker/.env.example`](../docker/.env.e
 
 Empty variables count as unset. Durations use `ms`, `s`, `m`, `h` or `d` (`1h`, `7d`). An invalid configuration stops the process with the list of every problem, and `eclair doctor` reports them too.
 
-Projects, keys, storages, presets and limits live in the database and are managed with the CLI or the admin API.
+Projects, keys, storages, presets and limits live in the database and are managed with the CLI or the admin API. The CLI runs next to the server, with the same `DATABASE_URL` and `ECLAIR_SECRET_KEY`:
+
+```bash
+eclair projects:create niche --name Niche --webhook-url https://niche.example.com/eclair/webhook
+eclair projects:update niche --set concurrency=8 --set 'operations=["probe","video.transcode"]'
+eclair projects:secret niche            # the webhook secret; --rotate replaces it
+eclair keys:create niche --name website --scopes jobs:read,jobs:write
+eclair storages:set niche media --kind s3 --config @media-storage.json
+eclair presets:set web-video --file web-video.json          # global; --project for a project's own
+```
+
+Secrets given on the command line end up in the shell history: pass storage configurations as a file (`@file`) or on standard input (`-`). `eclair --help` lists every command.
 
 ## Running without Docker
 
