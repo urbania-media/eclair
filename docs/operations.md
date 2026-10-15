@@ -152,4 +152,4 @@ Presets combine operations into pipelines. The built-in ones:
 | `mediatheque/document` | `probe`, `thumbnails` (every page)                                                                    |
 | `mediatheque/font`     | `probe`, `webfonts`                                                                                   |
 
-The `mediatheque/*` presets produce the same handles and formats as the mediatheque's own jobs. See [mediatheque.md](mediatheque.md).
+The `mediatheque/*` presets produce the same handles and formats as the jobs of `laravel-mediatheque` 1.x, for its driver. With mediatheque 2, renditions are declared in the application and sent as inline tasks. See [mediatheque.md](mediatheque.md).

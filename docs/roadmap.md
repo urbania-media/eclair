@@ -38,9 +38,9 @@ The operations that `laravel-mediatheque` runs today, with the same outputs:
 ## Phase 3: clients and first application
 
 - `@eclair-js/client` (JavaScript).
-- `folklore/laravel-eclair` (PHP), in its own repository.
-- The opt-in `eclair` driver in a `laravel-mediatheque` 1.x minor release.
-- Deploy a shared Eclair and move Niche, the pilot application, to it, one type at a time.
+- `folklore/laravel-eclair` (PHP 8.3+, Laravel 12+), in its own repository.
+- The `eclair` transcoder and prober of the `laravel-mediatheque` 2.x `Transcoder` contract, in `laravel-eclair` ([decision 0017](decisions/0017-mediatheque-2-transcoder-first.md)).
+- Deploy a shared Eclair and move Niche, the pilot application, to it through the 2.x transcoder, one type at a time.
 - Operations guide: sizing, monitoring, upgrades, incidents.
 
 ## Phase 4: AI and advanced operations
@@ -66,10 +66,10 @@ The `v1.x` maintenance branch is created at 1.0.0. The other phase 4 operations 
 ## Later
 
 - Web dashboard: projects, jobs, failures, usage and costs per project.
+- The opt-in `eclair` driver in a `laravel-mediatheque` 1.x minor release, for applications that stay on 1.x, reusing `laravel-eclair`.
 - More moving applications from local processing to Eclair, then other mediatheque consumers.
 - Usage reports per project and per month, to split the server's cost.
 - `document.text`, `document.pdf`, `image.describe`.
-- Mediatheque 2.0: Eclair as an implementation of the `Transcoder` contract.
 
 ## Open questions
 

@@ -66,7 +66,7 @@ Eclair ships as one Docker image that runs as `api`, `worker` or both. It needs 
 
 ## Laravel and laravel-mediatheque
 
-[`laravel-mediatheque`](https://github.com/folkloreinc/laravel-mediatheque) can hand its pipelines to Eclair instead of running ffmpeg on the application's servers. The integration is opt-in and keeps the same file handles, so existing applications don't change. See [`docs/mediatheque.md`](docs/mediatheque.md).
+[`laravel-mediatheque`](https://github.com/folkloreinc/laravel-mediatheque) 2 can hand its pipelines to Eclair instead of running ffmpeg on the application's servers: `laravel-eclair` implements its `Transcoder` contract. Choosing Eclair is configuration, and renditions keep the same handles as with the local driver. An opt-in driver for `laravel-mediatheque` 1.x comes later. See [`docs/mediatheque.md`](docs/mediatheque.md).
 
 ## Contributing
 
