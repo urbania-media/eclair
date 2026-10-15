@@ -423,7 +423,9 @@ export interface components {
         /** @enum {string} */
         Priority: "low" | "normal" | "high";
         /** @description Free object of the client, returned as is in the job and the webhooks. */
-        Metadata: Record<string, never>;
+        Metadata: {
+            [key: string]: unknown;
+        };
         UrlInput: {
             /**
              * Format: uri
@@ -476,7 +478,9 @@ export interface components {
             /** @description Name of the task whose output is this task's input. Defaults to the job's input. `h264:file` picks one output file of that task. */
             from?: string;
             /** @description Validated against the operation's options schema (see `GET /v1/operations`). */
-            options?: Record<string, never>;
+            options?: {
+                [key: string]: unknown;
+            };
             /** @description Extra dependencies, for ordering without using an output. */
             after?: components["schemas"]["TaskName"][];
             /**
@@ -562,7 +566,9 @@ export interface components {
         };
         TaskOutputs: {
             /** @description Data extracted by the task. Its shape depends on the operation: `probe` gives a `ProbeMetadata`. */
-            metadata?: Record<string, never>;
+            metadata?: {
+                [key: string]: unknown;
+            };
             files?: components["schemas"]["OutputFile"][];
         };
         Task: {
@@ -666,7 +672,9 @@ export interface components {
                 metadata: boolean;
             };
             /** @description JSON Schema (2020-12) of the options. */
-            options: Record<string, never>;
+            options: {
+                [key: string]: unknown;
+            };
         };
         OperationList: {
             data: components["schemas"]["Operation"][];
@@ -752,7 +760,9 @@ export interface components {
             fontNames?: string[];
             animated?: boolean;
             /** @description A summary of the EXIF data. GPS data is never included. */
-            exif?: Record<string, never>;
+            exif?: {
+                [key: string]: unknown;
+            };
         };
         ProbeRequest: {
             input: components["schemas"]["Input"];

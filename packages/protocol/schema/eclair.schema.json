@@ -71,7 +71,8 @@
         },
         "Metadata": {
             "description": "Free object of the client, returned as is in the job and the webhooks.",
-            "type": "object"
+            "type": "object",
+            "additionalProperties": true
         },
         "UrlInput": {
             "type": "object",
@@ -226,7 +227,8 @@
                 },
                 "options": {
                     "description": "Validated against the operation's options schema (see `GET /v1/operations`).",
-                    "type": "object"
+                    "type": "object",
+                    "additionalProperties": true
                 },
                 "after": {
                     "description": "Extra dependencies, for ordering without using an output.",
@@ -429,7 +431,8 @@
             "properties": {
                 "metadata": {
                     "description": "Data extracted by the task. Its shape depends on the operation: `probe` gives a `ProbeMetadata`.",
-                    "type": "object"
+                    "type": "object",
+                    "additionalProperties": true
                 },
                 "files": {
                     "type": "array",
@@ -751,7 +754,8 @@
                 },
                 "options": {
                     "description": "JSON Schema (2020-12) of the options.",
-                    "type": "object"
+                    "type": "object",
+                    "additionalProperties": true
                 }
             }
         },
@@ -984,7 +988,8 @@
                 },
                 "exif": {
                     "description": "A summary of the EXIF data. GPS data is never included.",
-                    "type": "object"
+                    "type": "object",
+                    "additionalProperties": true
                 }
             }
         },
