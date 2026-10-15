@@ -1,6 +1,6 @@
 # Deployment
 
-Eclair runs from one Docker image, `ghcr.io/urbania-media/eclair`, next to MySQL or PostgreSQL, and Redis. Start with everything on one server, then add worker servers as the load grows.
+Eclair runs from one Docker image, `ghcr.io/urbania-media/eclair`, next to Redis and a SQL database: MySQL or PostgreSQL, or SQLite on a single server. Start with everything on one server, then add worker servers as the load grows.
 
 ## The image
 
@@ -31,6 +31,8 @@ docker compose exec eclair eclair projects:create my-site
 docker compose exec eclair eclair keys:create my-site
 ```
 
+On one server, SQLite can replace the database server: set `DATABASE_URL=sqlite:///var/lib/eclair/eclair.db`, with that directory on a volume on a local disk (not a network file system), and leave out the database service. API and worker processes on the same machine can share the file. SQLite suits development, tests and small installs; to grow beyond one server, move to MySQL or PostgreSQL first (see [decision 0016](decisions/0016-sqlite-for-single-machine-installs.md)).
+
 Put a reverse proxy with TLS in front of the API. The temporary directory should be on a fast local disk with room for the largest input and its outputs, times the worker concurrency.
 
 ## Many servers
@@ -45,7 +47,7 @@ Put a reverse proxy with TLS in front of the API. The temporary directory should
 - API processes are stateless. Run several behind the reverse proxy.
 - Workers only need the database, Redis, the temporary storage bucket and access to the project storages. They don't share a disk.
 - Each operation runs on its capability's queue. A server without a GPU never serves `gpu`, so GPU work waits for a GPU worker instead of failing.
-- The database and Redis can be managed services. Use the database you already run: MySQL 8.4+ or PostgreSQL 15+.
+- The database and Redis can be managed services. Use the database you already run: **MySQL 8.4+ or PostgreSQL 15+ is required** with more than one server. SQLite can't be shared between machines, and Eclair refuses to start on SQLite when processes from several hosts use the same Redis.
 - A worker that stops gracefully (`SIGTERM`) finishes its running tasks, up to a timeout, and takes no new ones. A worker that dies has its tasks retried by another worker.
 
 ## Configuration
@@ -54,7 +56,7 @@ Environment variables, with defaults in `.env.example`:
 
 | Variable                    | Content                                                                                                                                          |
 | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `DATABASE_URL`              | Database connection: `mysql://…` or `postgres://…`                                                                                               |
+| `DATABASE_URL`              | Database connection: `mysql://…` or `postgres://…`, or `sqlite:///path/to/eclair.db` on a single server                                          |
 | `REDIS_URL`                 | Redis connection                                                                                                                                 |
 | `ECLAIR_SECRET_KEY`         | Key that encrypts storage credentials and provider keys. Keep it safe: losing it means registering storages again.                               |
 | `ECLAIR_ADMIN_TOKEN`        | Token for the admin API and the CLI                                                                                                              |
@@ -83,5 +85,5 @@ Supported but not the default: install Node 24, `npm install -g @eclair-js/serve
 
 ## Backups and monitoring
 
-- Back up the database. The temporary storage doesn't need backups. Redis only holds queues and can be rebuilt by the scheduler.
+- Back up the database. With SQLite, use `VACUUM INTO` or the SQLite backup API, not a copy of the file while Eclair runs. The temporary storage doesn't need backups. Redis only holds queues and can be rebuilt by the scheduler.
 - Scrape `/metrics` with Prometheus. Alert on queue wait time, task failure rate per operation, webhook delivery failures and free space in the temporary directory.

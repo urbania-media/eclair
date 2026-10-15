@@ -62,7 +62,7 @@ See [`docs/protocol.md`](docs/protocol.md) for the API and [`docs/operations.md`
 
 ## Deploying
 
-Eclair ships as one Docker image that runs as `api`, `worker` or both. It needs MySQL or PostgreSQL, and Redis. A single server runs everything. To scale out, add worker servers, and route heavy or GPU operations to the workers that can run them. See [`docs/deployment.md`](docs/deployment.md).
+Eclair ships as one Docker image that runs as `api`, `worker` or both. It needs Redis, and MySQL or PostgreSQL. A single server runs everything, and can use SQLite instead. To scale out, add worker servers, and route heavy or GPU operations to the workers that can run them. See [`docs/deployment.md`](docs/deployment.md).
 
 ## Laravel and laravel-mediatheque
 

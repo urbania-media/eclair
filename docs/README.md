@@ -7,7 +7,7 @@ Eclair is a self-hosted media processing server shared by several applications. 
 Eclair must be:
 
 - **Shared.** One deployment serves many applications (projects), each with its own keys, storage, presets, limits and usage reports.
-- **Simple to deploy.** One Docker image, MySQL or PostgreSQL, and Redis. One server is enough to start; more workers are added without changing anything else.
+- **Simple to deploy.** One Docker image, MySQL or PostgreSQL (or SQLite on one server), and Redis. One server is enough to start; more workers are added without changing anything else.
 - **Efficient.** Workers are tuned for media work. Heavy and GPU operations go to the servers that can run them. Applications no longer pay for idle processing capacity.
 - **Extensible.** Every operation is a typed plugin with a declared options schema. Adding a conversion or an extraction doesn't touch the core.
 - **Safe.** Media comes from users. Every input is untrusted, every project is isolated, and every binary runs with limits.
