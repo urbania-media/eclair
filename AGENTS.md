@@ -47,8 +47,8 @@ docs/                  Architecture, protocol, operations, deployment, decisions
 - Node 24 (`.nvmrc`), npm workspaces, ESM only.
 - TypeScript 6, `strict` with `noUncheckedIndexedAccess` (`tsconfig.base.json`). Packages build with `tsc`. Relative imports use the `.ts` extension, which `tsc` rewrites to `.js`.
 - Packages import each other by name (`@eclair-js/protocol`). In tests and typechecks, these imports resolve to the sources through the `@eclair-js/source` export condition, so nothing needs to be built first. A new package lists that condition in its `exports` and is added to `workspaces` after the packages it depends on.
-- MySQL 8.4+ or PostgreSQL 15+ for projects, jobs and usage, through a query builder. Redis with BullMQ for queues and progress.
-- **Both databases are first-class.** Write portable queries and migrations: no raw SQL outside the dialect module, no dialect-only types or features (see [decision 0007](docs/decisions/0007-sql-database-and-redis.md)). Tests run on both.
+- MySQL 8.4+ or PostgreSQL 15+ for projects, jobs and usage, through a query builder, or SQLite for development, tests and single-machine installs (decision 0016, proposed). Redis with BullMQ for queues and progress.
+- **Every database is first-class.** Write portable queries and migrations: no raw SQL outside the dialect module, no dialect-only types or features (see [decision 0007](docs/decisions/0007-sql-database-and-redis.md)). Tests run on all of them.
 - Tests use Vitest. Test files sit next to the code: `*.test.ts`. Operation tests run the real binaries on fixtures in the Docker image.
 - Lint with ESLint (flat config, typescript-eslint `strict`). Format with Prettier.
 - Versions and changelogs with changesets. All `@eclair-js/*` packages and the Docker image share one version.
