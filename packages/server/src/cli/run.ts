@@ -8,6 +8,8 @@ import { createDatabase } from '../database/connection.ts';
 import { checkDatabase } from '../database/dialect.ts';
 import { migrateToLatest, migrationStatus, pendingMigrations } from '../database/migrate.ts';
 import { buildApp } from '../http/app.ts';
+import { TaskQueues } from '../jobs/queues.ts';
+import { createRedis } from '../redis.ts';
 import { VERSION } from '../version.ts';
 import { ADMIN_COMMANDS } from './admin.ts';
 import {
@@ -25,17 +27,27 @@ export { EXIT } from './command.ts';
 export type { CliIo } from './command.ts';
 
 async function startApi(io: CliIo, role: 'api' | 'all'): Promise<number> {
-    const config = configWith(io, ['DATABASE_URL', 'ECLAIR_SECRET_KEY']);
+    const config = configWith(io, ['DATABASE_URL', 'REDIS_URL', 'ECLAIR_SECRET_KEY']);
     const operations = await loadOperations(config);
     const database = await openMigratedDatabase(config.databaseUrl ?? '');
+    const redis = createRedis(config.redisUrl ?? '', 'eclair-api');
+    const queues = new TaskQueues(redis);
     const app = buildApp({
-        services: createServicesFor(database, config, operations),
+        services: createServicesFor(database, config, operations, queues),
         version: VERSION,
         logger: {
             level: config.logLevel,
             redact: ['req.headers.authorization', 'req.headers.cookie'],
         },
-        checks: [{ name: 'database', check: () => database.ping() }],
+        checks: [
+            { name: 'database', check: () => database.ping() },
+            {
+                name: 'redis',
+                check: async () => {
+                    await redis.ping();
+                },
+            },
+        ],
     });
     try {
         if (role === 'all') {
@@ -46,6 +58,8 @@ async function startApi(io: CliIo, role: 'api' | 'all'): Promise<number> {
         app.log.info('Stopping');
     } finally {
         await app.close();
+        await queues.close();
+        redis.disconnect();
         await database.close();
     }
     return EXIT.ok;
@@ -101,6 +115,20 @@ async function doctor(io: CliIo): Promise<number> {
     for (const setting of ['DATABASE_URL', 'REDIS_URL', 'ECLAIR_SECRET_KEY'] as const) {
         if (io.env[setting] === undefined || io.env[setting]?.trim() === '') {
             line('error', `${setting} is not set: the API and the workers need it.`);
+        }
+    }
+
+    if (config.redisUrl !== undefined) {
+        const redis = createRedis(config.redisUrl, 'eclair-doctor');
+        redis.on('error', () => {});
+        try {
+            const info = await redis.info('server');
+            const version = /redis_version:(\S+)/.exec(info)?.[1] ?? 'unknown version';
+            line('ok', `redis: ${version}`);
+        } catch (error) {
+            line('error', `redis: ${errorMessage(error)}`);
+        } finally {
+            redis.disconnect();
         }
     }
 

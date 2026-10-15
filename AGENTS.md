@@ -77,6 +77,20 @@ docker run --rm -d -p 5432:5432 -e POSTGRES_USER=eclair -e POSTGRES_PASSWORD=ecl
 DATABASE_URL=postgres://eclair:eclair@127.0.0.1:5432/eclair npm test
 ```
 
+Other services are skipped without their variable, and required in CI:
+
+| Variable                  | Service                                                                       | Tests                                                  |
+| ------------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------ |
+| `ECLAIR_TEST_REDIS_URL`   | Redis (`redis://127.0.0.1:6379`)                                              | jobs, scheduler, the API                               |
+| `ECLAIR_TEST_S3_ENDPOINT` | an S3-compatible service with an `eclair-test` bucket, such as `adobe/s3mock` | `s3` storages, the S3 temporary storage                |
+| `ECLAIR_TEST_BINARIES=1`  | the image's binaries                                                          | operations: a missing binary fails instead of skipping |
+
+```bash
+docker run --rm -d -p 6379:6379 redis:8
+docker run --rm -d -p 9090:9090 -e COM_ADOBE_TESTING_S3MOCK_STORE_INITIAL_BUCKETS=eclair-test adobe/s3mock:5.2.3
+ECLAIR_TEST_REDIS_URL=redis://127.0.0.1:6379 ECLAIR_TEST_S3_ENDPOINT=http://127.0.0.1:9090 npm test
+```
+
 ## Workflow
 
 - `main` is the development branch until 1.0. A `v1.x` maintenance branch is created at 1.0.0.

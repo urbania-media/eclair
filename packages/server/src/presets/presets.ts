@@ -30,6 +30,19 @@ export interface StoredPreset extends Preset {
     updatedAt: Date;
 }
 
+/**
+ * Tasks are stored as a list of `[name, task]` entries: MySQL sorts the keys of a JSON object, and
+ * the order of a preset's tasks is the order of its job's tasks.
+ */
+function writeTasks(tasks: Record<string, TaskRequest>): string {
+    return toJson(Object.entries(tasks));
+}
+
+function readTasks(value: unknown): Record<string, TaskRequest> {
+    const stored = readJson<[string, TaskRequest][] | Record<string, TaskRequest>>(value);
+    return Array.isArray(stored) ? Object.fromEntries(stored) : stored;
+}
+
 function toPreset(row: Selectable<PresetsTable>): StoredPreset {
     return {
         id: row.id,
@@ -38,7 +51,7 @@ function toPreset(row: Selectable<PresetsTable>): StoredPreset {
         scope: row.scope === GLOBAL_SCOPE ? 'global' : 'project',
         version: row.version,
         ...(row.description === null ? {} : { description: row.description }),
-        tasks: readJson<Record<string, TaskRequest>>(row.tasks),
+        tasks: readTasks(row.tasks),
         updatedAt: readDate(row.updated_at),
     };
 }
@@ -101,7 +114,7 @@ export class Presets {
                         name,
                         description: description ?? null,
                         version: 1,
-                        tasks: toJson(tasks),
+                        tasks: writeTasks(tasks),
                         created_at: now,
                         updated_at: now,
                     })
@@ -118,7 +131,7 @@ export class Presets {
                 .set({
                     description: description ?? null,
                     version: existing.version + 1,
-                    tasks: toJson(tasks),
+                    tasks: writeTasks(tasks),
                     updated_at: now,
                 })
                 .where('id', '=', existing.id)

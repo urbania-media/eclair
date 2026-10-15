@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 
 import type { Services } from '../../services.ts';
 import { authenticateWithApiKeys } from '../auth.ts';
+import { jobRoutes } from './jobs.ts';
 import { operationRoutes } from './operations.ts';
 import { presetRoutes } from './presets.ts';
 import { uploadRoutes } from './uploads.ts';
@@ -13,6 +14,9 @@ export async function v1(app: FastifyInstance, options: { services: Services }):
     presetRoutes(app, services.presets);
     if (services.operations !== undefined) {
         operationRoutes(app, services.operations);
+    }
+    if (services.jobs !== undefined) {
+        jobRoutes(app, services.jobs);
     }
     await app.register(uploadRoutes, { services });
 }
