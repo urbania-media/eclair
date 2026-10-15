@@ -73,6 +73,7 @@ export interface PresetsTable {
     scope: string;
     project_id: Nullable<string>;
     name: string;
+    description: Nullable<string>;
     version: number;
     tasks: Json;
     created_at: Timestamp;
@@ -238,7 +239,17 @@ export const COLUMNS = {
         'revoked_at',
     ],
     storages: ['id', 'project_id', 'name', 'kind', 'config', 'created_at', 'updated_at'],
-    presets: ['id', 'scope', 'project_id', 'name', 'version', 'tasks', 'created_at', 'updated_at'],
+    presets: [
+        'id',
+        'scope',
+        'project_id',
+        'name',
+        'description',
+        'version',
+        'tasks',
+        'created_at',
+        'updated_at',
+    ],
     jobs: [
         'id',
         'project_id',

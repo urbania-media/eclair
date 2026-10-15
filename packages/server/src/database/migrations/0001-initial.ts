@@ -77,6 +77,7 @@ export function initial(dialect: Dialect): Migration {
                     .addColumn('scope', 'varchar(32)', (column) => column.notNull())
                     .addColumn('project_id', types.id)
                     .addColumn('name', 'varchar(128)', (column) => column.notNull())
+                    .addColumn('description', 'text')
                     .addColumn('version', 'integer', (column) => column.notNull())
                     .addColumn('tasks', types.json, (column) => column.notNull())
                     .addColumn('created_at', types.timestamp, (column) => column.notNull())
