@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ImageMagick policy of the Eclair image, based on ImageMagick's "websafe" policy.
+
+  Every input is untrusted. ImageMagick only reads and writes the raster formats below, never runs an
+  external program (delegate), never reads a file list (@file) and stays within the limits below.
+  PDF, PostScript, SVG and video go through their own binaries (Ghostscript, poppler, libvips,
+  ffmpeg), never through ImageMagick.
+
+  These limits are ceilings for one process: operations set lower ones with -limit. To change them,
+  mount another policy at /etc/ImageMagick-7/policy.xml.
+-->
+<policymap>
+    <policy domain="resource" name="memory" value="1GiB"/>
+    <policy domain="resource" name="map" value="2GiB"/>
+    <policy domain="resource" name="disk" value="8GiB"/>
+    <policy domain="resource" name="width" value="32KP"/>
+    <policy domain="resource" name="height" value="32KP"/>
+    <policy domain="resource" name="area" value="256MP"/>
+    <policy domain="resource" name="list-length" value="1000"/>
+    <policy domain="resource" name="file" value="768"/>
+    <policy domain="resource" name="thread" value="4"/>
+    <policy domain="resource" name="time" value="600"/>
+    <policy domain="system" name="max-memory-request" value="256MiB"/>
+    <policy domain="system" name="memory-map" value="anonymous"/>
+    <policy domain="system" name="precision" value="6"/>
+
+    <policy domain="delegate" rights="none" pattern="*"/>
+    <policy domain="filter" rights="none" pattern="*"/>
+    <policy domain="path" rights="none" pattern="@*"/>
+
+    <!-- Coder modules: deny all, then allow raster formats. HEIC also reads and writes AVIF. -->
+    <policy domain="module" rights="none" pattern="*"/>
+    <policy domain="module" rights="read|write" pattern="{BMP,GIF,HEIC,ICO,JPEG,PNG,TIFF,WEBP,XC}"/>
+</policymap>

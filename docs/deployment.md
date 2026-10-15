@@ -5,10 +5,13 @@ Eclair runs from one Docker image, `ghcr.io/urbania-media/eclair`, next to Redis
 ## The image
 
 - Node 24, `@eclair-js/server` and the built-in operations.
-- Binaries: ffmpeg and ffprobe, ImageMagick (with HEIC, AVIF and WebP), libvips, Ghostscript and poppler, audiowaveform, fonttools (with WOFF2 support), whisper.cpp. Versions are pinned and listed in the release notes.
+- Binaries: ffmpeg and ffprobe, ImageMagick (with HEIC, AVIF and WebP), libvips, Ghostscript and poppler, audiowaveform, fonttools (with WOFF2 support), whisper.cpp (without models). Versions are pinned and listed in the release notes. Most come from Debian 13, whose stable releases only take security fixes; audiowaveform and whisper.cpp are built from source.
 - Restrictive ImageMagick and Ghostscript policies.
-- Runs as a non-root user. The only writable path is the temporary directory (`ECLAIR_TMP_DIR`).
+- Runs as a non-root user (`eclair`, uid 10001). Tasks can only write to the temporary directory (`ECLAIR_TMP_DIR`, `/tmp/eclair` by default). The only other writable path is `/var/lib/eclair`, the mount point of the data volume for SQLite and the local temporary storage. The image also runs with a read-only root file system, with volumes on these two paths.
+- Built for `linux/amd64`. whisper.cpp needs a CPU with AVX2.
 - A `-gpu` variant adds CUDA, ffmpeg with NVENC, and whisper.cpp built for CUDA.
+
+Images are tagged with the version (`1.2.3`, `1.2`, `1`) and `latest` from release tags, and `main` from the development branch. [`docker/smoke-test.sh`](../docker/smoke-test.sh) checks every binary of an image, and CI runs it and scans the image before pushing it.
 
 The image takes one argument:
 
@@ -21,10 +24,11 @@ docker run ghcr.io/urbania-media/eclair eclair …  # CLI
 
 ## One server
 
-`docker/compose.yml` runs Eclair in `all` mode with PostgreSQL and Redis. `docker/compose.mysql.yml` does the same with MySQL:
+`docker/compose.yml` runs Eclair in `all` mode with PostgreSQL and Redis. `docker/compose.mysql.yml` does the same with MySQL (`docker compose -f compose.mysql.yml …`):
 
 ```bash
-cp .env.example .env            # set ECLAIR_SECRET_KEY, ECLAIR_ADMIN_TOKEN, ECLAIR_PUBLIC_URL
+cd docker
+cp .env.example .env            # set ECLAIR_SECRET_KEY, ECLAIR_ADMIN_TOKEN, ECLAIR_PUBLIC_URL, DATABASE_PASSWORD
 docker compose up -d
 docker compose exec eclair eclair migrate
 docker compose exec eclair eclair projects:create my-site
@@ -52,7 +56,7 @@ Put a reverse proxy with TLS in front of the API. The temporary directory should
 
 ## Configuration
 
-Environment variables, with defaults in `.env.example`:
+Environment variables, with defaults in [`docker/.env.example`](../docker/.env.example):
 
 | Variable                    | Content                                                                                                                                          |
 | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -61,6 +65,7 @@ Environment variables, with defaults in `.env.example`:
 | `ECLAIR_SECRET_KEY`         | Key that encrypts storage credentials and provider keys. Keep it safe: losing it means registering storages again.                               |
 | `ECLAIR_ADMIN_TOKEN`        | Token for the admin API and the CLI                                                                                                              |
 | `ECLAIR_PUBLIC_URL`         | Public URL of the API                                                                                                                            |
+| `ECLAIR_PORT`               | Port the API listens on (`8080`)                                                                                                                 |
 | `ECLAIR_QUEUES`             | Queues a worker serves, with optional concurrency: `cpu:4,video:1`. Every worker also serves `probe` with reserved slots, unless `probe:0`       |
 | `ECLAIR_TMP_DIR`            | Temporary directory for tasks                                                                                                                    |
 | `ECLAIR_TEMP_STORAGE`       | Temporary storage backend: a local path (`file:///data/eclair`) on a single server, or an S3-compatible bucket (`s3://…`) when there are several |
