@@ -34,6 +34,8 @@ export interface AppOptions {
     version: string;
     /** Fastify's logger options, or `false` to log nothing (tests). */
     logger?: FastifyServerOptions['logger'];
+    /** A pino logger to use instead, shared with the workers of the process. */
+    loggerInstance?: FastifyServerOptions['loggerInstance'];
     checks?: ReadinessCheck[];
     /** How long a readiness check may take, in milliseconds. */
     checkTimeout?: number;
@@ -108,7 +110,9 @@ export function buildApp(options: AppOptions): FastifyInstance {
     ajv.addSchema(jsonSchema);
 
     const app = Fastify({
-        logger: options.logger ?? false,
+        ...(options.loggerInstance === undefined
+            ? { logger: options.logger ?? false }
+            : { loggerInstance: options.loggerInstance }),
         // Ids in logs come from Fastify; clients can't choose them.
         requestIdHeader: false,
     });

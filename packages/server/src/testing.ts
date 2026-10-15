@@ -1,3 +1,4 @@
+import type { Redis } from 'ioredis';
 import { randomBytes } from 'node:crypto';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -5,6 +6,7 @@ import { join } from 'node:path';
 
 import { createTestDatabase } from './database/testing.ts';
 import { TaskQueues } from './jobs/queues.ts';
+import type { TaskQueueOptions } from './jobs/queues.ts';
 import type { OperationRegistry } from './operations/registry.ts';
 import { createRedis } from './redis.ts';
 import { createServices } from './services.ts';
@@ -20,19 +22,27 @@ export async function createTestServices(
     options: {
         operations?: OperationRegistry;
         limits?: Partial<ServerLimits>;
-        /** Creates empty task queues in the test Redis (see `testRedisUrl()`). */
-        queues?: boolean;
+        /** Creates empty task queues in the test Redis (see `testRedisUrl()`), with these options. */
+        queues?: boolean | TaskQueueOptions;
     } = {},
-): Promise<Services & { secretKey: Buffer; temporaryRoot: string; close(): Promise<void> }> {
+): Promise<
+    Services & {
+        secretKey: Buffer;
+        temporaryRoot: string;
+        /** The test Redis, with `queues`. */
+        redis: Redis | undefined;
+        close(): Promise<void>;
+    }
+> {
     const secretKey = randomBytes(32);
     const root = mkdtempSync(join(tmpdir(), 'eclair-test-'));
     const temporaryRoot = join(root, 'storage');
     const database = await createTestDatabase();
     let queues: TaskQueues | undefined;
-    let redis: ReturnType<typeof createRedis> | undefined;
-    if (options.queues === true) {
+    let redis: Redis | undefined;
+    if (options.queues !== undefined && options.queues !== false) {
         redis = createRedis(testRedisUrl() ?? '', 'eclair-test');
-        queues = new TaskQueues(redis);
+        queues = new TaskQueues(redis, options.queues === true ? {} : options.queues);
         await queues.obliterate();
     }
     const services = createServices({
@@ -53,6 +63,7 @@ export async function createTestServices(
         ...services,
         secretKey,
         temporaryRoot,
+        redis,
         async close() {
             await queues?.close();
             redis?.disconnect();

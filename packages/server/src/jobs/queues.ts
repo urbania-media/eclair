@@ -24,11 +24,22 @@ export function taskPriority(projectPriority: Priority, jobPriority: Priority): 
     return 1 + RANKS[projectPriority] * 3 + RANKS[jobPriority];
 }
 
+export interface TaskQueueOptions {
+    /** Runs of a task when it fails for a reason that may pass (storage, a crashed worker). */
+    attempts?: number;
+    /** Milliseconds before the first retry; it doubles each time. */
+    backoff?: number;
+}
+
 /** The task queues, one per capability (decision 0006). */
 export class TaskQueues {
     readonly #queues: Map<Capability, Queue>;
+    readonly #attempts: number;
+    readonly #backoff: number;
 
-    constructor(connection: Redis) {
+    constructor(connection: Redis, options: TaskQueueOptions = {}) {
+        this.#attempts = options.attempts ?? 3;
+        this.#backoff = options.backoff ?? 10_000;
         this.#queues = new Map(
             CAPABILITIES.map((capability) => [
                 capability,
@@ -54,6 +65,8 @@ export class TaskQueues {
         await this.#queue(capability).add('task', message, {
             jobId: message.taskId,
             priority,
+            attempts: this.#attempts,
+            backoff: { type: 'exponential', delay: this.#backoff },
             removeOnComplete: true,
             removeOnFail: true,
         });
