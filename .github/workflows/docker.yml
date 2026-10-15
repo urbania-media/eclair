@@ -80,7 +80,7 @@ jobs:
                       echo "linux/amd64, $(numfmt --to=iec-i --suffix=B --format=%.2f "$size") uncompressed."
                       echo
                       cat versions.md 2>/dev/null || echo 'The smoke test failed before listing the versions.'
-                  } >> "$GITHUB_STEP_SUMMARY"
+                  } | tee -a "$GITHUB_STEP_SUMMARY"
 
             - name: Scan for vulnerabilities
               id: scan
