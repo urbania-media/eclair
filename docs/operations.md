@@ -30,16 +30,16 @@ export default defineOperation({
 });
 ```
 
-| Member        | Role                                                                                                         |
-| ------------- | ------------------------------------------------------------------------------------------------------------ |
-| `name`        | `<domain>.<action>`, unique on the server. `probe` is the only name without a domain.                      |
-| `version`     | Major version. A change to options or outputs that breaks clients is a new version, and the old one stays.  |
-| `accepts`     | Kinds and mime types it can read. The scheduler skips or refuses other inputs before running anything.      |
-| `capability`  | Queue it runs on: `cpu`, `video`, `gpu` or `ai`.                                                            |
-| `binaries`    | Binaries it calls. `eclair doctor` and `/ready` check them; a worker without them doesn't take the task.    |
-| `options`     | JSON Schema of the options. It's validated when the job is created, and published in `GET /v1/operations`. |
-| `outputs`     | Whether it produces files, metadata or both.                                                                |
-| `run`         | Does the work. Gets a context and validated options, returns files and metadata.                            |
+| Member       | Role                                                                                                       |
+| ------------ | ---------------------------------------------------------------------------------------------------------- |
+| `name`       | `<domain>.<action>`, unique on the server. `probe` is the only name without a domain.                      |
+| `version`    | Major version. A change to options or outputs that breaks clients is a new version, and the old one stays. |
+| `accepts`    | Kinds and mime types it can read. The scheduler skips or refuses other inputs before running anything.     |
+| `capability` | Queue it runs on: `cpu`, `video`, `gpu` or `ai`.                                                           |
+| `binaries`   | Binaries it calls. `eclair doctor` and `/ready` check them; a worker without them doesn't take the task.   |
+| `options`    | JSON Schema of the options. It's validated when the job is created, and published in `GET /v1/operations`. |
+| `outputs`    | Whether it produces files, metadata or both.                                                               |
+| `run`        | Does the work. Gets a context and validated options, returns files and metadata.                           |
 
 The **context** gives the operation:
 
@@ -62,65 +62,65 @@ A plugin is an npm package that exports one or more operations. The server loads
 
 ### Probe
 
-| Operation | Output                                                                                                                                                 | 1.0 |
-| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | --- |
-| `probe`   | Kind, mime, extension, size, checksum; width, height, rotation; duration, frame rate, bitrate, codecs, audio channels; page count; font names; EXIF summary; animated or not | ✓ |
+| Operation | Output                                                                                                                                                                       | 1.0 |
+| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --- |
+| `probe`   | Kind, mime, extension, size, checksum; width, height, rotation; duration, frame rate, bitrate, codecs, audio channels; page count; font names; EXIF summary; animated or not | ✓   |
 
 ### Image (`@eclair-js/operations-image`)
 
-| Operation         | Output                                                                                     | 1.0 |
-| ----------------- | ------------------------------------------------------------------------------------------ | --- |
-| `image.convert`   | Resized or converted image (JPEG, PNG, WebP, AVIF), with auto-orientation and EXIF/GPS stripping | ✓ |
-| `image.thumbnail` | Thumbnails at given sizes, from any image or the first page of a document                  | ✓   |
-| `image.palette`   | Dominant colors                                                                            | ✓   |
-| `image.blurhash`  | BlurHash or ThumbHash placeholder                                                          |     |
-| `image.focus`     | Focal point and regions of interest (faces, saliency), through an AI provider             |     |
-| `image.describe`  | Alt text, through an AI provider                                                           |     |
+| Operation         | Output                                                                                           | 1.0 |
+| ----------------- | ------------------------------------------------------------------------------------------------ | --- |
+| `image.convert`   | Resized or converted image (JPEG, PNG, WebP, AVIF), with auto-orientation and EXIF/GPS stripping | ✓   |
+| `image.thumbnail` | Thumbnails at given sizes, from any image or the first page of a document                        | ✓   |
+| `image.palette`   | Dominant colors                                                                                  | ✓   |
+| `image.blurhash`  | BlurHash or ThumbHash placeholder                                                                |     |
+| `image.focus`     | Focal point and regions of interest (faces, saliency), through an AI provider                    |     |
+| `image.describe`  | Alt text, through an AI provider                                                                 |     |
 
 HEIC and HEIF inputs are converted by the same operations.
 
 ### Video (`@eclair-js/operations-video`)
 
-| Operation           | Output                                                                                  | 1.0 |
-| ------------------- | --------------------------------------------------------------------------------------- | --- |
-| `video.transcode`   | MP4 (H.264, H.265) or WebM (VP9, AV1), with size, bitrate and quality limits            | ✓   |
-| `video.hls`         | HLS with several renditions, `master.m3u8`                                               | ✓   |
-| `video.thumbnails`  | Frames at given times, at even intervals, or by scene changes                           | ✓   |
-| `video.poster`      | One representative frame                                                                | ✓   |
-| `video.animated`    | Short animated preview (WebP, GIF or a silent MP4)                                      |     |
-| `video.storyboard`  | Sprite sheet and its WebVTT map, for scrubbing previews                                 |     |
-| `video.clip`        | An extract: start, end, optional crop                                                   |     |
-| `video.reframe`     | Vertical (9:16) or square version that follows the subject, using `image.focus` per scene |   |
-| `video.scenes`      | Scene changes, as metadata                                                              |     |
+| Operation          | Output                                                                                    | 1.0 |
+| ------------------ | ----------------------------------------------------------------------------------------- | --- |
+| `video.transcode`  | MP4 (H.264, H.265) or WebM (VP9, AV1), with size, bitrate and quality limits              | ✓   |
+| `video.hls`        | HLS with several renditions, `master.m3u8`                                                | ✓   |
+| `video.thumbnails` | Frames at given times, at even intervals, or by scene changes                             | ✓   |
+| `video.poster`     | One representative frame                                                                  | ✓   |
+| `video.animated`   | Short animated preview (WebP, GIF or a silent MP4)                                        |     |
+| `video.storyboard` | Sprite sheet and its WebVTT map, for scrubbing previews                                   |     |
+| `video.clip`       | An extract: start, end, optional crop                                                     |     |
+| `video.reframe`    | Vertical (9:16) or square version that follows the subject, using `image.focus` per scene |     |
+| `video.scenes`     | Scene changes, as metadata                                                                |     |
 
 ### Audio (`@eclair-js/operations-audio`)
 
-| Operation          | Output                                               | 1.0 |
-| ------------------ | ---------------------------------------------------- | --- |
-| `audio.transcode`  | MP3, AAC or Opus, with loudness normalization        | ✓   |
-| `audio.waveform`   | Waveform data (JSON) and image, with audiowaveform  | ✓   |
-| `audio.clip`       | An extract between two times                         |     |
+| Operation         | Output                                             | 1.0 |
+| ----------------- | -------------------------------------------------- | --- |
+| `audio.transcode` | MP3, AAC or Opus, with loudness normalization      | ✓   |
+| `audio.waveform`  | Waveform data (JSON) and image, with audiowaveform | ✓   |
+| `audio.clip`      | An extract between two times                       |     |
 
 ### Document (`@eclair-js/operations-document`)
 
-| Operation             | Output                                         | 1.0 |
-| --------------------- | ---------------------------------------------- | --- |
-| `document.thumbnails` | One image per page, or for some pages          | ✓   |
-| `document.text`       | Extracted text, per page                       |     |
-| `document.pdf`        | PDF from office documents                      |     |
+| Operation             | Output                                | 1.0 |
+| --------------------- | ------------------------------------- | --- |
+| `document.thumbnails` | One image per page, or for some pages | ✓   |
+| `document.text`       | Extracted text, per page              |     |
+| `document.pdf`        | PDF from office documents             |     |
 
 ### Font (`@eclair-js/operations-font`)
 
-| Operation      | Output                                     | 1.0 |
-| -------------- | ------------------------------------------ | --- |
-| `font.convert` | WOFF and WOFF2, with optional subsetting   | ✓   |
+| Operation      | Output                                   | 1.0 |
+| -------------- | ---------------------------------------- | --- |
+| `font.convert` | WOFF and WOFF2, with optional subsetting | ✓   |
 
 ### AI (`@eclair-js/operations-ai`)
 
-| Operation        | Output                                                                                 | 1.0 |
-| ---------------- | -------------------------------------------------------------------------------------- | --- |
-| `ai.transcribe`  | Transcript with timings: WebVTT, SRT, and JSON with words and speakers                 | ✓   |
-| `ai.highlights`  | Suggested extracts (start, end, title, score) from the transcript and the scenes       |     |
+| Operation       | Output                                                                           | 1.0 |
+| --------------- | -------------------------------------------------------------------------------- | --- |
+| `ai.transcribe` | Transcript with timings: WebVTT, SRT, and JSON with words and speakers           | ✓   |
+| `ai.highlights` | Suggested extracts (start, end, title, score) from the transcript and the scenes |     |
 
 `image.focus`, `image.describe` and `video.reframe` also use AI providers.
 
@@ -128,11 +128,11 @@ HEIC and HEIF inputs are converted by the same operations.
 
 An AI operation asks for a provider by capability (`transcription`, `vision`, `language`). The project's configuration says which provider answers:
 
-| Provider             | Runs                                           | Default |
-| -------------------- | ---------------------------------------------- | ------- |
-| `local-whisper`      | whisper.cpp on the worker (CPU, or GPU)        | ✓       |
-| `local-vision`       | ONNX models for faces and saliency             | ✓       |
-| External APIs        | Hosted transcription, vision or language models | Opt-in |
+| Provider        | Runs                                            | Default |
+| --------------- | ----------------------------------------------- | ------- |
+| `local-whisper` | whisper.cpp on the worker (CPU, or GPU)         | ✓       |
+| `local-vision`  | ONNX models for faces and saliency              | ✓       |
+| External APIs   | Hosted transcription, vision or language models | Opt-in  |
 
 - Local providers run on workers with the `ai` or `gpu` capability. Models are downloaded at startup or baked into the image, never at task time.
 - External providers are enabled per project, with the project's own API key stored encrypted. They send media to a third party: the project's configuration has to say so explicitly.
@@ -142,14 +142,14 @@ An AI operation asks for a provider by capability (`transcription`, `vision`, `l
 
 Presets combine operations into pipelines. The built-in ones:
 
-| Preset                 | Tasks                                                                               |
-| ---------------------- | ----------------------------------------------------------------------------------- |
-| `web-video`            | `probe`, `h264` (1080p), `hls` (1080p, 720p, 360p), `poster`, `thumbnails` (5)     |
-| `web-audio`            | `probe`, `mp3`, `waveform`                                                         |
-| `web-image`            | `probe`, `palette`, `webp`                                                        |
+| Preset                 | Tasks                                                                                                 |
+| ---------------------- | ----------------------------------------------------------------------------------------------------- |
+| `web-video`            | `probe`, `h264` (1080p), `hls` (1080p, 720p, 360p), `poster`, `thumbnails` (5)                        |
+| `web-audio`            | `probe`, `mp3`, `waveform`                                                                            |
+| `web-image`            | `probe`, `palette`, `webp`                                                                            |
 | `mediatheque/video`    | The `laravel-mediatheque` video pipeline: `probe`, `h264`, `webm`, `hevc`, `thumbnails` (5, centered) |
-| `mediatheque/audio`    | `probe`, `thumbnails` (waveform image, as in the mediatheque)                     |
-| `mediatheque/document` | `probe`, `thumbnails` (every page)                                                 |
-| `mediatheque/font`     | `probe`, `webfonts`                                                                |
+| `mediatheque/audio`    | `probe`, `thumbnails` (waveform image, as in the mediatheque)                                         |
+| `mediatheque/document` | `probe`, `thumbnails` (every page)                                                                    |
+| `mediatheque/font`     | `probe`, `webfonts`                                                                                   |
 
 The `mediatheque/*` presets produce the same handles and formats as the mediatheque's own jobs. See [mediatheque.md](mediatheque.md).

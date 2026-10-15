@@ -1,0 +1,24 @@
+{
+    "compilerOptions": {
+        "target": "ES2024",
+        "lib": ["ES2024"],
+        "module": "NodeNext",
+        "moduleResolution": "NodeNext",
+        "types": ["node"],
+        "strict": true,
+        "noUncheckedIndexedAccess": true,
+        "noImplicitOverride": true,
+        "noFallthroughCasesInSwitch": true,
+        "verbatimModuleSyntax": true,
+        "isolatedModules": true,
+        "erasableSyntaxOnly": true,
+        "rewriteRelativeImportExtensions": true,
+        "resolveJsonModule": true,
+        "skipLibCheck": true,
+        "forceConsistentCasingInFileNames": true,
+        "customConditions": ["@eclair-js/source"],
+        "declaration": true,
+        "declarationMap": true,
+        "sourceMap": true
+    }
+}

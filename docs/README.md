@@ -21,27 +21,27 @@ Eclair must be:
 
 ## Vocabulary
 
-| Term          | Meaning                                                                                                        |
-| ------------- | -------------------------------------------------------------------------------------------------------------- |
-| **Project**   | An application that uses Eclair. It has API keys, storages, presets, webhooks, limits and usage.              |
+| Term          | Meaning                                                                                                                        |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| **Project**   | An application that uses Eclair. It has API keys, storages, presets, webhooks, limits and usage.                               |
 | **Storage**   | A place where a project's files live (an S3-compatible bucket, or an HTTP endpoint), or Eclair's temporary storage (`eclair`). |
-| **Job**       | One request: an input, a destination and a pipeline. It ends `completed`, `failed` or `canceled`.             |
-| **Pipeline**  | A graph of named tasks. A task reads the input or another task's output.                                      |
-| **Task**      | One run of an operation inside a job.                                                                          |
-| **Operation** | A plugin that does one thing (`video.transcode`, `image.palette`…), with an options schema.                   |
-| **Preset**    | A named pipeline stored on the server or on a project (`web-video`, `mediatheque/video`).                      |
-| **Output**    | A file or metadata produced by a task, reported under the task's name.                                         |
-| **Provider**  | A backend for an AI operation: a local model or an external API.                                               |
-| **Worker**    | A process that runs tasks from one or more queues. Each queue maps to a capability (`cpu`, `gpu`, `ai`…).     |
+| **Job**       | One request: an input, a destination and a pipeline. It ends `completed`, `failed` or `canceled`.                              |
+| **Pipeline**  | A graph of named tasks. A task reads the input or another task's output.                                                       |
+| **Task**      | One run of an operation inside a job.                                                                                          |
+| **Operation** | A plugin that does one thing (`video.transcode`, `image.palette`…), with an options schema.                                    |
+| **Preset**    | A named pipeline stored on the server or on a project (`web-video`, `mediatheque/video`).                                      |
+| **Output**    | A file or metadata produced by a task, reported under the task's name.                                                         |
+| **Provider**  | A backend for an AI operation: a local model or an external API.                                                               |
+| **Worker**    | A process that runs tasks from one or more queues. Each queue maps to a capability (`cpu`, `gpu`, `ai`…).                      |
 
 ## Documents
 
-| Document                             | Content                                                                    |
-| ------------------------------------ | -------------------------------------------------------------------------- |
-| [architecture.md](architecture.md)   | Components, data flow, storage, queues, security, observability           |
-| [protocol.md](protocol.md)           | The HTTP API, the job format and the webhooks (draft)                     |
-| [operations.md](operations.md)       | The operation interface, the built-in operations and the AI providers     |
-| [deployment.md](deployment.md)       | Docker image, configuration, one server or many                           |
-| [mediatheque.md](mediatheque.md)     | `laravel-eclair` and the `laravel-mediatheque` integration                |
-| [roadmap.md](roadmap.md)             | Phases, what ships in 1.0, open questions                                 |
-| [decisions/](decisions/README.md)    | Architecture decision records                                             |
+| Document                           | Content                                                               |
+| ---------------------------------- | --------------------------------------------------------------------- |
+| [architecture.md](architecture.md) | Components, data flow, storage, queues, security, observability       |
+| [protocol.md](protocol.md)         | The HTTP API, the job format and the webhooks (draft)                 |
+| [operations.md](operations.md)     | The operation interface, the built-in operations and the AI providers |
+| [deployment.md](deployment.md)     | Docker image, configuration, one server or many                       |
+| [mediatheque.md](mediatheque.md)   | `laravel-eclair` and the `laravel-mediatheque` integration            |
+| [roadmap.md](roadmap.md)           | Phases, what ships in 1.0, open questions                             |
+| [decisions/](decisions/README.md)  | Architecture decision records                                         |

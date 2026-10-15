@@ -20,14 +20,14 @@
 
 All processes come from one package (`@eclair-js/server`) and one Docker image. A process runs as `api`, `worker` or `all`.
 
-| Component     | Role                                                                                                         |
-| ------------- | ------------------------------------------------------------------------------------------------------------ |
-| **API**       | Authenticates projects, validates jobs against the protocol, stores them, reports status, serves metrics.   |
+| Component     | Role                                                                                                                                                                                                              |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **API**       | Authenticates projects, validates jobs against the protocol, stores them, reports status, serves metrics.                                                                                                         |
 | **Scheduler** | Resolves presets, builds the task graph, enqueues tasks whose dependencies are done, ends jobs, sends webhooks. It runs inside the API processes, with a lock in Redis so only one acts on a given job at a time. |
-| **Worker**    | Pulls tasks from the queues it is configured for, downloads inputs, runs the operation, uploads outputs, records usage. |
-| **CLI**       | `eclair`: migrations, projects, keys, storages, presets, jobs (list, inspect, retry, cancel), `doctor`.      |
-| **Database**  | MySQL or PostgreSQL. Durable state: projects, hashed keys, encrypted credentials, presets, jobs, tasks, outputs, usage.            |
-| **Redis**     | BullMQ queues, progress, locks and rate limits. Losing Redis loses queued work, not jobs: the scheduler re-enqueues from the database. |
+| **Worker**    | Pulls tasks from the queues it is configured for, downloads inputs, runs the operation, uploads outputs, records usage.                                                                                           |
+| **CLI**       | `eclair`: migrations, projects, keys, storages, presets, jobs (list, inspect, retry, cancel), `doctor`.                                                                                                           |
+| **Database**  | MySQL or PostgreSQL. Durable state: projects, hashed keys, encrypted credentials, presets, jobs, tasks, outputs, usage.                                                                                           |
+| **Redis**     | BullMQ queues, progress, locks and rate limits. Losing Redis loses queued work, not jobs: the scheduler re-enqueues from the database.                                                                            |
 
 ## Life of a job
 
@@ -48,10 +48,10 @@ Applications can also poll `GET /v1/jobs/{id}`, or follow progress with server-s
 
 Eclair doesn't keep media beyond a retention period. A project registers one or more **storages**, and every project can also use Eclair's **temporary storage**:
 
-| Kind     | Read inputs | Write outputs | Notes                                                                                     |
-| -------- | ----------- | ------------- | ----------------------------------------------------------------------------------------- |
-| `s3`     | yes         | yes           | Any S3-compatible service. Credentials scoped to a bucket and prefix, encrypted at rest. |
-| `http`   | yes         | yes           | Outputs are uploaded to an endpoint of the application, signed like webhooks. For applications that store files on their own disk. `laravel-eclair` provides this endpoint. |
+| Kind     | Read inputs | Write outputs | Notes                                                                                                                                                                                                                                                               |
+| -------- | ----------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `s3`     | yes         | yes           | Any S3-compatible service. Credentials scoped to a bucket and prefix, encrypted at rest.                                                                                                                                                                            |
+| `http`   | yes         | yes           | Outputs are uploaded to an endpoint of the application, signed like webhooks. For applications that store files on their own disk. `laravel-eclair` provides this endpoint.                                                                                         |
 | `eclair` | yes         | yes           | Eclair's temporary storage, under the reserved name `eclair`. Holds uploads (`POST /v1/uploads`) and outputs until they expire (24 hours by default). The application downloads outputs with signed URLs. See [decision 0011](decisions/0011-temporary-storage.md). |
 
 An input can also be a plain `https` URL (for example a presigned URL), fetched through the SSRF guard.
@@ -79,18 +79,18 @@ Every worker serves the `probe` queue by default, with reserved slots, so transc
 
 ## Data model
 
-| Table       | Content                                                                                          |
-| ----------- | ------------------------------------------------------------------------------------------------ |
-| `projects`  | Name, slug, priority, limits, allowed operations and providers, webhook secret                   |
-| `api_keys`  | Hashed key, prefix for display, project, scopes, last use, revocation                            |
-| `storages`  | Project, name, kind, encrypted configuration                                                     |
-| `uploads`   | Project, temporary storage path, size, mime, checksum, expiry                                     |
-| `presets`   | Name, optional project (global presets have none), pipeline definition, version                 |
-| `jobs`      | Project, status, input, output, resolved pipeline, webhook, client metadata, timestamps         |
-| `tasks`     | Job, name, operation and version, options, dependencies, status, attempts, progress, error      |
-| `outputs`   | Task, kind (file or metadata), storage, path, mime, size, checksum, data, expiry for temporary files |
-| `usage`     | Project, task, operation, CPU seconds, media seconds, bytes in and out, bytes kept in temporary storage, provider cost if known |
-| `webhook_deliveries` | Job, attempt, status code, next retry                                                   |
+| Table                | Content                                                                                                                         |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `projects`           | Name, slug, priority, limits, allowed operations and providers, webhook secret                                                  |
+| `api_keys`           | Hashed key, prefix for display, project, scopes, last use, revocation                                                           |
+| `storages`           | Project, name, kind, encrypted configuration                                                                                    |
+| `uploads`            | Project, temporary storage path, size, mime, checksum, expiry                                                                   |
+| `presets`            | Name, optional project (global presets have none), pipeline definition, version                                                 |
+| `jobs`               | Project, status, input, output, resolved pipeline, webhook, client metadata, timestamps                                         |
+| `tasks`              | Job, name, operation and version, options, dependencies, status, attempts, progress, error                                      |
+| `outputs`            | Task, kind (file or metadata), storage, path, mime, size, checksum, data, expiry for temporary files                            |
+| `usage`              | Project, task, operation, CPU seconds, media seconds, bytes in and out, bytes kept in temporary storage, provider cost if known |
+| `webhook_deliveries` | Job, attempt, status code, next retry                                                                                           |
 
 Old jobs are pruned after a configurable retention. Usage is aggregated per project and per day before pruning.
 

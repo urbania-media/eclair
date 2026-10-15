@@ -1,0 +1,44 @@
+{
+    "name": "eclair",
+    "private": true,
+    "type": "module",
+    "description": "Eclair: a self-hosted media processing server",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/urbania-media/eclair.git"
+    },
+    "license": "MIT",
+    "engines": {
+        "node": ">=24"
+    },
+    "workspaces": [
+        "packages/protocol",
+        "packages/operation",
+        "packages/client",
+        "packages/server"
+    ],
+    "scripts": {
+        "build": "npm run build --workspaces --if-present",
+        "typecheck": "tsc -p tsconfig.json && npm run typecheck --workspaces --if-present",
+        "lint": "eslint .",
+        "format": "prettier --write .",
+        "format:check": "prettier --check .",
+        "test": "vitest run",
+        "test:watch": "vitest",
+        "changeset": "changeset",
+        "version-packages": "changeset version && npm install --package-lock-only"
+    },
+    "devDependencies": {
+        "@changesets/cli": "^3.0.3",
+        "@eslint/js": "^10.0.1",
+        "@trivago/prettier-plugin-sort-imports": "^6.0.2",
+        "@types/node": "^24.19.2",
+        "eslint": "^10.12.0",
+        "eslint-config-prettier": "^10.1.8",
+        "globals": "^17.13.0",
+        "prettier": "^3.9.10",
+        "typescript": "~6.0.3",
+        "typescript-eslint": "^8.71.2",
+        "vitest": "^5.0.4"
+    }
+}
