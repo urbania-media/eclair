@@ -65,9 +65,11 @@ npm run format      # Prettier
 npx changeset       # describe a change for the changelog
 ```
 
-Database tests run on the database in `DATABASE_URL` and are skipped without it. CI runs them on MySQL 8.4 and PostgreSQL 15. To run them locally:
+Database tests run on the database in `DATABASE_URL` and are skipped without it. CI runs them on MySQL 8.4, PostgreSQL 15 and SQLite. To run them locally:
 
 ```bash
+DATABASE_URL=sqlite:///tmp/eclair-test.db npm test
+
 docker run --rm -d -p 5432:5432 -e POSTGRES_USER=eclair -e POSTGRES_PASSWORD=eclair postgres:15
 DATABASE_URL=postgres://eclair:eclair@127.0.0.1:5432/eclair npm test
 ```

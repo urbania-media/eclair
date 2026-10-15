@@ -4,6 +4,8 @@ import type { Dialect } from './dialect.ts';
 export const MINIMUM_VERSIONS: Record<Dialect, readonly [number, number]> = {
     mysql: [8, 4],
     postgres: [15, 0],
+    // JSON functions are built in from 3.38. Node 24 bundles a later version.
+    sqlite: [3, 38],
 };
 
 export interface ServerVersion {
@@ -13,7 +15,7 @@ export interface ServerVersion {
 
 /**
  * Parses the version a database server reports: `8.4.3` for MySQL, `15.10 (Debian …)` for
- * PostgreSQL. Returns `undefined` for MariaDB, which isn't supported, and for unknown formats.
+ * PostgreSQL, `3.50.4` for SQLite. Returns `undefined` for MariaDB, which isn't supported, and for unknown formats.
  */
 export function parseServerVersion(version: string): ServerVersion | undefined {
     if (/mariadb/i.test(version)) {

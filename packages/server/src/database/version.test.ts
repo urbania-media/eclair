@@ -24,6 +24,11 @@ describe('isSupportedVersion', () => {
         expect(isSupportedVersion('mysql', '8.0.40')).toBe(false);
     });
 
+    it('accepts SQLite 3.38 and later', () => {
+        expect(isSupportedVersion('sqlite', '3.53.4')).toBe(true);
+        expect(isSupportedVersion('sqlite', '3.37.2')).toBe(false);
+    });
+
     it('accepts PostgreSQL 15 and later', () => {
         expect(isSupportedVersion('postgres', '15.0')).toBe(true);
         expect(isSupportedVersion('postgres', '18.1')).toBe(true);
