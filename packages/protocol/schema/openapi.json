@@ -1,0 +1,1546 @@
+{
+    "openapi": "3.1.0",
+    "info": {
+        "title": "Eclair",
+        "version": "1.0.0-draft",
+        "summary": "Media processing jobs: create them, follow them, receive their results.",
+        "description": "The protocol between Eclair and its clients. Version 1 (`/v1`) only changes additively: new fields, endpoints, operations and enum values, never removed or renamed ones.\n\nRequest bodies refuse unknown fields, so typos are caught. Responses and webhook bodies can gain fields: clients ignore the ones they don't know.\n\nErrors use `application/problem+json` (RFC 9457).",
+        "license": {
+            "name": "MIT",
+            "identifier": "MIT"
+        }
+    },
+    "jsonSchemaDialect": "https://json-schema.org/draft/2020-12/schema",
+    "security": [
+        {
+            "apiKey": []
+        }
+    ],
+    "tags": [
+        {
+            "name": "Jobs",
+            "description": "Run a pipeline of operations on one input."
+        },
+        {
+            "name": "Presets",
+            "description": "Named pipelines, global or of the project."
+        },
+        {
+            "name": "Operations",
+            "description": "What this server can do."
+        }
+    ],
+    "paths": {
+        "/v1/jobs": {
+            "post": {
+                "operationId": "createJob",
+                "tags": ["Jobs"],
+                "summary": "Create a job",
+                "description": "Validates the job (the body, then each task's options against its operation's schema), stores it and queues its first tasks. The task graph must be acyclic.",
+                "security": [
+                    {
+                        "apiKey": ["jobs:write"]
+                    }
+                ],
+                "parameters": [
+                    {
+                        "$ref": "#/components/parameters/IdempotencyKey"
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/JobRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "202": {
+                        "description": "The job is accepted. A replay with the same `Idempotency-Key` and body returns the first response.",
+                        "headers": {
+                            "Location": {
+                                "description": "URL of the job.",
+                                "schema": {
+                                    "type": "string",
+                                    "format": "uri-reference"
+                                }
+                            }
+                        },
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Job"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthorized"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/Forbidden"
+                    },
+                    "409": {
+                        "$ref": "#/components/responses/IdempotencyConflict"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/Invalid"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/TooManyRequests"
+                    }
+                }
+            },
+            "get": {
+                "operationId": "listJobs",
+                "tags": ["Jobs"],
+                "summary": "List jobs",
+                "description": "The project's jobs, newest first.",
+                "security": [
+                    {
+                        "apiKey": ["jobs:read"]
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "status",
+                        "in": "query",
+                        "description": "Only jobs with one of these statuses.",
+                        "style": "form",
+                        "explode": false,
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/components/schemas/JobStatus"
+                            },
+                            "uniqueItems": true
+                        }
+                    },
+                    {
+                        "name": "createdAfter",
+                        "in": "query",
+                        "description": "Only jobs created after this time.",
+                        "schema": {
+                            "type": "string",
+                            "format": "date-time"
+                        }
+                    },
+                    {
+                        "name": "metadata",
+                        "in": "query",
+                        "description": "Only jobs whose `metadata` has these top-level values: `metadata[mediaId]=42`. Compares as strings.",
+                        "style": "deepObject",
+                        "explode": true,
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    {
+                        "$ref": "#/components/parameters/Cursor"
+                    },
+                    {
+                        "$ref": "#/components/parameters/Limit"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "A page of jobs.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/JobList"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthorized"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/Forbidden"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/Invalid"
+                    }
+                }
+            }
+        },
+        "/v1/jobs/{id}": {
+            "parameters": [
+                {
+                    "$ref": "#/components/parameters/JobId"
+                }
+            ],
+            "get": {
+                "operationId": "getJob",
+                "tags": ["Jobs"],
+                "summary": "Show a job",
+                "security": [
+                    {
+                        "apiKey": ["jobs:read"]
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The job, its tasks and their outputs.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Job"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthorized"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/Forbidden"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFound"
+                    }
+                }
+            }
+        },
+        "/v1/jobs/{id}/cancel": {
+            "parameters": [
+                {
+                    "$ref": "#/components/parameters/JobId"
+                }
+            ],
+            "post": {
+                "operationId": "cancelJob",
+                "tags": ["Jobs"],
+                "summary": "Cancel a job",
+                "description": "Cancels the pending and running tasks. Tasks that ended keep their outputs. Canceling an ended job changes nothing and returns it.",
+                "security": [
+                    {
+                        "apiKey": ["jobs:write"]
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The job.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Job"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthorized"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/Forbidden"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFound"
+                    }
+                }
+            }
+        },
+        "/v1/jobs/{id}/retry": {
+            "parameters": [
+                {
+                    "$ref": "#/components/parameters/JobId"
+                }
+            ],
+            "post": {
+                "operationId": "retryJob",
+                "tags": ["Jobs"],
+                "summary": "Retry a job",
+                "description": "Runs the failed and canceled tasks again, and the tasks that depend on them.",
+                "security": [
+                    {
+                        "apiKey": ["jobs:write"]
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "The job, running again.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Job"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthorized"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/Forbidden"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFound"
+                    },
+                    "409": {
+                        "description": "The job is still running, or has no failed or canceled task.",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Problem"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/jobs/{id}/events": {
+            "parameters": [
+                {
+                    "$ref": "#/components/parameters/JobId"
+                }
+            ],
+            "get": {
+                "operationId": "streamJobEvents",
+                "tags": ["Jobs"],
+                "summary": "Follow a job",
+                "description": "Server-sent events with the job's status and progress changes. Each event's `event` field is the `type` of its data, and its `data` field is a `JobEvent` as JSON. The stream ends after the job ends.",
+                "security": [
+                    {
+                        "apiKey": ["jobs:read"]
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "An event stream.",
+                        "content": {
+                            "text/event-stream": {
+                                "schema": {
+                                    "description": "Each event's `data` is a `JobEvent`.",
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthorized"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/Forbidden"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFound"
+                    }
+                }
+            }
+        },
+        "/v1/presets": {
+            "get": {
+                "operationId": "listPresets",
+                "tags": ["Presets"],
+                "summary": "List presets",
+                "description": "The project's presets and the global ones. A project preset hides a global one with the same name.",
+                "security": [
+                    {
+                        "apiKey": ["jobs:read"]
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Every preset the project can use.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/PresetList"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthorized"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/Forbidden"
+                    }
+                }
+            }
+        },
+        "/v1/presets/{name}": {
+            "parameters": [
+                {
+                    "$ref": "#/components/parameters/PresetName"
+                }
+            ],
+            "get": {
+                "operationId": "getPreset",
+                "tags": ["Presets"],
+                "summary": "Show a preset",
+                "security": [
+                    {
+                        "apiKey": ["jobs:read"]
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The preset.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Preset"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthorized"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/Forbidden"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFound"
+                    }
+                }
+            },
+            "put": {
+                "operationId": "putPreset",
+                "tags": ["Presets"],
+                "summary": "Create or replace a project preset",
+                "description": "Each change gives the preset a new version. Jobs record the version they used.",
+                "security": [
+                    {
+                        "apiKey": ["presets:write"]
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PresetRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "The preset was replaced.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Preset"
+                                }
+                            }
+                        }
+                    },
+                    "201": {
+                        "description": "The preset was created.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Preset"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthorized"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/Forbidden"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/Invalid"
+                    }
+                }
+            },
+            "delete": {
+                "operationId": "deletePreset",
+                "tags": ["Presets"],
+                "summary": "Delete a project preset",
+                "description": "Global presets can't be deleted with a project key. Jobs that used the preset keep their pipeline.",
+                "security": [
+                    {
+                        "apiKey": ["presets:write"]
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "The preset was deleted."
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthorized"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/Forbidden"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFound"
+                    }
+                }
+            }
+        },
+        "/v1/operations": {
+            "get": {
+                "operationId": "listOperations",
+                "tags": ["Operations"],
+                "summary": "List operations",
+                "description": "The operations this server provides and this project may use, with their options schema. Clients can validate options or build forms from it.",
+                "security": [
+                    {
+                        "apiKey": ["jobs:read"]
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The operations.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/OperationList"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthorized"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/Forbidden"
+                    }
+                }
+            }
+        }
+    },
+    "webhooks": {
+        "job.completed": {
+            "$ref": "#/components/pathItems/JobWebhook"
+        },
+        "job.failed": {
+            "$ref": "#/components/pathItems/JobWebhook"
+        },
+        "job.canceled": {
+            "$ref": "#/components/pathItems/JobWebhook"
+        },
+        "task.completed": {
+            "post": {
+                "operationId": "taskCompletedWebhook",
+                "summary": "A task completed",
+                "description": "Sent when a task completes, to projects that subscribe to it, so they can attach outputs as soon as they exist. The body is the whole job, and `Eclair-Task` names the task.",
+                "parameters": [
+                    {
+                        "$ref": "#/components/parameters/EclairEvent"
+                    },
+                    {
+                        "$ref": "#/components/parameters/EclairDelivery"
+                    },
+                    {
+                        "$ref": "#/components/parameters/EclairSignature"
+                    },
+                    {
+                        "name": "Eclair-Task",
+                        "in": "header",
+                        "required": true,
+                        "description": "Name of the task that completed.",
+                        "schema": {
+                            "$ref": "#/components/schemas/TaskName"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/Job"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "2XX": {
+                        "$ref": "#/components/responses/WebhookReceived"
+                    }
+                }
+            }
+        },
+        "storage.write": {
+            "put": {
+                "operationId": "httpStorageWrite",
+                "summary": "Write a file to an `http` storage",
+                "description": "With an `http` storage, workers send each output file to `PUT {endpoint}/{path}`. Retried until the endpoint answers `2xx`: the same path can be written twice.",
+                "parameters": [
+                    {
+                        "$ref": "#/components/parameters/EclairJob"
+                    },
+                    {
+                        "$ref": "#/components/parameters/EclairContentSha256"
+                    },
+                    {
+                        "$ref": "#/components/parameters/EclairStorageSignature"
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "description": "The file. `Content-Type` is its detected mime type.",
+                    "content": {
+                        "*/*": {
+                            "schema": {
+                                "type": "string",
+                                "contentMediaType": "application/octet-stream"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "2XX": {
+                        "description": "The file is stored."
+                    }
+                }
+            }
+        },
+        "storage.read": {
+            "get": {
+                "operationId": "httpStorageRead",
+                "summary": "Read a file from an `http` storage",
+                "description": "Workers read an input with `GET {endpoint}/{path}`. The signature covers the timestamp, the path and the SHA-256 of an empty body.",
+                "parameters": [
+                    {
+                        "$ref": "#/components/parameters/EclairJob"
+                    },
+                    {
+                        "$ref": "#/components/parameters/EclairStorageSignature"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The file.",
+                        "content": {
+                            "*/*": {
+                                "schema": {
+                                    "type": "string",
+                                    "contentMediaType": "application/octet-stream"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "No file at this path."
+                    }
+                }
+            }
+        }
+    },
+    "components": {
+        "securitySchemes": {
+            "apiKey": {
+                "type": "http",
+                "scheme": "bearer",
+                "description": "A project's API key: `Authorization: Bearer <key>`. Keys have scopes: `jobs:read`, `jobs:write`, `presets:write`."
+            }
+        },
+        "parameters": {
+            "JobId": {
+                "name": "id",
+                "in": "path",
+                "required": true,
+                "schema": {
+                    "$ref": "#/components/schemas/JobId"
+                }
+            },
+            "PresetName": {
+                "name": "name",
+                "in": "path",
+                "required": true,
+                "description": "Preset name. A `/` in it is encoded as `%2F`: `/v1/presets/mediatheque%2Fvideo`.",
+                "schema": {
+                    "$ref": "#/components/schemas/PresetName"
+                }
+            },
+            "IdempotencyKey": {
+                "name": "Idempotency-Key",
+                "in": "header",
+                "description": "Makes the request safe to retry. A replay with the same key and body returns the first response. The same key with another body is refused.",
+                "schema": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 255
+                }
+            },
+            "Cursor": {
+                "name": "cursor",
+                "in": "query",
+                "description": "The `nextCursor` of the previous page.",
+                "schema": {
+                    "type": "string"
+                }
+            },
+            "Limit": {
+                "name": "limit",
+                "in": "query",
+                "description": "Items per page.",
+                "schema": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 100,
+                    "default": 25
+                }
+            },
+            "EclairEvent": {
+                "name": "Eclair-Event",
+                "in": "header",
+                "required": true,
+                "schema": {
+                    "$ref": "#/components/schemas/WebhookEvent"
+                }
+            },
+            "EclairDelivery": {
+                "name": "Eclair-Delivery",
+                "in": "header",
+                "required": true,
+                "description": "Id of the delivery. Retries keep it: use it to ignore duplicates.",
+                "schema": {
+                    "type": "string",
+                    "pattern": "^whd_[0-9A-HJKMNP-TV-Z]{26}$"
+                }
+            },
+            "EclairSignature": {
+                "name": "Eclair-Signature",
+                "in": "header",
+                "required": true,
+                "description": "`t=<unix time>,v1=<hex>`: the HMAC-SHA256 of `{t}.{body}` with the project's webhook secret. Refuse timestamps older than five minutes.",
+                "schema": {
+                    "$ref": "#/components/schemas/Signature"
+                }
+            },
+            "EclairJob": {
+                "name": "Eclair-Job",
+                "in": "header",
+                "required": true,
+                "description": "Id of the job the file belongs to.",
+                "schema": {
+                    "$ref": "#/components/schemas/JobId"
+                }
+            },
+            "EclairContentSha256": {
+                "name": "Eclair-Content-Sha256",
+                "in": "header",
+                "required": true,
+                "description": "SHA-256 of the body, in hex.",
+                "schema": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                }
+            },
+            "EclairStorageSignature": {
+                "name": "Eclair-Signature",
+                "in": "header",
+                "required": true,
+                "description": "`t=<unix time>,v1=<hex>`: the HMAC-SHA256 of `{t}.{path}.{sha256 of the body}` with the project's webhook secret. Refuse timestamps older than five minutes.",
+                "schema": {
+                    "$ref": "#/components/schemas/Signature"
+                }
+            }
+        },
+        "pathItems": {
+            "JobWebhook": {
+                "post": {
+                    "summary": "A job ended",
+                    "description": "Sent to the job's webhook URL when it ends. Retried with exponential backoff for 24 hours until the receiver answers `2xx`. Receivers must accept duplicates.",
+                    "parameters": [
+                        {
+                            "$ref": "#/components/parameters/EclairEvent"
+                        },
+                        {
+                            "$ref": "#/components/parameters/EclairDelivery"
+                        },
+                        {
+                            "$ref": "#/components/parameters/EclairSignature"
+                        }
+                    ],
+                    "requestBody": {
+                        "required": true,
+                        "description": "The job, as `GET /v1/jobs/{id}` returns it.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Job"
+                                }
+                            }
+                        }
+                    },
+                    "responses": {
+                        "2XX": {
+                            "$ref": "#/components/responses/WebhookReceived"
+                        }
+                    }
+                }
+            }
+        },
+        "responses": {
+            "Unauthorized": {
+                "description": "No API key, or an unknown or revoked one.",
+                "content": {
+                    "application/problem+json": {
+                        "schema": {
+                            "$ref": "#/components/schemas/Problem"
+                        }
+                    }
+                }
+            },
+            "Forbidden": {
+                "description": "The key doesn't have the scope, or the project may not use this operation or provider.",
+                "content": {
+                    "application/problem+json": {
+                        "schema": {
+                            "$ref": "#/components/schemas/Problem"
+                        }
+                    }
+                }
+            },
+            "NotFound": {
+                "description": "Not found in this project.",
+                "content": {
+                    "application/problem+json": {
+                        "schema": {
+                            "$ref": "#/components/schemas/Problem"
+                        }
+                    }
+                }
+            },
+            "IdempotencyConflict": {
+                "description": "The `Idempotency-Key` was used with another body.",
+                "content": {
+                    "application/problem+json": {
+                        "schema": {
+                            "$ref": "#/components/schemas/Problem"
+                        }
+                    }
+                }
+            },
+            "Invalid": {
+                "description": "The request is invalid. `errors` lists the messages by JSON pointer.",
+                "content": {
+                    "application/problem+json": {
+                        "schema": {
+                            "$ref": "#/components/schemas/Problem"
+                        }
+                    }
+                }
+            },
+            "TooManyRequests": {
+                "description": "The project reached one of its limits.",
+                "headers": {
+                    "Retry-After": {
+                        "description": "Seconds to wait before trying again.",
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 0
+                        }
+                    }
+                },
+                "content": {
+                    "application/problem+json": {
+                        "schema": {
+                            "$ref": "#/components/schemas/Problem"
+                        }
+                    }
+                }
+            },
+            "WebhookReceived": {
+                "description": "Received. Any other answer is retried."
+            }
+        },
+        "schemas": {
+            "JobId": {
+                "description": "Prefixed ULID.",
+                "type": "string",
+                "pattern": "^job_[0-9A-HJKMNP-TV-Z]{26}$",
+                "examples": ["job_01JA2Y8C6W4N5V7TQ3H9XK0B2M"]
+            },
+            "TaskName": {
+                "description": "Name of a task in a job. It is also the name of its outputs: the handle the application reads.",
+                "type": "string",
+                "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$",
+                "examples": ["h264", "thumbnails"]
+            },
+            "OperationName": {
+                "description": "Name of an operation, `<domain>.<action>` or `probe`, optionally with a major version: `video.hls@1`. Without a version, the latest one.",
+                "type": "string",
+                "pattern": "^(probe|[a-z][a-z0-9]*\\.[a-z][a-zA-Z0-9]*)(@[1-9][0-9]*)?$",
+                "examples": ["probe", "video.transcode", "video.hls@1"]
+            },
+            "PresetName": {
+                "description": "Name of a preset. A `/` groups presets: `mediatheque/video`.",
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*(/[a-z0-9][a-z0-9-]*)*$",
+                "maxLength": 128,
+                "examples": ["web-video", "mediatheque/video"]
+            },
+            "StorageName": {
+                "description": "Name of one of the project's storages.",
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+                "examples": ["media"]
+            },
+            "Kind": {
+                "description": "Kind of a file, detected from its content.",
+                "type": "string",
+                "enum": ["image", "video", "audio", "document", "font", "other"]
+            },
+            "Priority": {
+                "type": "string",
+                "enum": ["low", "normal", "high"]
+            },
+            "Metadata": {
+                "description": "Free object of the client, returned as is in the job and the webhooks.",
+                "type": "object"
+            },
+            "UrlInput": {
+                "type": "object",
+                "required": ["url"],
+                "additionalProperties": false,
+                "properties": {
+                    "url": {
+                        "description": "`https` URL of the file, for example a presigned URL. Fetched through the SSRF guard.",
+                        "type": "string",
+                        "format": "uri",
+                        "pattern": "^https://",
+                        "maxLength": 4096
+                    },
+                    "mime": {
+                        "$ref": "#/components/schemas/MimeHint"
+                    },
+                    "size": {
+                        "$ref": "#/components/schemas/SizeHint"
+                    }
+                }
+            },
+            "StorageInput": {
+                "type": "object",
+                "required": ["storage", "path"],
+                "additionalProperties": false,
+                "properties": {
+                    "storage": {
+                        "$ref": "#/components/schemas/StorageName"
+                    },
+                    "path": {
+                        "$ref": "#/components/schemas/StoragePath"
+                    },
+                    "mime": {
+                        "$ref": "#/components/schemas/MimeHint"
+                    },
+                    "size": {
+                        "$ref": "#/components/schemas/SizeHint"
+                    }
+                }
+            },
+            "Input": {
+                "description": "The file to process: a URL, or a path in one of the project's storages.",
+                "oneOf": [
+                    {
+                        "$ref": "#/components/schemas/UrlInput"
+                    },
+                    {
+                        "$ref": "#/components/schemas/StorageInput"
+                    }
+                ]
+            },
+            "StoragePath": {
+                "description": "Path in a storage, without a leading `/`.",
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1024,
+                "pattern": "^[^/]"
+            },
+            "MimeHint": {
+                "description": "The mime type the client expects. A hint: Eclair detects the real one from the content.",
+                "type": "string",
+                "pattern": "^[a-z]+/[a-zA-Z0-9.+-]+$"
+            },
+            "SizeHint": {
+                "description": "The size in bytes the client expects. A hint, checked against the project's limits before downloading.",
+                "type": "integer",
+                "minimum": 0
+            },
+            "OutputTarget": {
+                "description": "Where output files are written. Optional when no task writes files.",
+                "type": "object",
+                "required": ["storage"],
+                "additionalProperties": false,
+                "properties": {
+                    "storage": {
+                        "$ref": "#/components/schemas/StorageName"
+                    },
+                    "prefix": {
+                        "description": "Prefix of every output path, usually ending with `/`.",
+                        "type": "string",
+                        "maxLength": 512,
+                        "default": ""
+                    },
+                    "path": {
+                        "description": "Pattern of each output file's path, after the prefix. `{task}` is the task's name, `{file}` the file's name.",
+                        "type": "string",
+                        "maxLength": 512,
+                        "default": "{task}/{file}"
+                    }
+                }
+            },
+            "TaskCondition": {
+                "description": "Runs the task only if the probed input matches every given condition. Otherwise the task is `skipped`.",
+                "type": "object",
+                "additionalProperties": false,
+                "minProperties": 1,
+                "properties": {
+                    "kind": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/Kind"
+                        },
+                        "minItems": 1,
+                        "uniqueItems": true
+                    },
+                    "mime": {
+                        "description": "Mime types, with `*` for a subtype: `image/*`.",
+                        "type": "array",
+                        "items": {
+                            "type": "string",
+                            "pattern": "^[a-z]+/([a-zA-Z0-9.+-]+|\\*)$"
+                        },
+                        "minItems": 1,
+                        "uniqueItems": true
+                    },
+                    "minDuration": {
+                        "description": "Seconds.",
+                        "type": "number",
+                        "minimum": 0
+                    },
+                    "maxDuration": {
+                        "description": "Seconds.",
+                        "type": "number",
+                        "minimum": 0
+                    }
+                }
+            },
+            "TaskRequest": {
+                "type": "object",
+                "required": ["op"],
+                "additionalProperties": false,
+                "properties": {
+                    "op": {
+                        "$ref": "#/components/schemas/OperationName"
+                    },
+                    "from": {
+                        "description": "Name of the task whose output is this task's input. Defaults to the job's input. `h264:file` picks one output file of that task.",
+                        "type": "string",
+                        "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}(:[A-Za-z0-9_.-]+)?$"
+                    },
+                    "options": {
+                        "description": "Validated against the operation's options schema (see `GET /v1/operations`).",
+                        "type": "object"
+                    },
+                    "after": {
+                        "description": "Extra dependencies, for ordering without using an output.",
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/TaskName"
+                        },
+                        "uniqueItems": true
+                    },
+                    "keep": {
+                        "description": "`false` for an intermediate output, deleted when the job ends.",
+                        "type": "boolean",
+                        "default": true
+                    },
+                    "when": {
+                        "$ref": "#/components/schemas/TaskCondition"
+                    }
+                }
+            },
+            "TaskRequests": {
+                "description": "Named tasks.",
+                "type": "object",
+                "propertyNames": {
+                    "$ref": "#/components/schemas/TaskName"
+                },
+                "additionalProperties": {
+                    "$ref": "#/components/schemas/TaskRequest"
+                },
+                "maxProperties": 100
+            },
+            "JobRequest": {
+                "description": "A job: an input, where to write the outputs, and a pipeline: a preset, inline tasks, or both. Without a preset, `tasks` is required. Tasks with the same name as a preset's task replace it.",
+                "type": "object",
+                "required": ["input"],
+                "additionalProperties": false,
+                "properties": {
+                    "input": {
+                        "$ref": "#/components/schemas/Input"
+                    },
+                    "output": {
+                        "$ref": "#/components/schemas/OutputTarget"
+                    },
+                    "preset": {
+                        "$ref": "#/components/schemas/PresetName"
+                    },
+                    "tasks": {
+                        "$ref": "#/components/schemas/TaskRequests"
+                    },
+                    "webhook": {
+                        "description": "URL called when the job ends. Defaults to the project's webhook.",
+                        "type": "string",
+                        "format": "uri",
+                        "pattern": "^https://",
+                        "maxLength": 2048
+                    },
+                    "metadata": {
+                        "$ref": "#/components/schemas/Metadata"
+                    },
+                    "priority": {
+                        "$ref": "#/components/schemas/Priority",
+                        "description": "Within the project's limits.",
+                        "default": "normal"
+                    },
+                    "failFast": {
+                        "description": "Cancel the remaining tasks as soon as one fails.",
+                        "type": "boolean",
+                        "default": false
+                    }
+                },
+                "if": {
+                    "not": {
+                        "required": ["preset"]
+                    }
+                },
+                "then": {
+                    "required": ["tasks"],
+                    "properties": {
+                        "tasks": {
+                            "type": "object",
+                            "minProperties": 1
+                        }
+                    }
+                }
+            },
+            "JobStatus": {
+                "type": "string",
+                "enum": ["pending", "running", "completed", "failed", "canceled"]
+            },
+            "TaskStatus": {
+                "type": "string",
+                "enum": [
+                    "pending",
+                    "queued",
+                    "running",
+                    "completed",
+                    "failed",
+                    "canceled",
+                    "skipped"
+                ]
+            },
+            "TaskErrorCode": {
+                "description": "Stable error code: `input_unreadable`, `unsupported_input`, `timeout`, `limit_exceeded`, `operation_failed`, `storage_failed`, `provider_failed`. New codes can be added: treat unknown ones as `operation_failed`.",
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]*$",
+                "examples": [
+                    "input_unreadable",
+                    "unsupported_input",
+                    "timeout",
+                    "limit_exceeded",
+                    "operation_failed",
+                    "storage_failed",
+                    "provider_failed"
+                ]
+            },
+            "TaskError": {
+                "type": "object",
+                "required": ["code", "message"],
+                "properties": {
+                    "code": {
+                        "$ref": "#/components/schemas/TaskErrorCode"
+                    },
+                    "message": {
+                        "description": "For humans. Can change.",
+                        "type": "string"
+                    }
+                }
+            },
+            "OutputFile": {
+                "type": "object",
+                "required": ["name", "path", "mime", "size"],
+                "properties": {
+                    "name": {
+                        "description": "Name of the file within the task's outputs.",
+                        "type": "string"
+                    },
+                    "path": {
+                        "description": "Path in the job's output storage.",
+                        "type": "string"
+                    },
+                    "mime": {
+                        "type": "string"
+                    },
+                    "size": {
+                        "description": "Bytes.",
+                        "type": "integer",
+                        "minimum": 0
+                    },
+                    "checksum": {
+                        "description": "SHA-256 of the file, in hex.",
+                        "type": "string",
+                        "pattern": "^[0-9a-f]{64}$"
+                    },
+                    "role": {
+                        "description": "What the file is for, when a task writes several: `main`, `thumbnail`, `segment`…",
+                        "type": "string"
+                    },
+                    "count": {
+                        "description": "For files with many parts (HLS segments, a thumbnail series): how many parts are not listed.",
+                        "type": "integer",
+                        "minimum": 0
+                    }
+                }
+            },
+            "TaskOutputs": {
+                "type": "object",
+                "properties": {
+                    "metadata": {
+                        "description": "Data extracted by the task. Its shape depends on the operation.",
+                        "type": "object"
+                    },
+                    "files": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/OutputFile"
+                        }
+                    }
+                }
+            },
+            "Task": {
+                "type": "object",
+                "required": ["status", "op"],
+                "properties": {
+                    "status": {
+                        "$ref": "#/components/schemas/TaskStatus"
+                    },
+                    "op": {
+                        "description": "The operation that runs, always with its version: `video.hls@1`.",
+                        "type": "string"
+                    },
+                    "from": {
+                        "type": "string"
+                    },
+                    "after": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/TaskName"
+                        }
+                    },
+                    "progress": {
+                        "description": "From 0 to 1, while the task runs.",
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1
+                    },
+                    "attempts": {
+                        "type": "integer",
+                        "minimum": 0
+                    },
+                    "startedAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "endedAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "outputs": {
+                        "$ref": "#/components/schemas/TaskOutputs"
+                    },
+                    "error": {
+                        "$ref": "#/components/schemas/TaskError"
+                    }
+                }
+            },
+            "Job": {
+                "type": "object",
+                "required": ["id", "status", "createdAt", "tasks"],
+                "properties": {
+                    "id": {
+                        "$ref": "#/components/schemas/JobId"
+                    },
+                    "status": {
+                        "$ref": "#/components/schemas/JobStatus"
+                    },
+                    "createdAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "startedAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "endedAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "input": {
+                        "$ref": "#/components/schemas/Input"
+                    },
+                    "output": {
+                        "$ref": "#/components/schemas/OutputTarget"
+                    },
+                    "preset": {
+                        "description": "The preset the job used, and its version at that time.",
+                        "type": "object",
+                        "required": ["name", "version"],
+                        "properties": {
+                            "name": {
+                                "$ref": "#/components/schemas/PresetName"
+                            },
+                            "version": {
+                                "type": "integer",
+                                "minimum": 1
+                            }
+                        }
+                    },
+                    "priority": {
+                        "$ref": "#/components/schemas/Priority"
+                    },
+                    "failFast": {
+                        "type": "boolean"
+                    },
+                    "metadata": {
+                        "$ref": "#/components/schemas/Metadata"
+                    },
+                    "tasks": {
+                        "description": "Every task of the resolved pipeline, by name.",
+                        "type": "object",
+                        "additionalProperties": {
+                            "$ref": "#/components/schemas/Task"
+                        }
+                    }
+                }
+            },
+            "JobList": {
+                "type": "object",
+                "required": ["data", "nextCursor"],
+                "properties": {
+                    "data": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/Job"
+                        }
+                    },
+                    "nextCursor": {
+                        "$ref": "#/components/schemas/NextCursor"
+                    }
+                }
+            },
+            "NextCursor": {
+                "description": "Cursor of the next page, `null` on the last one.",
+                "type": ["string", "null"]
+            },
+            "JobEvent": {
+                "description": "An event of `GET /v1/jobs/{id}/events`.",
+                "type": "object",
+                "required": ["type", "job"],
+                "properties": {
+                    "type": {
+                        "type": "string",
+                        "enum": ["job.status", "task.status", "task.progress"]
+                    },
+                    "job": {
+                        "$ref": "#/components/schemas/JobId"
+                    },
+                    "status": {
+                        "description": "The new status, for `job.status` and `task.status`.",
+                        "type": "string"
+                    },
+                    "task": {
+                        "description": "The task, for `task.*` events.",
+                        "$ref": "#/components/schemas/TaskName"
+                    },
+                    "progress": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1
+                    }
+                }
+            },
+            "PresetRequest": {
+                "type": "object",
+                "required": ["tasks"],
+                "additionalProperties": false,
+                "properties": {
+                    "description": {
+                        "type": "string",
+                        "maxLength": 1000
+                    },
+                    "tasks": {
+                        "$ref": "#/components/schemas/TaskRequests",
+                        "minProperties": 1
+                    }
+                }
+            },
+            "Preset": {
+                "type": "object",
+                "required": ["name", "scope", "version", "tasks"],
+                "properties": {
+                    "name": {
+                        "$ref": "#/components/schemas/PresetName"
+                    },
+                    "scope": {
+                        "description": "`global` presets come with the server or the admin API, `project` presets are the project's own.",
+                        "type": "string",
+                        "enum": ["global", "project"]
+                    },
+                    "version": {
+                        "type": "integer",
+                        "minimum": 1
+                    },
+                    "description": {
+                        "type": "string"
+                    },
+                    "tasks": {
+                        "type": "object",
+                        "additionalProperties": {
+                            "$ref": "#/components/schemas/TaskRequest"
+                        }
+                    }
+                }
+            },
+            "PresetList": {
+                "type": "object",
+                "required": ["data"],
+                "properties": {
+                    "data": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/Preset"
+                        }
+                    }
+                }
+            },
+            "Operation": {
+                "type": "object",
+                "required": ["name", "version", "accepts", "capability", "outputs", "options"],
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "examples": ["image.palette"]
+                    },
+                    "version": {
+                        "description": "Major version.",
+                        "type": "integer",
+                        "minimum": 1
+                    },
+                    "description": {
+                        "type": "string"
+                    },
+                    "accepts": {
+                        "description": "Inputs it can read. Other inputs are refused before anything runs.",
+                        "type": "object",
+                        "properties": {
+                            "kinds": {
+                                "type": "array",
+                                "items": {
+                                    "$ref": "#/components/schemas/Kind"
+                                }
+                            },
+                            "mimes": {
+                                "type": "array",
+                                "items": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    },
+                    "capability": {
+                        "description": "Queue it runs on.",
+                        "type": "string",
+                        "examples": ["cpu", "video", "gpu", "ai"]
+                    },
+                    "outputs": {
+                        "type": "object",
+                        "required": ["files", "metadata"],
+                        "properties": {
+                            "files": {
+                                "type": "boolean"
+                            },
+                            "metadata": {
+                                "type": "boolean"
+                            }
+                        }
+                    },
+                    "options": {
+                        "description": "JSON Schema (2020-12) of the options.",
+                        "type": "object"
+                    }
+                }
+            },
+            "OperationList": {
+                "type": "object",
+                "required": ["data"],
+                "properties": {
+                    "data": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/Operation"
+                        }
+                    }
+                }
+            },
+            "WebhookEvent": {
+                "type": "string",
+                "enum": ["job.completed", "job.failed", "job.canceled", "task.completed"]
+            },
+            "Signature": {
+                "description": "`t=<unix time>,v1=<hex HMAC-SHA256>`. Several `v1` values can follow: the signature is valid if one of them matches.",
+                "type": "string",
+                "pattern": "^t=[0-9]+(,v1=[0-9a-f]{64})+$"
+            },
+            "Problem": {
+                "description": "Problem details (RFC 9457).",
+                "type": "object",
+                "required": ["title", "status"],
+                "properties": {
+                    "type": {
+                        "description": "URI of the problem type. `about:blank` when the status says it all.",
+                        "type": "string",
+                        "format": "uri-reference",
+                        "default": "about:blank"
+                    },
+                    "title": {
+                        "type": "string"
+                    },
+                    "status": {
+                        "type": "integer",
+                        "minimum": 400,
+                        "maximum": 599
+                    },
+                    "detail": {
+                        "type": "string"
+                    },
+                    "instance": {
+                        "type": "string",
+                        "format": "uri-reference"
+                    },
+                    "errors": {
+                        "description": "Validation errors: messages by JSON pointer to the invalid value in the request body (`/tasks/h264/options/codec`). The empty pointer is the body itself.",
+                        "type": "object",
+                        "additionalProperties": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

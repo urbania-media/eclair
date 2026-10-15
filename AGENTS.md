@@ -63,6 +63,8 @@ npm run typecheck   # tsc in every package
 npm run build       # build every package
 npm run format      # Prettier
 npx changeset       # describe a change for the changelog
+
+npm run generate -w @eclair-js/protocol   # after changing the OpenAPI document
 ```
 
 Database tests run on the database in `DATABASE_URL` and are skipped without it. CI runs them on MySQL 8.4, PostgreSQL 15 and SQLite. To run them locally:
