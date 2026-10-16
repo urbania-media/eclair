@@ -1,6 +1,6 @@
 # 0009: laravel-eclair and an opt-in driver in laravel-mediatheque 1.x
 
-- Status: accepted
+- Status: superseded by [0017](0017-mediatheque-2-transcoder-first.md)
 - Date: 2026-10-15
 
 ## Context

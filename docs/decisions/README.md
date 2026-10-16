@@ -12,7 +12,7 @@ Architecture decision records for Eclair. Each record is short: context, decisio
 | [0006](0006-docker-image-and-roles.md)             | One Docker image with api and worker roles, queues per capability  | Accepted                                                                |
 | [0007](0007-sql-database-and-redis.md)             | MySQL or PostgreSQL for state, Redis and BullMQ for queues         | Accepted, amended by [0016](0016-sqlite-for-single-machine-installs.md) |
 | [0008](0008-ai-providers.md)                       | AI operations go through providers, local by default               | Accepted                                                                |
-| [0009](0009-laravel-mediatheque-integration.md)    | `laravel-eclair` and an opt-in driver in `laravel-mediatheque` 1.x | Accepted                                                                |
+| [0009](0009-laravel-mediatheque-integration.md)    | `laravel-eclair` and an opt-in driver in `laravel-mediatheque` 1.x | Superseded by [0017](0017-mediatheque-2-transcoder-first.md)            |
 | [0010](0010-repositories-packages-and-releases.md) | Repositories, packages, license and releases                       | Accepted                                                                |
 | [0011](0011-temporary-storage.md)                  | Temporary storage for uploads and outputs                          | Accepted                                                                |
 | [0012](0012-synchronous-probe.md)                  | Synchronous probe for metadata at upload                           | Accepted                                                                |
@@ -20,3 +20,4 @@ Architecture decision records for Eclair. Each record is short: context, decisio
 | [0014](0014-kysely.md)                             | Kysely for database access and migrations                          | Accepted                                                                |
 | [0015](0015-typebox-for-options-schemas.md)        | TypeBox for options schemas, Ajv to validate                       | Accepted                                                                |
 | [0016](0016-sqlite-for-single-machine-installs.md) | SQLite for development, tests and single-machine installs          | Accepted                                                                |
+| [0017](0017-mediatheque-2-transcoder-first.md)     | `laravel-eclair` implements the mediatheque 2.x `Transcoder` first | Accepted                                                                |
