@@ -41,7 +41,8 @@ packages/
   operations-audio/    @eclair-js/operations-audio: transcode, waveform
   operations-document/ @eclair-js/operations-document: page thumbnails
   operations-font/     @eclair-js/operations-font: WOFF and WOFF2
-  operations-image/    @eclair-js/operations-image (and -ai)
+  operations-image/    @eclair-js/operations-image: convert, thumbnail, palette
+  operations-ai/       @eclair-js/operations-ai (planned)
 docker/                Dockerfile and docker compose examples
 config/                Shared Vitest config of the packages
 docs/                  Architecture, protocol, operations, deployment, decisions

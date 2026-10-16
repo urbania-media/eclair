@@ -63,7 +63,8 @@ describe('GET /v1/operations', () => {
             url: '/v1/operations',
             headers: { authorization: `Bearer ${limitedToken}` },
         });
-        expect(response.json()).toEqual({ data: [] });
+        const { data } = response.json<{ data: { name: string }[] }>();
+        expect(data.map(({ name }) => name)).toEqual(['image.palette']);
     });
 });
 
