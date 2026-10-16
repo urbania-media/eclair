@@ -34,6 +34,8 @@ describe('OperationRegistry.load', () => {
     it('loads the built-in operations', async () => {
         const registry = await OperationRegistry.load(BUILT_IN_PLUGINS);
         expect(registry.resolve('probe')?.key).toBe('probe@1');
+        expect(registry.resolve('video.transcode')?.key).toBe('video.transcode@1');
+        expect(registry.resolve('video.hls')?.capability).toBe('video');
     });
 
     it('accepts a list or { operations }, and refuses anything else', async () => {

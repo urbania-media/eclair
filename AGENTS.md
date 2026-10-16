@@ -37,7 +37,8 @@ packages/
   server/              @eclair-js/server: API, scheduler, workers, storage, webhooks, `eclair` CLI
   client/              @eclair-js/client: JS client and webhook verification
   operations-core/     @eclair-js/operations-core: probe
-  operations-image/    @eclair-js/operations-image (and -video, -audio, -document, -font, -ai)
+  operations-video/    @eclair-js/operations-video: transcode, thumbnails, poster, HLS
+  operations-image/    @eclair-js/operations-image (and -audio, -document, -font, -ai)
 docker/                Dockerfile and docker compose examples
 config/                Shared Vitest config of the packages
 docs/                  Architecture, protocol, operations, deployment, decisions
