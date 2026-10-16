@@ -86,9 +86,24 @@ export function toOutputFile(output: OutputRecord): OutputFile {
     };
 }
 
+/**
+ * The files a task lists in its job: every file but the parts of a file with many parts (HLS
+ * segments), which `GET /v1/jobs/{id}/files` lists.
+ */
+function listedFiles(outputs: OutputRecord[]): OutputRecord[] {
+    return outputs.filter(({ kind, role }) => kind === 'file' && role !== 'segment');
+}
+
 function toTask(task: TaskRecord, outputs: OutputRecord[]): Task {
     const metadata = outputs.find(({ kind }) => kind === 'metadata')?.data;
-    const files = outputs.filter(({ kind }) => kind === 'file').map(toOutputFile);
+    const listed = listedFiles(outputs);
+    const parts = outputs.filter(({ kind, role }) => kind === 'file' && role === 'segment').length;
+    // The main file counts the parts that aren't listed.
+    const main =
+        parts === 0 ? undefined : (listed.find(({ role }) => role === 'main') ?? listed[0]);
+    const files = listed.map((output) =>
+        output === main ? { ...toOutputFile(output), count: parts } : toOutputFile(output),
+    );
     return {
         status: task.status,
         op: task.operation,
@@ -465,8 +480,8 @@ export class Jobs {
                 if (job === undefined || record === undefined || files === undefined) {
                     continue;
                 }
-                const taskOutputs = outputRecords.filter(
-                    ({ taskId, kind }) => taskId === record.id && kind === 'file',
+                const taskOutputs = listedFiles(
+                    outputRecords.filter(({ taskId }) => taskId === record.id),
                 );
                 task.outputs = {
                     ...task.outputs,

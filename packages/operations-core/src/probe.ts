@@ -3,7 +3,7 @@ import { createReadStream } from 'node:fs';
 import { open } from 'node:fs/promises';
 import { Type } from 'typebox';
 
-import { OperationError, defineOperation } from '@eclair-js/operation';
+import { OperationError, defineOperation, ffmpegInput } from '@eclair-js/operation';
 import type { OperationContext } from '@eclair-js/operation';
 import type { ProbeMetadata } from '@eclair-js/protocol';
 
@@ -128,7 +128,7 @@ async function probeMedia(context: OperationContext, metadata: Metadata): Promis
             'json',
             '-show_format',
             '-show_streams',
-            context.input.path,
+            ...ffmpegInput(context.input.path),
         ]);
         output = JSON.parse(stdout) as FfprobeOutput;
     } catch (error) {

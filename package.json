@@ -15,6 +15,7 @@
         "packages/protocol",
         "packages/operation",
         "packages/operations-core",
+        "packages/operations-video",
         "packages/client",
         "packages/server"
     ],

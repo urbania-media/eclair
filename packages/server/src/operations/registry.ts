@@ -8,7 +8,10 @@ import type { ProjectSettings } from '../projects/settings.ts';
 import { InvalidValueError, createAjv, groupErrors } from '../validation.ts';
 
 /** The packages of built-in operations. The server loads them by name, like any plugin (rule 4). */
-export const BUILT_IN_PLUGINS = ['@eclair-js/operations-core'] as const;
+export const BUILT_IN_PLUGINS = [
+    '@eclair-js/operations-core',
+    '@eclair-js/operations-video',
+] as const;
 
 /** A plugin can't be loaded, or exports an invalid operation. */
 export class PluginError extends Error {

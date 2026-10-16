@@ -94,7 +94,7 @@ jobs:
                       -e ECLAIR_TEST_BINARIES=1 -e HOME=/src/.tmp -e TMPDIR=/src/.tmp \
                       -e MAGICK_TEMPORARY_PATH=/src/.tmp \
                       -v "$PWD:/src" -w /src "$TEST_TAG" \
-                      node_modules/vitest/vitest.mjs run --project operations-core
+                      node_modules/vitest/vitest.mjs run --project 'operations-*'
 
             - name: Summary
               if: ${{ !cancelled() && steps.build.outcome == 'success' }}

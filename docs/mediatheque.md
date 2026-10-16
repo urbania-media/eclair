@@ -122,11 +122,14 @@ Handles, file paths, sources and URLs stay the same, so `laravel-folklore` and t
 | ---------------------------- | ------------------------------------------------------------------ |
 | `Video\H264`, `WebM`, `HEVC` | `video.transcode` with the same codec, size and bitrate            |
 | `Video\Thumbnails`           | `video.thumbnails` with `count` and `inMiddle`                     |
+| `Video\HLS`                  | `video.hls` with the same renditions and segment duration          |
 | `Video\MediaConvert`         | Not needed: Eclair replaces it                                     |
 | `Audio\Thumbnails`           | `audio.waveform`, image output with the same size and colors       |
 | `Document\Thumbnails`        | `document.thumbnails` with the same resolution, quality and format |
 | `Font\WebFonts`              | `font.convert`                                                     |
 | Metadata readers             | `probe`                                                            |
+
+WebM outputs are VP9 and Opus, where the mediatheque's `WebM` job writes VP8 and Vorbis: same container and handle, with codecs that every browser that plays WebM reads.
 
 Each mediatheque job's options are translated by the driver, so an application's custom pipeline options keep working. A job class that has no Eclair equivalent (a custom job in an application) keeps running locally, and the driver splits the pipeline between Eclair and the local queue.
 

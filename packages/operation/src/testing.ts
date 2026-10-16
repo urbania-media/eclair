@@ -1,5 +1,6 @@
 import addFormatsModule from 'ajv-formats';
 import { Ajv2020 } from 'ajv/dist/2020.js';
+import { spawnSync } from 'node:child_process';
 import { mkdtemp, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -95,4 +96,20 @@ export async function runOperation(
     } finally {
         clearTimeout(timer);
     }
+}
+
+/** The binaries of this list that aren't on `PATH`. */
+export function missingBinaries(binaries: readonly string[]): string[] {
+    return binaries.filter(
+        (binary) => spawnSync(binary, ['-h'], { stdio: 'ignore' }).error !== undefined,
+    );
+}
+
+/**
+ * Whether the tests of an operation that runs `binaries` should be skipped: some are missing, and
+ * `ECLAIR_TEST_BINARIES` isn't set. The image's CI job sets it, so there a missing binary fails.
+ * Add a test that expects `missingBinaries()` to be empty, to fail in that case.
+ */
+export function skipWithoutBinaries(binaries: readonly string[]): boolean {
+    return missingBinaries(binaries).length > 0 && process.env['ECLAIR_TEST_BINARIES'] !== '1';
 }

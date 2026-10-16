@@ -40,6 +40,7 @@
         "@aws-sdk/s3-request-presigner": "^3.1152.0",
         "@eclair-js/operation": "^0.0.0",
         "@eclair-js/operations-core": "^0.0.0",
+        "@eclair-js/operations-video": "^0.0.0",
         "@eclair-js/protocol": "^0.0.0",
         "@fastify/multipart": "^10.1.4",
         "ajv": "^8.20.0",

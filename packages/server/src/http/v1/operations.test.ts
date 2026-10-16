@@ -43,7 +43,8 @@ describe('GET /v1/operations', () => {
         });
         expect(response.statusCode).toBe(200);
         expect(validate('OperationList', response.json()).valid).toBe(true);
-        const [probe] = response.json<{ data: { name: string; options: unknown }[] }>().data;
+        const { data } = response.json<{ data: { name: string; options: unknown }[] }>();
+        const probe = data.find(({ name }) => name === 'probe');
         expect(probe).toMatchObject({
             name: 'probe',
             version: 1,
@@ -75,7 +76,8 @@ describe('presets with operations', () => {
             payload: {
                 tasks: {
                     probe: { op: 'probe', options: { checksum: 'yes' } },
-                    hls: { op: 'video.hls' },
+                    hls: { op: 'video.hls', options: { segmentDuration: 0 } },
+                    reframe: { op: 'video.reframe' },
                 },
             },
         });
@@ -84,7 +86,8 @@ describe('presets with operations', () => {
             detail: 'Some tasks are invalid.',
             errors: {
                 '/tasks/probe/options/checksum': ['must be boolean'],
-                '/tasks/hls/op': ['"video.hls" is not an operation of this server'],
+                '/tasks/hls/options/segmentDuration': ['must be >= 1'],
+                '/tasks/reframe/op': ['"video.reframe" is not an operation of this server'],
             },
         });
     });

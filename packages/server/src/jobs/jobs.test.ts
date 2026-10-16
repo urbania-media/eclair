@@ -365,6 +365,47 @@ describe.skipIf(!RUNS_WITH_REDIS)('jobs', () => {
                 2,
             );
         });
+
+        it('counts the segments of a file on its main file, and lists them with the files', async () => {
+            const { job } = await jobs.create(project, pipeline);
+            const tasks = await scheduler.loadTasks(job.id);
+            const h264 = tasks.find(({ name }) => name === 'h264');
+            const { createId } = await import('../ids.ts');
+            const files: [string, string][] = [
+                ['master.m3u8', 'main'],
+                ['720p.m3u8', 'playlist'],
+                ['720p_000.ts', 'segment'],
+                ['720p_001.ts', 'segment'],
+                ['720p_002.ts', 'segment'],
+            ];
+            for (const [name, role] of files) {
+                await services.database.kysely
+                    .insertInto('outputs')
+                    .values({
+                        id: createId('output'),
+                        task_id: h264?.id ?? '',
+                        job_id: job.id,
+                        project_id: project.id,
+                        kind: 'file',
+                        name,
+                        storage: 'media',
+                        path: `videos/42/hls/${name}`,
+                        mime: 'application/octet-stream',
+                        size: 10,
+                        role,
+                        expired: false,
+                        created_at: new Date(),
+                    })
+                    .execute();
+            }
+            const shown = await jobs.get(project.id, job.id);
+            expect(validate('Job', shown).valid).toBe(true);
+            expect(shown.tasks['h264']?.outputs?.files).toEqual([
+                expect.objectContaining({ name: 'master.m3u8', role: 'main', count: 3 }),
+                expect.not.objectContaining({ count: expect.anything() }),
+            ]);
+            expect((await jobs.files(project.id, job.id, { limit: 10 })).data).toHaveLength(5);
+        });
     });
 
     it('reports invalid jobs as InvalidValueError', async () => {

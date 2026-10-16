@@ -89,6 +89,17 @@ describe('execBinary', () => {
         expect(result.stdout).toBe('hello');
     });
 
+    it('streams stdout to onStdout without keeping it', async () => {
+        const chunks: string[] = [];
+        const result = await execBinary(
+            node,
+            script('process.stdout.write("x".repeat(10_000)); console.error("done")'),
+            { maxOutput: 1000, onStdout: (chunk) => chunks.push(chunk) },
+        );
+        expect(chunks.join('')).toBe('x'.repeat(10_000));
+        expect(result).toEqual({ stdout: '', stderr: 'done\n' });
+    });
+
     it('fails clearly when the binary is missing', async () => {
         await expect(execBinary('/nonexistent/ffmpeg', [])).rejects.toMatchObject({
             code: 'operation_failed',

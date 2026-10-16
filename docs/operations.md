@@ -93,6 +93,15 @@ HEIC and HEIF inputs are converted by the same operations.
 | `video.reframe`    | Vertical (9:16) or square version that follows the subject, using `image.focus` per scene |     |
 | `video.scenes`     | Scene changes, as metadata                                                                |     |
 
+The options of each operation are published in `GET /v1/operations`. In short:
+
+- `video.transcode`: `codec` (`h264` by default, `h265`, `vp9`, `av1`), `format` (`mp4` or `webm`, from the codec by default), `maxWidth` and `maxHeight` (never enlarged), `quality` (CRF), `maxBitrate`, `audio` and `audioBitrate` (AAC in MP4, Opus in WebM). Writes `video.mp4` or `video.webm`. The defaults are those of the mediatheque's `H264`, `HEVC` and `WebM` jobs: `fast` preset, main profile, 8-bit 4:2:0, CRF 26 for H.264 and VP9 and 30 for H.265.
+- `video.thumbnails`: `count` frames at even intervals (5 by default), centered with `inMiddle` as in the mediatheque, or at given `times`, every `interval` seconds, or at the clearest `scenes` changes. `maxWidth`, `maxHeight`, `format` (`jpeg`, `png`, `webp`) and `quality`. Writes `0.jpg`, `1.jpg`…, with the role `thumbnail`.
+- `video.poster`: the frame at `time`, or by default the most representative frame of a few seconds near the start. Writes `poster.jpg`, with the role `poster`.
+- `video.hls`: `renditions` by short side (`size`), with their `bitrate` and `audioBitrate`, and `segmentDuration`. By default, the renditions of the mediatheque's `HLS` job: 360p, 720p and 1080p at 800, 2000 and 4000 kbit/s, in 5-second segments. Renditions larger than the video are left out. Writes `master.m3u8` (role `main`), a playlist per rendition (`720p.m3u8`, role `playlist`) and their segments (`720p_000.ts`, role `segment`), which the job lists as a `count` on `master.m3u8`.
+
+They also return the size of what they wrote as metadata. ffmpeg only opens local files with audio and video demuxers (`ffmpegInput()` of `@eclair-js/operation`), never playlists, so an input can't make it read another file.
+
 ### Audio (`@eclair-js/operations-audio`)
 
 | Operation         | Output                                             | 1.0 |

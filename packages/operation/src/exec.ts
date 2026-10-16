@@ -14,6 +14,11 @@ export interface ExecOptions {
     env?: Record<string, string>;
     /** Written to stdin, then stdin is closed. */
     input?: string | Buffer;
+    /**
+     * Receives stdout as it comes, for binaries that report progress there (`ffmpeg -progress`).
+     * stdout is then not kept: the result's `stdout` is empty, and `maxOutput` doesn't apply to it.
+     */
+    onStdout?: (chunk: string) => void;
 }
 
 export interface ExecResult {
@@ -119,7 +124,15 @@ export function execBinary(
             }
         };
 
-        child.stdout?.on('data', (chunk: Buffer) => {
+        const { onStdout } = options;
+        if (onStdout !== undefined) {
+            child.stdout?.setEncoding('utf8');
+        }
+        child.stdout?.on('data', (chunk: Buffer | string) => {
+            if (onStdout !== undefined) {
+                onStdout(chunk as string);
+                return;
+            }
             stdoutSize += chunk.length;
             if (stdoutSize > maxOutput) {
                 kill(
@@ -129,7 +142,7 @@ export function execBinary(
                     ),
                 );
             } else {
-                stdout.push(chunk);
+                stdout.push(chunk as Buffer);
             }
         });
         child.stderr?.on('data', (chunk: Buffer) => {

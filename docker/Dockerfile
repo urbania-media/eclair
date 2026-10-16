@@ -72,6 +72,7 @@ COPY package.json package-lock.json tsconfig.base.json tsconfig.json ./
 COPY packages/protocol/package.json packages/protocol/
 COPY packages/operation/package.json packages/operation/
 COPY packages/operations-core/package.json packages/operations-core/
+COPY packages/operations-video/package.json packages/operations-video/
 COPY packages/client/package.json packages/client/
 COPY packages/server/package.json packages/server/
 RUN npm ci --ignore-scripts
