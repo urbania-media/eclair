@@ -6,6 +6,7 @@ import { STATUS_CODES } from 'node:http';
 import { jsonSchema } from '@eclair-js/protocol';
 
 import { ConflictError, NotFoundError, RateLimitedError } from '../errors.ts';
+import type { Metrics } from '../metrics.ts';
 import type { Services } from '../services.ts';
 import { InvalidValueError, createAjv, groupErrors } from '../validation.ts';
 import { fileRoutes } from './files.ts';
@@ -42,6 +43,8 @@ export interface AppOptions {
     checkTimeout?: number;
     /** The repositories. Without them, only `/health` and `/ready` exist (tests). */
     services?: Services;
+    /** Served on `/metrics`, for Prometheus. */
+    metrics?: Metrics;
 }
 
 const PROBLEM_CONTENT_TYPE = 'application/problem+json; charset=utf-8';
@@ -148,6 +151,13 @@ export function buildApp(options: AppOptions): FastifyInstance {
     );
 
     app.get('/health', async () => ({ status: 'ok', version: options.version }));
+
+    const { metrics } = options;
+    if (metrics !== undefined) {
+        app.get('/metrics', async (_request, reply) =>
+            reply.type(metrics.registry.contentType).send(await metrics.registry.metrics()),
+        );
+    }
 
     app.get('/ready', async (request, reply) => {
         const checks = options.checks ?? [];

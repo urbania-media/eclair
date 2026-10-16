@@ -9,9 +9,13 @@ import type { Config } from '../config/config.ts';
 import { createDatabase } from '../database/connection.ts';
 import { checkDatabase } from '../database/dialect.ts';
 import { migrateToLatest, migrationStatus, pendingMigrations } from '../database/migrate.ts';
+import { HostRegistry, sqliteOnSeveralHosts } from '../hosts.ts';
 import { buildApp } from '../http/app.ts';
 import { TaskQueues } from '../jobs/queues.ts';
+import { Maintenance } from '../maintenance/maintenance.ts';
+import { Metrics } from '../metrics.ts';
 import { createRedis } from '../redis.ts';
+import { usageReport } from '../usage/usage.ts';
 import { VERSION } from '../version.ts';
 import { CancelBus } from '../workers/cancel.ts';
 import { TaskRunner } from '../workers/runner.ts';
@@ -26,6 +30,7 @@ import {
     errorMessage,
     loadOperations,
     openMigratedDatabase,
+    withServices,
 } from './command.ts';
 import type { CliIo, Command, CommandContext } from './command.ts';
 
@@ -39,18 +44,38 @@ async function start(io: CliIo, roles: { api: boolean; worker: boolean }): Promi
     const database = await openMigratedDatabase(config.databaseUrl ?? '');
     const name = roles.api && roles.worker ? 'all' : roles.api ? 'api' : 'worker';
     const redis = createRedis(config.redisUrl ?? '', `eclair-${name}`);
+    const hosts = new HostRegistry(redis);
+
+    // SQLite is for one machine (decision 0016): refuse to join an install that runs on another.
+    if (database.dialect === 'sqlite') {
+        const others = await hosts.others().catch(() => []);
+        if (others.length > 0) {
+            redis.disconnect();
+            await database.close();
+            throw new CliExit(EXIT.unavailable, sqliteOnSeveralHosts(others));
+        }
+    }
+
     const queues = new TaskQueues(redis);
     const cancel = new CancelBus(redis);
+    const metrics = new Metrics(queues);
     const logger = pino({
         level: config.logLevel,
         redact: ['req.headers.authorization', 'req.headers.cookie'],
     });
-    const services = createServicesFor(database, config, operations, { queues, redis, logger });
+    const services = createServicesFor(database, config, operations, {
+        queues,
+        redis,
+        logger,
+        metrics,
+    });
     services.scheduler?.onCancelRunning((taskIds) => cancel.publish(taskIds));
 
     let workers: TaskWorkers | undefined;
+    let maintenance: Maintenance | undefined;
     let app: ReturnType<typeof buildApp> | undefined;
     try {
+        await hosts.start();
         if (roles.worker && services.scheduler !== undefined) {
             const runner = new TaskRunner({
                 database,
@@ -63,6 +88,7 @@ async function start(io: CliIo, roles: { api: boolean; worker: boolean }): Promi
                 worker: `${hostname()}:${process.pid}`,
                 logger,
                 webhooks: services.webhooks,
+                metrics,
             });
             workers = new TaskWorkers({
                 connection: redis,
@@ -80,10 +106,22 @@ async function start(io: CliIo, roles: { api: boolean; worker: boolean }): Promi
             );
         }
         if (roles.api) {
-            // The processes that run the API send the webhooks.
+            // The processes that run the API send the webhooks and run the maintenance.
             await services.webhooks?.start();
+            maintenance = new Maintenance({
+                database,
+                redis,
+                queues,
+                projects: services.projects,
+                uploads: services.uploads,
+                temporary: services.resolver.temporary,
+                logger,
+                jobRetention: config.jobRetention,
+            });
+            maintenance.start();
             app = buildApp({
                 services,
+                metrics,
                 version: VERSION,
                 loggerInstance: logger,
                 checks: [
@@ -94,6 +132,19 @@ async function start(io: CliIo, roles: { api: boolean; worker: boolean }): Promi
                             await redis.ping();
                         },
                     },
+                    ...(database.dialect === 'sqlite'
+                        ? [
+                              {
+                                  name: 'single-machine',
+                                  check: async () => {
+                                      const others = await hosts.others();
+                                      if (others.length > 0) {
+                                          throw new Error(sqliteOnSeveralHosts(others));
+                                      }
+                                  },
+                              },
+                          ]
+                        : []),
                 ],
             });
             await app.listen({ host: config.host, port: config.port });
@@ -102,8 +153,10 @@ async function start(io: CliIo, roles: { api: boolean; worker: boolean }): Promi
         logger.info('Stopping');
     } finally {
         await app?.close();
+        await maintenance?.stop();
         // Running tasks end first: a worker that stops takes no new task.
         await workers?.close();
+        await hosts.stop();
         await services.webhooks?.close();
         await services.events?.close();
         await queues.close();
@@ -111,6 +164,62 @@ async function start(io: CliIo, roles: { api: boolean; worker: boolean }): Promi
         await database.close();
     }
     return EXIT.ok;
+}
+
+async function usageCommand(io: CliIo, values: CommandContext['values']): Promise<number> {
+    const days = values['days'] === undefined ? 30 : Number(values['days']);
+    if (!Number.isInteger(days) || days < 1) {
+        throw new CliExit(EXIT.usage, '--days must be a number of days.');
+    }
+    return withServices(io, async ({ database, projects }) => {
+        const slug = typeof values['project'] === 'string' ? values['project'] : undefined;
+        const projectId = slug === undefined ? undefined : (await projects.get(slug)).id;
+        const lines = await usageReport(database, {
+            since: new Date(Date.now() - days * 24 * 3_600_000),
+            projectId,
+        });
+        if (values['json'] === true) {
+            io.stdout(`${JSON.stringify(lines, null, 2)}\n`);
+            return EXIT.ok;
+        }
+        if (lines.length === 0) {
+            io.stdout('No usage in this period.\n');
+            return EXIT.ok;
+        }
+        const megabytes = (bytes: number) => (bytes / 1024 ** 2).toFixed(1);
+        const rows = lines.map((line) => [
+            line.project,
+            line.day,
+            String(line.tasks),
+            line.cpuSeconds.toFixed(1),
+            line.mediaSeconds.toFixed(1),
+            megabytes(line.bytesIn),
+            megabytes(line.bytesOut),
+            megabytes(line.bytesStored),
+        ]);
+        const headers = [
+            'PROJECT',
+            'DAY',
+            'TASKS',
+            'TASK S',
+            'MEDIA S',
+            'IN MB',
+            'OUT MB',
+            'KEPT MB',
+        ];
+        const widths = headers.map((header, column) =>
+            Math.max(header.length, ...rows.map((row) => (row[column] ?? '').length)),
+        );
+        for (const row of [headers, ...rows]) {
+            io.stdout(
+                `${row
+                    .map((cell, column) => cell.padEnd(widths[column] ?? 0))
+                    .join('  ')
+                    .trimEnd()}\n`,
+            );
+        }
+        return EXIT.ok;
+    });
 }
 
 async function migrate(io: CliIo, statusOnly: boolean): Promise<number> {
@@ -173,6 +282,13 @@ async function doctor(io: CliIo): Promise<number> {
             const info = await redis.info('server');
             const version = /redis_version:(\S+)/.exec(info)?.[1] ?? 'unknown version';
             line('ok', `redis: ${version}`);
+            const live = await new HostRegistry(redis).live();
+            if (live.length > 0) {
+                line('ok', `machines running Eclair: ${live.join(', ')}`);
+            }
+            if (live.length > 1 && config.databaseUrl?.startsWith('sqlite:') === true) {
+                line('error', sqliteOnSeveralHosts(live));
+            }
         } catch (error) {
             line('error', `redis: ${errorMessage(error)}`);
         } finally {
@@ -271,6 +387,16 @@ const COMMANDS: Record<string, Command> = {
         run: ({ io }) => doctor(io),
     },
     ...ADMIN_COMMANDS,
+    usage: {
+        usage: '[--project …] [--days 30] [--json]',
+        description: 'Usage per project and day, to split the cost of the server',
+        options: {
+            project: { type: 'string' },
+            days: { type: 'string' },
+            json: { type: 'boolean' },
+        },
+        run: ({ io, values }) => usageCommand(io, values),
+    },
     'key:generate': {
         description: 'Print a new ECLAIR_SECRET_KEY',
         run: async ({ io }) => {

@@ -17,6 +17,7 @@ import { toJson } from '../database/values.ts';
 import { ConflictError, NotFoundError } from '../errors.ts';
 import type { FileLinks } from '../files/links.ts';
 import { createId, isId } from '../ids.ts';
+import type { Metrics } from '../metrics.ts';
 import { BlockedUrlError, checkUrl } from '../net/ssrf.ts';
 import type { OperationRegistry } from '../operations/registry.ts';
 import type { Presets } from '../presets/presets.ts';
@@ -41,6 +42,7 @@ export interface JobsOptions {
     scheduler: Scheduler;
     /** Signs the download URLs of files in the temporary storage. */
     links?: FileLinks | undefined;
+    metrics?: Metrics | undefined;
 }
 
 export interface JobFilters {
@@ -145,9 +147,11 @@ export class Jobs {
     readonly #operations: OperationRegistry;
     readonly #scheduler: Scheduler;
     readonly #links: FileLinks | undefined;
+    readonly #metrics: Metrics | undefined;
 
     constructor(options: JobsOptions) {
         this.#links = options.links;
+        this.#metrics = options.metrics;
         this.#database = options.database;
         this.#presets = options.presets;
         this.#storages = options.storages;
@@ -358,6 +362,7 @@ export class Jobs {
             throw error;
         }
 
+        this.#metrics?.jobs.inc();
         await this.#scheduler.advance(id);
         return { job: await this.get(project.id, id), created: true };
     }

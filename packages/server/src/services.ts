@@ -6,6 +6,7 @@ import { JobEvents } from './jobs/events.ts';
 import { Jobs } from './jobs/jobs.ts';
 import type { TaskQueues } from './jobs/queues.ts';
 import { Scheduler } from './jobs/scheduler.ts';
+import type { Metrics } from './metrics.ts';
 import type { GuardOptions } from './net/ssrf.ts';
 import type { OperationRegistry } from './operations/registry.ts';
 import { Presets } from './presets/presets.ts';
@@ -68,6 +69,7 @@ export interface ServicesOptions {
     guard?: Pick<GuardOptions, 'allowHttp' | 'allowPrivateAddresses'>;
     /** Only for tests: the backoff between webhook attempts. */
     webhookBackoff?: (attemptsMade: number) => number;
+    metrics?: Metrics | undefined;
 }
 
 const SILENT: RunnerLogger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
@@ -110,7 +112,16 @@ export function createServices(options: ServicesOptions): Services {
     const scheduler = new Scheduler(database, queues, projects);
     const events = new JobEvents(redis);
     scheduler.setEvents(events);
-    const jobs = new Jobs({ database, presets, storages, uploads, operations, scheduler, links });
+    const jobs = new Jobs({
+        database,
+        presets,
+        storages,
+        uploads,
+        operations,
+        scheduler,
+        links,
+        metrics: options.metrics,
+    });
     const webhooks = new Webhooks({
         database,
         projects,
@@ -118,6 +129,7 @@ export function createServices(options: ServicesOptions): Services {
         logger: options.logger ?? SILENT,
         ...(options.guard === undefined ? {} : { guard: options.guard }),
         ...(options.webhookBackoff === undefined ? {} : { backoff: options.webhookBackoff }),
+        metrics: options.metrics,
     });
     webhooks.setJobs(jobs);
     scheduler.onJobEnded((job) => webhooks.send(job, `job.${job.status}` as 'job.completed'));

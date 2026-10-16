@@ -8,6 +8,7 @@ import type { Database } from '../database/connection.ts';
 import { pendingMigrations } from '../database/migrate.ts';
 import { ConflictError, NotFoundError } from '../errors.ts';
 import type { TaskQueues } from '../jobs/queues.ts';
+import type { Metrics } from '../metrics.ts';
 import { BUILT_IN_PLUGINS, OperationRegistry, PluginError } from '../operations/registry.ts';
 import { createServices } from '../services.ts';
 import type { Services } from '../services.ts';
@@ -154,7 +155,7 @@ export function createServicesFor(
     database: Database,
     config: Config,
     operations: OperationRegistry | undefined,
-    runtime: { queues?: TaskQueues; redis?: Redis; logger?: RunnerLogger } = {},
+    runtime: { queues?: TaskQueues; redis?: Redis; logger?: RunnerLogger; metrics?: Metrics } = {},
 ): Services {
     return createServices({
         database,

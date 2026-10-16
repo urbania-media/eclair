@@ -29,13 +29,14 @@ docker run ghcr.io/urbania-media/eclair eclair …  # CLI
 ```bash
 cd docker
 cp .env.example .env            # set ECLAIR_SECRET_KEY, ECLAIR_ADMIN_TOKEN, ECLAIR_PUBLIC_URL, DATABASE_PASSWORD
-docker compose up -d
-docker compose exec eclair eclair migrate
+docker compose up -d --wait     # runs the migrations, then Eclair, until /ready answers
 docker compose exec eclair eclair projects:create my-site
 docker compose exec eclair eclair keys:create my-site
 ```
 
 On one server, SQLite can replace the database server: set `DATABASE_URL=sqlite:///var/lib/eclair/eclair.db`, with that directory on a volume on a local disk (not a network file system), and leave out the database service. API and worker processes on the same machine can share the file. SQLite suits development, tests and small installs; to grow beyond one server, move to MySQL or PostgreSQL first (see [decision 0016](decisions/0016-sqlite-for-single-machine-installs.md)).
+
+The `migrate` service runs `eclair migrate` before Eclair starts, at every `up`: it does nothing when the schema is up to date. `docker/e2e.sh` runs both compose files end to end with a built image, as the image's CI does.
 
 Put a reverse proxy with TLS in front of the API. The temporary directory should be on a fast local disk with room for the largest input and its outputs, times the worker concurrency.
 
@@ -101,10 +102,30 @@ Supported but not the default: install Node 24, `npm install -g @eclair-js/serve
 ## Upgrades
 
 - Read the changelog, then pull the new image.
-- Run `eclair migrate` once, from one container. Migrations are additive within a major version, so old and new workers can run side by side during a rolling upgrade.
+- Run `eclair migrate` once, from one container (the compose files do it with their `migrate` service). Migrations are additive within a major version, so old and new workers can run side by side during a rolling upgrade.
 - Restart the API, then the workers.
 
 ## Backups and monitoring
 
 - Back up the database. With SQLite, use `VACUUM INTO` or the SQLite backup API, not a copy of the file while Eclair runs. The temporary storage doesn't need backups. Redis only holds queues and can be rebuilt by the scheduler.
-- Scrape `/metrics` with Prometheus. Alert on queue wait time, task failure rate per operation, webhook delivery failures and free space in the temporary directory.
+- Scrape `/metrics` with Prometheus: `eclair_queue_tasks` (by queue and state), `eclair_tasks_total` and `eclair_task_duration_seconds` (by operation and outcome), `eclair_jobs_created_total`, `eclair_webhook_deliveries_total`, and the process metrics. Keep `/metrics` off the public internet: let the reverse proxy refuse it from outside. Alert on queue wait time, task failure rate per operation, webhook delivery failures and free space in the temporary directory.
+- `GET /ready` checks the database and Redis, and with SQLite that no other machine runs Eclair on the same Redis.
+
+## Maintenance
+
+Every minute, one API process (whichever takes a lock in Redis) cleans up:
+
+- uploads and files of the temporary storage past their expiry;
+- the intermediate files (`keep: false`) of the jobs that ended;
+- the jobs that ended more than `ECLAIR_JOB_RETENTION` ago, with their files. Their usage stays;
+- tasks that are queued in the database but missing from Redis (Redis lost its data, for example): they go back to their queue.
+
+## Usage and costs
+
+`eclair usage` sums the usage of each project per day: tasks, task time, media duration, bytes read, written and kept in the temporary storage. `--project` keeps one project, `--days` sets the period (30 by default), `--json` gives it to a spreadsheet or a script.
+
+```bash
+eclair usage --days 31
+```
+
+Task time is the wall-clock time of each task; the CPU time of its binaries isn't measured yet.
