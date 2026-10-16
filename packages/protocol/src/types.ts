@@ -39,6 +39,7 @@ export type ProjectRequest = Schemas['ProjectRequest'];
 export type ProjectCreated = Schemas['ProjectCreated'];
 export type ProjectPatch = Schemas['ProjectPatch'];
 export type WebhookSecret = Schemas['WebhookSecret'];
+export type WebhookSecretRotation = Schemas['WebhookSecretRotation'];
 export type ApiKey = Schemas['ApiKey'];
 export type ApiKeyList = Schemas['ApiKeyList'];
 export type ApiKeyRequest = Schemas['ApiKeyRequest'];
