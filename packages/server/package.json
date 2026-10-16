@@ -19,6 +19,11 @@
             "types": "./dist/index.d.ts",
             "default": "./dist/index.js"
         },
+        "./testing": {
+            "@eclair-js/source": "./src/testing.ts",
+            "types": "./dist/testing.d.ts",
+            "default": "./dist/testing.js"
+        },
         "./package.json": "./package.json"
     },
     "bin": {
