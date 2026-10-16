@@ -158,6 +158,36 @@ describe.skipIf(!RUNS_WITH_REDIS)('webhooks, events and probes', () => {
             });
         });
 
+        it('are signed with both secrets during the grace period of a rotation', async () => {
+            const before = await services.projects.webhookSecret(project.id);
+            const { webhookSecret } = await services.projects.rotateWebhookSecret('niche');
+
+            async function deliver() {
+                const job = await createJob();
+                const count = received.length;
+                await completeJob(job.id);
+                await until(
+                    async () => received.length,
+                    (length) => length > count,
+                );
+                const delivery = received.at(-1);
+                const signature = String(delivery?.headers['eclair-signature']);
+                return (secret: string) => verifySignature(signature, secret, delivery?.body ?? '');
+            }
+
+            // An application with either secret accepts the webhook.
+            const during = await deliver();
+            expect(during(webhookSecret)).toBe(true);
+            expect(during(before)).toBe(true);
+            expect(during('whsec_other')).toBe(false);
+
+            const rotated = await services.projects.rotateWebhookSecret('niche', { grace: 0 });
+            const after = await deliver();
+            expect(after(rotated.webhookSecret)).toBe(true);
+            expect(after(webhookSecret)).toBe(false);
+            expect(after(before)).toBe(false);
+        });
+
         it('retry until the receiver answers 2xx', async () => {
             const job = await createJob();
             answers.push(500, 503);

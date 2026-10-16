@@ -5,7 +5,7 @@ import type * as protocol from '@eclair-js/protocol';
 
 import { safeEqual } from '../../crypto.ts';
 import type { ApiKey } from '../../projects/api-keys.ts';
-import type { Project, ProjectPatch } from '../../projects/projects.ts';
+import type { Project, ProjectPatch, WebhookSecrets } from '../../projects/projects.ts';
 import type { Services } from '../../services.ts';
 import type { StorageSummary } from '../../storages/storages.ts';
 import { usageReport } from '../../usage/usage.ts';
@@ -24,6 +24,15 @@ function toProject(project: Project): protocol.AdminProject {
         disabled: project.disabledAt !== undefined,
         createdAt: project.createdAt.toISOString(),
         updatedAt: project.updatedAt.toISOString(),
+    };
+}
+
+function toWebhookSecret(secrets: WebhookSecrets): protocol.WebhookSecret {
+    return {
+        webhookSecret: secrets.webhookSecret,
+        ...(secrets.previousSecretExpiresAt === undefined
+            ? {}
+            : { previousSecretExpiresAt: secrets.previousSecretExpiresAt.toISOString() }),
     };
 }
 
@@ -115,15 +124,28 @@ export async function admin(
         '/projects/:project/webhook-secret',
         async (request): Promise<protocol.WebhookSecret> => {
             const project = await projects.get(param(request, 'project'));
-            return { webhookSecret: await projects.webhookSecret(project.id) };
+            return toWebhookSecret(await projects.webhookSecrets(project.id));
         },
     );
 
     app.post(
         '/projects/:project/webhook-secret',
-        async (request): Promise<protocol.WebhookSecret> => ({
-            webhookSecret: await projects.rotateWebhookSecret(param(request, 'project')),
-        }),
+        {
+            schema: { body: schema('WebhookSecretRotation') },
+            // The body is optional: without one, the previous secret gets the default grace period.
+            preValidation: async (request) => {
+                request.body ??= {};
+            },
+        },
+        async (request): Promise<protocol.WebhookSecret> => {
+            const { grace } = request.body as protocol.WebhookSecretRotation;
+            return toWebhookSecret(
+                await projects.rotateWebhookSecret(
+                    param(request, 'project'),
+                    grace === undefined ? {} : { grace: grace * 1000 },
+                ),
+            );
+        },
     );
 
     app.get('/projects/:project/keys', async (request): Promise<protocol.ApiKeyList> => ({

@@ -1,5 +1,7 @@
 import { readFileSync } from 'node:fs';
 
+import { parseDuration } from '../config/units.ts';
+import { MAX_SECRET_GRACE } from '../projects/projects.ts';
 import type { Priority, Project, ProjectPatch } from '../projects/projects.ts';
 import { CliExit, EXIT, errorMessage, withServices } from './command.ts';
 import type { CliIo, Command, CommandContext } from './command.ts';
@@ -15,6 +17,24 @@ function texts(values: CommandContext['values'], name: string): string[] {
         return value.filter((item): item is string => typeof item === 'string');
     }
     return typeof value === 'string' ? [value] : [];
+}
+
+/** `--grace`: a duration (`30m`, `2h`, `3d`) or `0`, in milliseconds. */
+function grace(values: CommandContext['values']): number | undefined {
+    const value = text(values, 'grace');
+    if (value === undefined) {
+        return undefined;
+    }
+    let milliseconds: number;
+    try {
+        milliseconds = value.trim() === '0' ? 0 : parseDuration(value);
+    } catch (error) {
+        throw new CliExit(EXIT.usage, `--grace: ${errorMessage(error)}`);
+    }
+    if (milliseconds > MAX_SECRET_GRACE) {
+        throw new CliExit(EXIT.usage, '--grace must be at most 7 days.');
+    }
+    return milliseconds;
 }
 
 function positional(context: CommandContext, index: number, name: string): string {
@@ -218,18 +238,32 @@ export const ADMIN_COMMANDS: Record<string, Command> = {
     },
 
     'projects:secret': {
-        usage: '<project> [--rotate]',
-        description: "Print a project's webhook secret, or replace it with --rotate",
+        usage: '<project> [--rotate [--grace 24h]]',
+        description:
+            "Print a project's webhook secret, or replace it with --rotate. The previous secret stays valid for --grace (24h by default, 0 to drop it at once)",
         positionals: 1,
-        options: { rotate: { type: 'boolean' } },
+        options: { rotate: { type: 'boolean' }, grace: { type: 'string' } },
         run: (context) =>
             withServices(context.io, async ({ projects }) => {
                 const slug = positional(context, 0, 'project');
-                const secret =
-                    context.values['rotate'] === true
-                        ? await projects.rotateWebhookSecret(slug)
-                        : await projects.webhookSecret((await projects.get(slug)).id);
-                context.io.stdout(`${secret}\n`);
+                const rotate = context.values['rotate'] === true;
+                const gracePeriod = grace(context.values);
+                if (gracePeriod !== undefined && !rotate) {
+                    throw new CliExit(EXIT.usage, '--grace only goes with --rotate.');
+                }
+                const secrets = rotate
+                    ? await projects.rotateWebhookSecret(
+                          slug,
+                          gracePeriod === undefined ? {} : { grace: gracePeriod },
+                      )
+                    : await projects.webhookSecrets((await projects.get(slug)).id);
+                context.io.stdout(`${secrets.webhookSecret}\n`);
+                // On stderr, so that stdout is only the secret.
+                if (secrets.previousSecretExpiresAt !== undefined) {
+                    context.io.stderr(
+                        `The previous secret stays valid until ${secrets.previousSecretExpiresAt.toISOString()}: Eclair signs with both until then.\n`,
+                    );
+                }
                 return EXIT.ok;
             }),
     },

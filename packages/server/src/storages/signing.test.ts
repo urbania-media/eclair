@@ -31,4 +31,20 @@ describe('signatures', () => {
             verifySignature(`t=${now},v1=${'0'.repeat(64)},v1=${valid}`, secret, 'body', now),
         ).toBe(true);
     });
+
+    it('sign with each secret, in order, during a rotation', () => {
+        const now = 1760536992;
+        const header = signWebhook(['whsec_new', secret], 'body', now);
+        expect(header).toBe(
+            `${signWebhook('whsec_new', 'body', now)},v1=${signWebhook(secret, 'body', now).split('v1=')[1]}`,
+        );
+        expect(header).toMatch(/^t=1760536992(,v1=[0-9a-f]{64}){2}$/);
+        expect(verifySignature(header, 'whsec_new', 'body', now)).toBe(true);
+        expect(verifySignature(header, secret, 'body', now)).toBe(true);
+        expect(verifySignature(header, 'whsec_other', 'body', now)).toBe(false);
+        expect(signStorageRequest([secret], 'a.mp4', EMPTY_SHA256, now)).toBe(
+            signStorageRequest(secret, 'a.mp4', EMPTY_SHA256, now),
+        );
+        expect(() => sign([], 'body', now)).toThrow();
+    });
 });

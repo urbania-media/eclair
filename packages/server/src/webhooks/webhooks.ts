@@ -119,7 +119,7 @@ export class Webhooks {
             throw new Error('The webhooks have no jobs to send.');
         }
         const body = JSON.stringify(await this.#jobs.get(delivery.project_id, delivery.job_id));
-        const secret = await projects.webhookSecret(delivery.project_id);
+        const secrets = await projects.signingSecrets(delivery.project_id);
         const attempts = delivery.attempts + 1;
 
         let status: number | undefined;
@@ -133,7 +133,7 @@ export class Webhooks {
                     'user-agent': 'Eclair',
                     'eclair-event': delivery.event,
                     'eclair-delivery': delivery.id,
-                    'eclair-signature': signWebhook(secret, body),
+                    'eclair-signature': signWebhook(secrets, body),
                 },
                 headersTimeout: 10_000,
                 bodyTimeout: 10_000,

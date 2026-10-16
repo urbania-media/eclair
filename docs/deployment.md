@@ -87,13 +87,15 @@ Projects, keys, storages, presets and limits live in the database and are manage
 ```bash
 eclair projects:create niche --name Niche --webhook-url https://niche.example.com/eclair/webhook
 eclair projects:update niche --set concurrency=8 --set 'operations=["probe","video.transcode"]'
-eclair projects:secret niche            # the webhook secret; --rotate replaces it
+eclair projects:secret niche            # the webhook secret; --rotate replaces it (see below)
 eclair keys:create niche --name website --scopes jobs:read,jobs:write
 eclair storages:set niche media --kind s3 --config @media-storage.json
 eclair presets:set web-video --file web-video.json          # global; --project for a project's own
 ```
 
 Secrets given on the command line end up in the shell history: pass storage configurations as a file (`@file`) or on standard input (`-`). `eclair --help` lists every command.
+
+The webhook secret signs the project's webhooks and the requests to its `http` storages. `eclair projects:secret niche --rotate` replaces it and prints the new one; the previous secret stays valid for 24 hours ([decision 0018](decisions/0018-webhook-secret-grace-period.md)). During that time Eclair signs with both secrets, so the application keeps accepting webhooks and storage requests until it's deployed with the new one. `--grace 2h` (at most `7d`) changes the grace period, and `--grace 0` drops the previous secret at once. `eclair projects:secret niche` shows when the previous secret expires, as does `GET /admin/v1/projects/{project}/webhook-secret`; `POST` on the same path rotates with `{ "grace": <seconds> }`.
 
 ## Running without Docker
 

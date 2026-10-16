@@ -157,6 +157,21 @@ describe('http driver', () => {
             'The storage answered 401 to write a/b.bin.',
         );
     });
+
+    it('signs with each secret during a rotation, so either one is accepted', async () => {
+        const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}/storage`;
+        for (const secrets of [
+            ['whsec_new', secret],
+            [secret, 'whsec_old'],
+        ]) {
+            const driver = new HttpDriver({ url }, secrets);
+            await driver.write('rotation.bin', source, options);
+            const destination = join(directory, 'rotation.bin');
+            expect(await driver.read('rotation.bin', destination, { maxSize: 1024 ** 2 })).toBe(
+                content.length,
+            );
+        }
+    });
 });
 
 // S3 runs against an S3-compatible service: S3Mock in CI, or any one set in ECLAIR_TEST_S3_ENDPOINT.

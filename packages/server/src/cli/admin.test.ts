@@ -70,6 +70,48 @@ describe('admin commands', () => {
         expect((await eclair('projects:list')).stdout).toMatch(/niche\s+Niche\s+normal\s+active/);
     });
 
+    it('rotate the webhook secret with a grace period', async () => {
+        const before = (await eclair('projects:secret', 'niche')).stdout.trim();
+
+        const rotated = await eclair('projects:secret', 'niche', '--rotate');
+        expect(rotated.code).toBe(EXIT.ok);
+        const secret = rotated.stdout.trim();
+        expect(secret).toMatch(/^whsec_[\w-]+$/);
+        expect(secret).not.toBe(before);
+        expect(rotated.stderr).toMatch(/previous secret stays valid until \d{4}-\d\d-\d\dT/);
+        const until = new Date(/until (\S+):/.exec(rotated.stderr)?.[1] ?? '').getTime();
+        expect(until - Date.now()).toBeGreaterThan(23 * 3_600_000);
+        expect(until - Date.now()).toBeLessThanOrEqual(24 * 3_600_000);
+
+        const shown = await eclair('projects:secret', 'niche');
+        expect(shown.stdout).toBe(`${secret}\n`);
+        expect(shown.stderr).toBe(rotated.stderr);
+
+        const short = await eclair('projects:secret', 'niche', '--rotate', '--grace', '30m');
+        const shortUntil = new Date(/until (\S+):/.exec(short.stderr)?.[1] ?? '').getTime();
+        expect(shortUntil - Date.now()).toBeLessThanOrEqual(30 * 60_000);
+        expect(shortUntil - Date.now()).toBeGreaterThan(29 * 60_000);
+
+        const dropped = await eclair('projects:secret', 'niche', '--rotate', '--grace', '0');
+        expect(dropped.code).toBe(EXIT.ok);
+        expect(dropped.stderr).toBe('');
+        expect((await eclair('projects:secret', 'niche')).stderr).toBe('');
+    });
+
+    it('refuse a wrong --grace', async () => {
+        const secret = (await eclair('projects:secret', 'niche')).stdout;
+        for (const args of [
+            ['--rotate', '--grace', 'tomorrow'],
+            ['--rotate', '--grace', '8d'],
+            ['--grace', '1h'],
+        ]) {
+            const result = await eclair('projects:secret', 'niche', ...args);
+            expect(result.code).toBe(EXIT.usage);
+            expect(result.stderr).toContain('--grace');
+        }
+        expect((await eclair('projects:secret', 'niche')).stdout).toBe(secret);
+    });
+
     it('update a project', async () => {
         const updated = await eclair(
             'projects:update',

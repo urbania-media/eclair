@@ -94,8 +94,40 @@ describe('/admin/v1', () => {
         const secret = await admin('GET', '/projects/niche/webhook-secret');
         expect(secret.json()).toEqual({ webhookSecret: body.webhookSecret });
         const rotated = await admin('POST', '/projects/niche/webhook-secret');
-        expect(rotated.json<{ webhookSecret: string }>().webhookSecret).not.toBe(
-            body.webhookSecret,
+        expect(rotated.statusCode).toBe(200);
+        expect(validate('WebhookSecret', rotated.json()).valid).toBe(true);
+        const { webhookSecret, previousSecretExpiresAt } = rotated.json<{
+            webhookSecret: string;
+            previousSecretExpiresAt: string;
+        }>();
+        expect(webhookSecret).not.toBe(body.webhookSecret);
+        const grace = new Date(previousSecretExpiresAt).getTime() - Date.now();
+        expect(grace).toBeGreaterThan(23 * 3_600_000);
+        expect(grace).toBeLessThanOrEqual(24 * 3_600_000);
+        expect((await admin('GET', '/projects/niche/webhook-secret')).json()).toEqual(
+            rotated.json(),
+        );
+
+        const short = await admin('POST', '/projects/niche/webhook-secret', { grace: 600 });
+        const shortGrace =
+            new Date(
+                short.json<{ previousSecretExpiresAt: string }>().previousSecretExpiresAt,
+            ).getTime() - Date.now();
+        expect(shortGrace).toBeLessThanOrEqual(600_000);
+        expect(shortGrace).toBeGreaterThan(590_000);
+
+        const dropped = await admin('POST', '/projects/niche/webhook-secret', { grace: 0 });
+        expect(Object.keys(dropped.json<object>())).toEqual(['webhookSecret']);
+        expect((await admin('GET', '/projects/niche/webhook-secret')).json()).toEqual(
+            dropped.json(),
+        );
+
+        for (const invalid of [{ grace: 604_801 }, { grace: -1 }, { days: 1 }]) {
+            const refused = await admin('POST', '/projects/niche/webhook-secret', invalid);
+            expect(refused.statusCode).toBe(422);
+        }
+        expect((await admin('GET', '/projects/niche/webhook-secret')).json()).toEqual(
+            dropped.json(),
         );
 
         const list = await admin('GET', '/projects');
