@@ -5,6 +5,10 @@ updates:
       directory: /docker
       schedule:
           interval: weekly
+      ignore:
+          # A new major of Node moves with .nvmrc, CI and the smoke test, in its own change.
+          - dependency-name: node
+            update-types: ['version-update:semver-major']
 
     # GitHub Actions, some of them pinned to a commit.
     - package-ecosystem: github-actions
