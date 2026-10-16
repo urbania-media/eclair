@@ -165,7 +165,7 @@ Stores a file in the temporary storage ([decision 0011](decisions/0011-temporary
 
 ## Presets
 
-- `GET /v1/presets`, `GET /v1/presets/{name}`: the project's presets and the global ones.
+- `GET /v1/presets`, `GET /v1/presets/{name}`: the project's presets, the global ones, and the built-in ones that ship with the server (shown as global).
 - `PUT /v1/presets/{name}`, `DELETE /v1/presets/{name}`: the project's own presets (key scope `presets:write`).
 
 A preset is a stored `{ "tasks": { … } }` object. A job that uses it records the preset's version.
@@ -206,15 +206,15 @@ The signature covers the timestamp, the path and the SHA-256 of the body (sent i
 
 Under `/admin/v1`, with the server's admin token (`Authorization: Bearer <ECLAIR_ADMIN_TOKEN>`), never with a project's key. It manages projects, keys, storages, global presets and limits, and reads usage, for tools such as a dashboard. The `eclair` CLI does the same directly on the database, where it runs next to the server.
 
-| Endpoint                                                                          | What it does                                                                                  |
-| --------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| `GET`, `POST /admin/v1/projects`                                                  | List, create (the response has the webhook secret, once)                                      |
-| `GET`, `PATCH`, `DELETE /admin/v1/projects/{project}`                             | Read, change (settings are merged; `null` restores a default), delete with everything it owns |
-| `GET`, `POST /admin/v1/projects/{project}/webhook-secret`                         | Read, replace                                                                                 |
-| `GET`, `POST /admin/v1/projects/{project}/keys`                                   | List, create (the key is shown once)                                                          |
-| `POST /admin/v1/keys/{key}/revoke`                                                | Revoke a key                                                                                  |
-| `GET /admin/v1/projects/{project}/storages`, `PUT`, `DELETE …/storages/{storage}` | List without credentials, create or replace, remove                                           |
-| `GET /admin/v1/presets`, `PUT`, `DELETE …/presets/{name}`                         | Global presets                                                                                |
-| `GET /admin/v1/usage?project=…&days=30`                                           | Usage per project and UTC day                                                                 |
+| Endpoint                                                                          | What it does                                                                                     |
+| --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `GET`, `POST /admin/v1/projects`                                                  | List, create (the response has the webhook secret, once)                                         |
+| `GET`, `PATCH`, `DELETE /admin/v1/projects/{project}`                             | Read, change (settings are merged; `null` restores a default), delete with everything it owns    |
+| `GET`, `POST /admin/v1/projects/{project}/webhook-secret`                         | Read, replace                                                                                    |
+| `GET`, `POST /admin/v1/projects/{project}/keys`                                   | List, create (the key is shown once)                                                             |
+| `POST /admin/v1/keys/{key}/revoke`                                                | Revoke a key                                                                                     |
+| `GET /admin/v1/projects/{project}/storages`, `PUT`, `DELETE …/storages/{storage}` | List without credentials, create or replace, remove                                              |
+| `GET /admin/v1/presets`, `PUT`, `DELETE …/presets/{name}`                         | Global presets, built-in ones included. A global preset replaces a built-in one of the same name |
+| `GET /admin/v1/usage?project=…&days=30`                                           | Usage per project and UTC day                                                                    |
 
 `{project}` is a project's id or slug.

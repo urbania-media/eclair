@@ -1,6 +1,7 @@
 #!/bin/sh
 # End-to-end test of a compose file with a built image: start Eclair with its database and Redis,
-# create a project and a key with the CLI, then probe an image and run a job over HTTP.
+# create a project and a key with the CLI, then probe an image and run a job with the built-in
+# web-image preset over HTTP.
 #
 #   docker tag <image> ghcr.io/urbania-media/eclair:e2e
 #   ECLAIR_VERSION=e2e sh docker/e2e.sh compose.yml
@@ -63,7 +64,7 @@ probe=$(curl -fsS -X POST "$base/v1/probe" -H "Authorization: Bearer $token" \
 echo "$probe" | grep -q '"kind":"image"' || fail "unexpected probe: $probe"
 echo "$probe" | grep -q '"width":64' || fail "unexpected probe: $probe"
 
-echo "== $file: upload and job" >&2
+echo "== $file: upload and a job with the web-image preset" >&2
 upload=$(curl -fsS -X POST "$base/v1/uploads" -H "Authorization: Bearer $token" \
     -H 'Content-Type: application/octet-stream' --data-binary "@$fixture")
 upload_id=$(echo "$upload" | sed -n 's/.*"id":"\(upl_[0-9A-Z]*\)".*/\1/p')
@@ -71,7 +72,7 @@ upload_id=$(echo "$upload" | sed -n 's/.*"id":"\(upl_[0-9A-Z]*\)".*/\1/p')
 
 job=$(curl -fsS -X POST "$base/v1/jobs" -H "Authorization: Bearer $token" \
     -H 'Content-Type: application/json' \
-    -d "{\"input\":{\"upload\":\"$upload_id\"},\"tasks\":{\"probe\":{\"op\":\"probe\",\"options\":{\"checksum\":true}}}}")
+    -d "{\"input\":{\"upload\":\"$upload_id\"},\"output\":{\"storage\":\"eclair\",\"prefix\":\"e2e/\"},\"preset\":\"web-image\",\"tasks\":{\"probe\":{\"op\":\"probe\",\"options\":{\"checksum\":true}}}}")
 job_id=$(echo "$job" | sed -n 's/.*"id":"\(job_[0-9A-Z]*\)".*/\1/p')
 [ -n "$job_id" ] || fail "no job: $job"
 
@@ -87,6 +88,9 @@ while :; do
     sleep 1
 done
 echo "$job" | grep -q '"checksum":"[0-9a-f]\{64\}"' || fail "no checksum: $job"
+echo "$job" | grep -q '"dominant":"#[0-9a-f]\{6\}"' || fail "no palette: $job"
+echo "$job" | grep -q '"name":"image.webp"' || fail "no WebP: $job"
+echo "$job" | grep -q '"path":"e2e/webp/image.webp"' || fail "the WebP isn't in the temporary storage: $job"
 
 echo "== $file: metrics and doctor" >&2
 curl -fsS "$base/metrics" | grep -q '^eclair_tasks_total' || fail 'no task metrics'

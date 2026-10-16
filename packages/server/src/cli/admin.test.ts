@@ -148,17 +148,20 @@ describe('admin commands', () => {
     it('set, list and remove presets', async () => {
         const file = join(directory, 'preset.json');
         writeFileSync(file, JSON.stringify({ tasks: { probe: { op: 'probe' } } }));
-        expect((await eclair('presets:set', 'web-video', '--file', file)).stdout).toBe(
-            'Created global preset web-video, version 1.\n',
+        expect((await eclair('presets:set', 'site-video', '--file', file)).stdout).toBe(
+            'Created global preset site-video, version 1.\n',
         );
         expect(
-            (await eclair('presets:set', 'web-video', '--file', file, '--project', 'niche')).stdout,
-        ).toBe('Created project preset web-video, version 1.\n');
+            (await eclair('presets:set', 'site-video', '--file', file, '--project', 'niche'))
+                .stdout,
+        ).toBe('Created project preset site-video, version 1.\n');
         expect((await eclair('presets:list', '--project', 'niche')).stdout).toMatch(
-            /web-video\s+project\s+1\s+probe/,
+            /site-video\s+project\s+1\s+probe/,
         );
-        expect((await eclair('presets:remove', 'web-video')).code).toBe(EXIT.ok);
-        expect((await eclair('presets:list')).stdout).toBe('Nothing yet.\n');
+        expect((await eclair('presets:remove', 'site-video')).code).toBe(EXIT.ok);
+        const list = (await eclair('presets:list')).stdout;
+        expect(list).not.toContain('site-video');
+        expect(list).toMatch(/mediatheque\/video\s+built-in\s+1\s+probe, h264, webm, hevc/);
     });
 
     it('explain what went wrong', async () => {
