@@ -127,7 +127,7 @@ Handles, file paths, sources and URLs stay the same, so `laravel-folklore` and t
 | `Audio\Mp3`                  | `audio.transcode` with `codec: mp3` and the same bitrate           |
 | `Audio\Thumbnails`           | `audio.waveform`, image output with the same size and colors       |
 | `Document\Thumbnails`        | `document.thumbnails` with the same resolution, quality and format |
-| `Font\WebFonts`              | `font.convert`                                                     |
+| `Font\WebFonts`              | `font.convert` (WOFF and WOFF2; no EOT or SVG fonts)               |
 | Metadata readers             | `probe`                                                            |
 
 WebM outputs are VP9 and Opus, where the mediatheque's `WebM` job writes VP8 and Vorbis: same container and handle, with codecs that every browser that plays WebM reads.

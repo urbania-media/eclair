@@ -18,6 +18,7 @@
         "packages/operations-video",
         "packages/operations-audio",
         "packages/operations-document",
+        "packages/operations-font",
         "packages/client",
         "packages/server"
     ],

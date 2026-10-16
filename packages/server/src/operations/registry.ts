@@ -13,6 +13,7 @@ export const BUILT_IN_PLUGINS = [
     '@eclair-js/operations-video',
     '@eclair-js/operations-audio',
     '@eclair-js/operations-document',
+    '@eclair-js/operations-font',
 ] as const;
 
 /** A plugin can't be loaded, or exports an invalid operation. */
