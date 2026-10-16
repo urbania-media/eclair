@@ -131,6 +131,8 @@ Both read audio files and the soundtrack of videos.
 | -------------- | ---------------------------------------- | --- |
 | `font.convert` | WOFF and WOFF2, with optional subsetting | ✓   |
 
+`font.convert` reads TrueType, OpenType, WOFF and WOFF2 fonts with fonttools. `formats` (`["woff2", "woff"]` by default; the first is the main file) writes `font.woff2` and `font.woff`; `unicodes` (`U+0020-007E`) and `text` keep only some characters. Layout features, names and hinting are kept. It replaces the WOFF and WOFF2 files of the mediatheque's `WebFonts` job; the EOT and SVG fonts that job also wrote are left out, since no current browser needs them, and the application keeps its original TrueType or OpenType file.
+
 ### AI (`@eclair-js/operations-ai`)
 
 | Operation       | Output                                                                           | 1.0 |
