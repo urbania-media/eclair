@@ -18,7 +18,7 @@ jobs:
         name: Format, lint, typecheck and build
         runs-on: ubuntu-24.04
         steps:
-            - uses: actions/checkout@v5
+            - uses: actions/checkout@v7
               with:
                   fetch-depth: 0
 
@@ -116,7 +116,7 @@ jobs:
             ECLAIR_TEST_S3_ENDPOINT: http://127.0.0.1:9090
             ECLAIR_TEST_S3_BUCKET: eclair-test
         steps:
-            - uses: actions/checkout@v5
+            - uses: actions/checkout@v7
 
             - uses: actions/setup-node@v5
               with:
