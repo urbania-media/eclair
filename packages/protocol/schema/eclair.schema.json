@@ -1066,6 +1066,459 @@
                     "description": "With `?probe=1`."
                 }
             }
+        },
+        "ProjectSettings": {
+            "description": "A project's settings. Every one has a default; limits not set use the server's.",
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "concurrency": {
+                    "description": "Tasks of the project that can run at the same time, over every worker.",
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 1000,
+                    "default": 4
+                },
+                "maxInputSize": {
+                    "description": "Largest input, in bytes. `ECLAIR_MAX_INPUT_SIZE` when not set.",
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "maxDirectUpload": {
+                    "description": "Largest file sent in the body of `POST /v1/probe` or `POST /v1/uploads`, in bytes.",
+                    "type": "integer",
+                    "minimum": 1,
+                    "default": 104857600
+                },
+                "taskTimeout": {
+                    "description": "Longest a task may run, in milliseconds. `ECLAIR_TASK_TIMEOUT` when not set.",
+                    "type": "integer",
+                    "minimum": 1000
+                },
+                "tempRetention": {
+                    "description": "How long temporary files are kept, in milliseconds, at most `ECLAIR_TEMP_MAX_RETENTION`.",
+                    "type": "integer",
+                    "minimum": 60000
+                },
+                "operations": {
+                    "description": "Operations the project may use, by name. All of them when not set.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "uniqueItems": true
+                },
+                "inputHosts": {
+                    "description": "Hosts that `url` inputs may come from (`cdn.example.com`, `*.example.com`). Any public host when not set.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "uniqueItems": true
+                },
+                "probesPerMinute": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "default": 600
+                },
+                "taskWebhooks": {
+                    "description": "Sends a `task.completed` webhook for each task, besides the job's.",
+                    "type": "boolean",
+                    "default": false
+                }
+            }
+        },
+        "AdminProject": {
+            "type": "object",
+            "required": [
+                "id",
+                "slug",
+                "name",
+                "priority",
+                "webhookUrl",
+                "settings",
+                "disabled",
+                "createdAt",
+                "updatedAt"
+            ],
+            "properties": {
+                "id": {
+                    "type": "string",
+                    "pattern": "^prj_[0-9A-HJKMNP-TV-Z]{26}$"
+                },
+                "slug": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "priority": {
+                    "$ref": "#/$defs/Priority"
+                },
+                "webhookUrl": {
+                    "type": [
+                        "string",
+                        "null"
+                    ]
+                },
+                "settings": {
+                    "$ref": "#/$defs/ProjectSettings"
+                },
+                "disabled": {
+                    "type": "boolean"
+                },
+                "createdAt": {
+                    "type": "string",
+                    "format": "date-time"
+                },
+                "updatedAt": {
+                    "type": "string",
+                    "format": "date-time"
+                }
+            }
+        },
+        "AdminProjectList": {
+            "type": "object",
+            "required": [
+                "data"
+            ],
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/$defs/AdminProject"
+                    }
+                }
+            }
+        },
+        "ProjectRequest": {
+            "type": "object",
+            "required": [
+                "slug"
+            ],
+            "additionalProperties": false,
+            "properties": {
+                "slug": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9][a-z0-9-]{0,62}$"
+                },
+                "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 255
+                },
+                "priority": {
+                    "$ref": "#/$defs/Priority"
+                },
+                "webhookUrl": {
+                    "type": "string",
+                    "pattern": "^https://",
+                    "maxLength": 2048
+                },
+                "settings": {
+                    "description": "Settings that differ from the defaults (see `ProjectSettings`).",
+                    "type": "object",
+                    "additionalProperties": true
+                }
+            }
+        },
+        "ProjectCreated": {
+            "type": "object",
+            "required": [
+                "project",
+                "webhookSecret"
+            ],
+            "properties": {
+                "project": {
+                    "$ref": "#/$defs/AdminProject"
+                },
+                "webhookSecret": {
+                    "description": "Verifies the webhooks and signed storage requests. Shown here once; `GET …/webhook-secret` reads it again.",
+                    "type": "string"
+                }
+            }
+        },
+        "ProjectPatch": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 255
+                },
+                "priority": {
+                    "$ref": "#/$defs/Priority"
+                },
+                "webhookUrl": {
+                    "description": "`null` removes it.",
+                    "type": [
+                        "string",
+                        "null"
+                    ],
+                    "pattern": "^https://",
+                    "maxLength": 2048
+                },
+                "settings": {
+                    "description": "Merged into the current settings. A setting set to `null` goes back to its default.",
+                    "type": "object",
+                    "additionalProperties": true
+                },
+                "disabled": {
+                    "description": "A disabled project's keys are refused.",
+                    "type": "boolean"
+                }
+            }
+        },
+        "WebhookSecret": {
+            "type": "object",
+            "required": [
+                "webhookSecret"
+            ],
+            "properties": {
+                "webhookSecret": {
+                    "type": "string"
+                }
+            }
+        },
+        "Scope": {
+            "type": "string",
+            "enum": [
+                "jobs:read",
+                "jobs:write",
+                "presets:write"
+            ]
+        },
+        "ApiKey": {
+            "type": "object",
+            "required": [
+                "id",
+                "name",
+                "prefix",
+                "scopes",
+                "createdAt",
+                "lastUsedAt",
+                "revoked"
+            ],
+            "properties": {
+                "id": {
+                    "type": "string",
+                    "pattern": "^key_[0-9A-HJKMNP-TV-Z]{26}$"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "prefix": {
+                    "description": "The start of the key, to recognize it.",
+                    "type": "string"
+                },
+                "scopes": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/$defs/Scope"
+                    }
+                },
+                "createdAt": {
+                    "type": "string",
+                    "format": "date-time"
+                },
+                "lastUsedAt": {
+                    "type": [
+                        "string",
+                        "null"
+                    ],
+                    "format": "date-time"
+                },
+                "revoked": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "ApiKeyList": {
+            "type": "object",
+            "required": [
+                "data"
+            ],
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/$defs/ApiKey"
+                    }
+                }
+            }
+        },
+        "ApiKeyRequest": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 255
+                },
+                "scopes": {
+                    "description": "Every scope when not set.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/$defs/Scope"
+                    },
+                    "minItems": 1,
+                    "uniqueItems": true
+                }
+            }
+        },
+        "ApiKeyCreated": {
+            "type": "object",
+            "required": [
+                "key",
+                "token"
+            ],
+            "properties": {
+                "key": {
+                    "$ref": "#/$defs/ApiKey"
+                },
+                "token": {
+                    "description": "The key, shown once: only its hash is kept.",
+                    "type": "string"
+                }
+            }
+        },
+        "StorageRequest": {
+            "description": "A storage's kind and configuration. `s3`: `bucket`, `region` (`us-east-1`), `endpoint`, `prefix`, `accessKeyId`, `secretAccessKey`, `forcePathStyle`. `http`: `url`. The configuration is encrypted and never shown again.",
+            "type": "object",
+            "required": [
+                "kind",
+                "config"
+            ],
+            "additionalProperties": false,
+            "properties": {
+                "kind": {
+                    "type": "string",
+                    "enum": [
+                        "s3",
+                        "http"
+                    ]
+                },
+                "config": {
+                    "type": "object",
+                    "additionalProperties": true
+                }
+            }
+        },
+        "Storage": {
+            "description": "A storage, without its credentials.",
+            "type": "object",
+            "required": [
+                "name",
+                "kind",
+                "location",
+                "createdAt",
+                "updatedAt"
+            ],
+            "properties": {
+                "name": {
+                    "$ref": "#/$defs/StorageName"
+                },
+                "kind": {
+                    "type": "string",
+                    "enum": [
+                        "s3",
+                        "http"
+                    ]
+                },
+                "location": {
+                    "description": "Where it points: `s3://bucket/prefix (endpoint)` or the URL.",
+                    "type": "string"
+                },
+                "createdAt": {
+                    "type": "string",
+                    "format": "date-time"
+                },
+                "updatedAt": {
+                    "type": "string",
+                    "format": "date-time"
+                }
+            }
+        },
+        "StorageList": {
+            "type": "object",
+            "required": [
+                "data"
+            ],
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/$defs/Storage"
+                    }
+                }
+            }
+        },
+        "UsageLine": {
+            "type": "object",
+            "required": [
+                "project",
+                "day",
+                "tasks",
+                "cpuSeconds",
+                "mediaSeconds",
+                "bytesIn",
+                "bytesOut",
+                "bytesStored"
+            ],
+            "properties": {
+                "project": {
+                    "description": "The project's slug.",
+                    "type": "string"
+                },
+                "day": {
+                    "description": "UTC day.",
+                    "type": "string",
+                    "format": "date"
+                },
+                "tasks": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "cpuSeconds": {
+                    "description": "Wall-clock time of the tasks, for now.",
+                    "type": "number",
+                    "minimum": 0
+                },
+                "mediaSeconds": {
+                    "type": "number",
+                    "minimum": 0
+                },
+                "bytesIn": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "bytesOut": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "bytesStored": {
+                    "description": "Bytes written to the temporary storage.",
+                    "type": "integer",
+                    "minimum": 0
+                }
+            }
+        },
+        "UsageReport": {
+            "type": "object",
+            "required": [
+                "data"
+            ],
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/$defs/UsageLine"
+                    }
+                }
+            }
         }
     }
 }

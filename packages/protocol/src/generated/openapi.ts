@@ -293,6 +293,215 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/v1/projects": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the projects */
+        get: operations["adminListProjects"];
+        put?: never;
+        /** Create a project */
+        post: operations["adminCreateProject"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/projects/{project}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The project's id or slug. */
+                project: components["parameters"]["Project"];
+            };
+            cookie?: never;
+        };
+        /** Read a project */
+        get: operations["adminGetProject"];
+        put?: never;
+        post?: never;
+        /** Delete a project */
+        delete: operations["adminDeleteProject"];
+        options?: never;
+        head?: never;
+        /** Change a project */
+        patch: operations["adminUpdateProject"];
+        trace?: never;
+    };
+    "/admin/v1/projects/{project}/webhook-secret": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The project's id or slug. */
+                project: components["parameters"]["Project"];
+            };
+            cookie?: never;
+        };
+        /** Read a project's webhook secret */
+        get: operations["adminGetWebhookSecret"];
+        put?: never;
+        /** Replace a project's webhook secret */
+        post: operations["adminRotateWebhookSecret"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/projects/{project}/keys": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The project's id or slug. */
+                project: components["parameters"]["Project"];
+            };
+            cookie?: never;
+        };
+        /** List a project's API keys */
+        get: operations["adminListKeys"];
+        put?: never;
+        /** Create an API key */
+        post: operations["adminCreateKey"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/keys/{key}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The key's id. */
+                key: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Revoke an API key */
+        post: operations["adminRevokeKey"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/projects/{project}/storages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The project's id or slug. */
+                project: components["parameters"]["Project"];
+            };
+            cookie?: never;
+        };
+        /** List a project's storages */
+        get: operations["adminListStorages"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/projects/{project}/storages/{storage}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The project's id or slug. */
+                project: components["parameters"]["Project"];
+                /** @description Name of one of the project's storages. */
+                storage: components["parameters"]["StorageNameParameter"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Create or replace a storage
+         * @description `eclair` is the temporary storage's name: it can't be used.
+         */
+        put: operations["adminPutStorage"];
+        post?: never;
+        /** Remove a storage */
+        delete: operations["adminDeleteStorage"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/presets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the global presets */
+        get: operations["adminListPresets"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/presets/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Preset name. A `/` in it is encoded as `%2F`: `/v1/presets/mediatheque%2Fvideo`. */
+                name: components["parameters"]["PresetName"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Create or replace a global preset
+         * @description Every project can use a global preset, unless it has its own with the same name.
+         */
+        put: operations["adminPutPreset"];
+        post?: never;
+        /** Delete a global preset */
+        delete: operations["adminDeletePreset"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Usage per project and day
+         * @description To split the cost of a server between the projects that share it.
+         */
+        get: operations["adminUsage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export interface webhooks {
     "job.completed": {
@@ -816,6 +1025,152 @@ export interface components {
             /** @description With `?probe=1`. */
             metadata?: components["schemas"]["ProbeMetadata"];
         };
+        /** @description A project's settings. Every one has a default; limits not set use the server's. */
+        ProjectSettings: {
+            /**
+             * @description Tasks of the project that can run at the same time, over every worker.
+             * @default 4
+             */
+            concurrency?: number;
+            /** @description Largest input, in bytes. `ECLAIR_MAX_INPUT_SIZE` when not set. */
+            maxInputSize?: number;
+            /**
+             * @description Largest file sent in the body of `POST /v1/probe` or `POST /v1/uploads`, in bytes.
+             * @default 104857600
+             */
+            maxDirectUpload?: number;
+            /** @description Longest a task may run, in milliseconds. `ECLAIR_TASK_TIMEOUT` when not set. */
+            taskTimeout?: number;
+            /** @description How long temporary files are kept, in milliseconds, at most `ECLAIR_TEMP_MAX_RETENTION`. */
+            tempRetention?: number;
+            /** @description Operations the project may use, by name. All of them when not set. */
+            operations?: string[];
+            /** @description Hosts that `url` inputs may come from (`cdn.example.com`, `*.example.com`). Any public host when not set. */
+            inputHosts?: string[];
+            /** @default 600 */
+            probesPerMinute?: number;
+            /**
+             * @description Sends a `task.completed` webhook for each task, besides the job's.
+             * @default false
+             */
+            taskWebhooks?: boolean;
+        };
+        AdminProject: {
+            id: string;
+            slug: string;
+            name: string;
+            priority: components["schemas"]["Priority"];
+            webhookUrl: string | null;
+            settings: components["schemas"]["ProjectSettings"];
+            disabled: boolean;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        AdminProjectList: {
+            data: components["schemas"]["AdminProject"][];
+        };
+        ProjectRequest: {
+            slug: string;
+            name?: string;
+            priority?: components["schemas"]["Priority"];
+            webhookUrl?: string;
+            /** @description Settings that differ from the defaults (see `ProjectSettings`). */
+            settings?: {
+                [key: string]: unknown;
+            };
+        };
+        ProjectCreated: {
+            project: components["schemas"]["AdminProject"];
+            /** @description Verifies the webhooks and signed storage requests. Shown here once; `GET …/webhook-secret` reads it again. */
+            webhookSecret: string;
+        };
+        ProjectPatch: {
+            name?: string;
+            priority?: components["schemas"]["Priority"];
+            /** @description `null` removes it. */
+            webhookUrl?: string | null;
+            /** @description Merged into the current settings. A setting set to `null` goes back to its default. */
+            settings?: {
+                [key: string]: unknown;
+            };
+            /** @description A disabled project's keys are refused. */
+            disabled?: boolean;
+        };
+        WebhookSecret: {
+            webhookSecret: string;
+        };
+        /** @enum {string} */
+        Scope: "jobs:read" | "jobs:write" | "presets:write";
+        ApiKey: {
+            id: string;
+            name: string;
+            /** @description The start of the key, to recognize it. */
+            prefix: string;
+            scopes: components["schemas"]["Scope"][];
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            lastUsedAt: string | null;
+            revoked: boolean;
+        };
+        ApiKeyList: {
+            data: components["schemas"]["ApiKey"][];
+        };
+        ApiKeyRequest: {
+            name?: string;
+            /** @description Every scope when not set. */
+            scopes?: components["schemas"]["Scope"][];
+        };
+        ApiKeyCreated: {
+            key: components["schemas"]["ApiKey"];
+            /** @description The key, shown once: only its hash is kept. */
+            token: string;
+        };
+        /** @description A storage's kind and configuration. `s3`: `bucket`, `region` (`us-east-1`), `endpoint`, `prefix`, `accessKeyId`, `secretAccessKey`, `forcePathStyle`. `http`: `url`. The configuration is encrypted and never shown again. */
+        StorageRequest: {
+            /** @enum {string} */
+            kind: "s3" | "http";
+            config: {
+                [key: string]: unknown;
+            };
+        };
+        /** @description A storage, without its credentials. */
+        Storage: {
+            name: components["schemas"]["StorageName"];
+            /** @enum {string} */
+            kind: "s3" | "http";
+            /** @description Where it points: `s3://bucket/prefix (endpoint)` or the URL. */
+            location: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        StorageList: {
+            data: components["schemas"]["Storage"][];
+        };
+        UsageLine: {
+            /** @description The project's slug. */
+            project: string;
+            /**
+             * Format: date
+             * @description UTC day.
+             */
+            day: string;
+            tasks: number;
+            /** @description Wall-clock time of the tasks, for now. */
+            cpuSeconds: number;
+            mediaSeconds: number;
+            bytesIn: number;
+            bytesOut: number;
+            /** @description Bytes written to the temporary storage. */
+            bytesStored: number;
+        };
+        UsageReport: {
+            data: components["schemas"]["UsageLine"][];
+        };
     };
     responses: {
         /** @description No API key, or an unknown or revoked one. */
@@ -890,6 +1245,24 @@ export interface components {
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
+        /** @description No admin token, or the wrong one. */
+        AdminUnauthorized: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /** @description It conflicts with what exists: a project slug is taken. */
+        Conflict: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
     };
     parameters: {
         JobId: components["schemas"]["JobId"];
@@ -915,6 +1288,10 @@ export interface components {
         UploadId: components["schemas"]["UploadId"];
         /** @description tus protocol version. */
         TusResumable: "1.0.0";
+        /** @description The project's id or slug. */
+        Project: string;
+        /** @description Name of one of the project's storages. */
+        StorageNameParameter: components["schemas"]["StorageName"];
     };
     requestBodies: never;
     headers: never;
@@ -1559,6 +1936,454 @@ export interface operations {
                 };
             };
             404: components["responses"]["NotFound"];
+        };
+    };
+    adminListProjects: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The projects, by slug. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminProjectList"];
+                };
+            };
+            401: components["responses"]["AdminUnauthorized"];
+        };
+    };
+    adminCreateProject: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProjectRequest"];
+            };
+        };
+        responses: {
+            /** @description The project, and its webhook secret. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectCreated"];
+                };
+            };
+            401: components["responses"]["AdminUnauthorized"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Invalid"];
+        };
+    };
+    adminGetProject: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The project's id or slug. */
+                project: components["parameters"]["Project"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The project. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminProject"];
+                };
+            };
+            401: components["responses"]["AdminUnauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    adminDeleteProject: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The project's id or slug. */
+                project: components["parameters"]["Project"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted, with its keys, storages, presets, jobs, uploads and usage. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["AdminUnauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    adminUpdateProject: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The project's id or slug. */
+                project: components["parameters"]["Project"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProjectPatch"];
+            };
+        };
+        responses: {
+            /** @description The project. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminProject"];
+                };
+            };
+            401: components["responses"]["AdminUnauthorized"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["Invalid"];
+        };
+    };
+    adminGetWebhookSecret: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The project's id or slug. */
+                project: components["parameters"]["Project"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The secret. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebhookSecret"];
+                };
+            };
+            401: components["responses"]["AdminUnauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    adminRotateWebhookSecret: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The project's id or slug. */
+                project: components["parameters"]["Project"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The new secret. The old one stops working at once. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebhookSecret"];
+                };
+            };
+            401: components["responses"]["AdminUnauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    adminListKeys: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The project's id or slug. */
+                project: components["parameters"]["Project"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The keys, without the keys themselves. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiKeyList"];
+                };
+            };
+            401: components["responses"]["AdminUnauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    adminCreateKey: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The project's id or slug. */
+                project: components["parameters"]["Project"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApiKeyRequest"];
+            };
+        };
+        responses: {
+            /** @description The key, shown once. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiKeyCreated"];
+                };
+            };
+            401: components["responses"]["AdminUnauthorized"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["Invalid"];
+        };
+    };
+    adminRevokeKey: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The key's id. */
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The revoked key. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiKey"];
+                };
+            };
+            401: components["responses"]["AdminUnauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    adminListStorages: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The project's id or slug. */
+                project: components["parameters"]["Project"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The storages, without their credentials. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageList"];
+                };
+            };
+            401: components["responses"]["AdminUnauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    adminPutStorage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The project's id or slug. */
+                project: components["parameters"]["Project"];
+                /** @description Name of one of the project's storages. */
+                storage: components["parameters"]["StorageNameParameter"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StorageRequest"];
+            };
+        };
+        responses: {
+            /** @description The storage. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Storage"];
+                };
+            };
+            401: components["responses"]["AdminUnauthorized"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["Invalid"];
+        };
+    };
+    adminDeleteStorage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The project's id or slug. */
+                project: components["parameters"]["Project"];
+                /** @description Name of one of the project's storages. */
+                storage: components["parameters"]["StorageNameParameter"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removed. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["AdminUnauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    adminListPresets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The global presets. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PresetList"];
+                };
+            };
+            401: components["responses"]["AdminUnauthorized"];
+        };
+    };
+    adminPutPreset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Preset name. A `/` in it is encoded as `%2F`: `/v1/presets/mediatheque%2Fvideo`. */
+                name: components["parameters"]["PresetName"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PresetRequest"];
+            };
+        };
+        responses: {
+            /** @description The preset was replaced. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Preset"];
+                };
+            };
+            /** @description The preset was created. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Preset"];
+                };
+            };
+            401: components["responses"]["AdminUnauthorized"];
+            422: components["responses"]["Invalid"];
+        };
+    };
+    adminDeletePreset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Preset name. A `/` in it is encoded as `%2F`: `/v1/presets/mediatheque%2Fvideo`. */
+                name: components["parameters"]["PresetName"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["AdminUnauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    adminUsage: {
+        parameters: {
+            query?: {
+                /** @description Only this project, by id or slug. */
+                project?: string;
+                /** @description Days back from now. */
+                days?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Usage per project and UTC day, by project then day. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UsageReport"];
+                };
+            };
+            401: components["responses"]["AdminUnauthorized"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["Invalid"];
         };
     };
     taskCompletedWebhook: {

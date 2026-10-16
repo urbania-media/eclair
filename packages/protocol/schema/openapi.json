@@ -40,6 +40,10 @@
         {
             "name": "Files",
             "description": "Download files of the temporary storage."
+        },
+        {
+            "name": "Admin",
+            "description": "Manage projects, keys, storages and global presets, and read usage, with the server's admin token."
         }
     ],
     "paths": {
@@ -1048,6 +1052,618 @@
                     }
                 }
             }
+        },
+        "/admin/v1/projects": {
+            "get": {
+                "operationId": "adminListProjects",
+                "tags": ["Admin"],
+                "summary": "List the projects",
+                "security": [
+                    {
+                        "adminToken": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The projects, by slug.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AdminProjectList"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AdminUnauthorized"
+                    }
+                }
+            },
+            "post": {
+                "operationId": "adminCreateProject",
+                "tags": ["Admin"],
+                "summary": "Create a project",
+                "security": [
+                    {
+                        "adminToken": []
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "The project, and its webhook secret.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProjectCreated"
+                                }
+                            }
+                        }
+                    },
+                    "409": {
+                        "$ref": "#/components/responses/Conflict"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/Invalid"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AdminUnauthorized"
+                    }
+                },
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ProjectRequest"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/v1/projects/{project}": {
+            "parameters": [
+                {
+                    "$ref": "#/components/parameters/Project"
+                }
+            ],
+            "get": {
+                "operationId": "adminGetProject",
+                "tags": ["Admin"],
+                "summary": "Read a project",
+                "security": [
+                    {
+                        "adminToken": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The project.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AdminProject"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFound"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AdminUnauthorized"
+                    }
+                }
+            },
+            "patch": {
+                "operationId": "adminUpdateProject",
+                "tags": ["Admin"],
+                "summary": "Change a project",
+                "security": [
+                    {
+                        "adminToken": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The project.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AdminProject"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFound"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/Invalid"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AdminUnauthorized"
+                    }
+                },
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ProjectPatch"
+                            }
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "operationId": "adminDeleteProject",
+                "tags": ["Admin"],
+                "summary": "Delete a project",
+                "security": [
+                    {
+                        "adminToken": []
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "Deleted, with its keys, storages, presets, jobs, uploads and usage."
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFound"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AdminUnauthorized"
+                    }
+                }
+            }
+        },
+        "/admin/v1/projects/{project}/webhook-secret": {
+            "parameters": [
+                {
+                    "$ref": "#/components/parameters/Project"
+                }
+            ],
+            "get": {
+                "operationId": "adminGetWebhookSecret",
+                "tags": ["Admin"],
+                "summary": "Read a project's webhook secret",
+                "security": [
+                    {
+                        "adminToken": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The secret.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/WebhookSecret"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFound"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AdminUnauthorized"
+                    }
+                }
+            },
+            "post": {
+                "operationId": "adminRotateWebhookSecret",
+                "tags": ["Admin"],
+                "summary": "Replace a project's webhook secret",
+                "security": [
+                    {
+                        "adminToken": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The new secret. The old one stops working at once.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/WebhookSecret"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFound"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AdminUnauthorized"
+                    }
+                }
+            }
+        },
+        "/admin/v1/projects/{project}/keys": {
+            "parameters": [
+                {
+                    "$ref": "#/components/parameters/Project"
+                }
+            ],
+            "get": {
+                "operationId": "adminListKeys",
+                "tags": ["Admin"],
+                "summary": "List a project's API keys",
+                "security": [
+                    {
+                        "adminToken": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The keys, without the keys themselves.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiKeyList"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFound"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AdminUnauthorized"
+                    }
+                }
+            },
+            "post": {
+                "operationId": "adminCreateKey",
+                "tags": ["Admin"],
+                "summary": "Create an API key",
+                "security": [
+                    {
+                        "adminToken": []
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "The key, shown once.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiKeyCreated"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFound"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/Invalid"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AdminUnauthorized"
+                    }
+                },
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ApiKeyRequest"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/v1/keys/{key}/revoke": {
+            "parameters": [
+                {
+                    "name": "key",
+                    "in": "path",
+                    "required": true,
+                    "description": "The key's id.",
+                    "schema": {
+                        "type": "string"
+                    }
+                }
+            ],
+            "post": {
+                "operationId": "adminRevokeKey",
+                "tags": ["Admin"],
+                "summary": "Revoke an API key",
+                "security": [
+                    {
+                        "adminToken": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The revoked key.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiKey"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFound"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AdminUnauthorized"
+                    }
+                }
+            }
+        },
+        "/admin/v1/projects/{project}/storages": {
+            "parameters": [
+                {
+                    "$ref": "#/components/parameters/Project"
+                }
+            ],
+            "get": {
+                "operationId": "adminListStorages",
+                "tags": ["Admin"],
+                "summary": "List a project's storages",
+                "security": [
+                    {
+                        "adminToken": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The storages, without their credentials.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/StorageList"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFound"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AdminUnauthorized"
+                    }
+                }
+            }
+        },
+        "/admin/v1/projects/{project}/storages/{storage}": {
+            "parameters": [
+                {
+                    "$ref": "#/components/parameters/Project"
+                },
+                {
+                    "$ref": "#/components/parameters/StorageNameParameter"
+                }
+            ],
+            "put": {
+                "operationId": "adminPutStorage",
+                "tags": ["Admin"],
+                "summary": "Create or replace a storage",
+                "security": [
+                    {
+                        "adminToken": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The storage.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Storage"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFound"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/Invalid"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AdminUnauthorized"
+                    }
+                },
+                "description": "`eclair` is the temporary storage's name: it can't be used.",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/StorageRequest"
+                            }
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "operationId": "adminDeleteStorage",
+                "tags": ["Admin"],
+                "summary": "Remove a storage",
+                "security": [
+                    {
+                        "adminToken": []
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "Removed."
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFound"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AdminUnauthorized"
+                    }
+                }
+            }
+        },
+        "/admin/v1/presets": {
+            "get": {
+                "operationId": "adminListPresets",
+                "tags": ["Admin"],
+                "summary": "List the global presets",
+                "security": [
+                    {
+                        "adminToken": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The global presets.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/PresetList"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AdminUnauthorized"
+                    }
+                }
+            }
+        },
+        "/admin/v1/presets/{name}": {
+            "parameters": [
+                {
+                    "$ref": "#/components/parameters/PresetName"
+                }
+            ],
+            "put": {
+                "operationId": "adminPutPreset",
+                "tags": ["Admin"],
+                "summary": "Create or replace a global preset",
+                "security": [
+                    {
+                        "adminToken": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The preset was replaced.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Preset"
+                                }
+                            }
+                        }
+                    },
+                    "201": {
+                        "description": "The preset was created.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Preset"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/Invalid"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AdminUnauthorized"
+                    }
+                },
+                "description": "Every project can use a global preset, unless it has its own with the same name.",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PresetRequest"
+                            }
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "operationId": "adminDeletePreset",
+                "tags": ["Admin"],
+                "summary": "Delete a global preset",
+                "security": [
+                    {
+                        "adminToken": []
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "Deleted."
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFound"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AdminUnauthorized"
+                    }
+                }
+            }
+        },
+        "/admin/v1/usage": {
+            "get": {
+                "operationId": "adminUsage",
+                "tags": ["Admin"],
+                "summary": "Usage per project and day",
+                "security": [
+                    {
+                        "adminToken": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Usage per project and UTC day, by project then day.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/UsageReport"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFound"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/Invalid"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AdminUnauthorized"
+                    }
+                },
+                "description": "To split the cost of a server between the projects that share it.",
+                "parameters": [
+                    {
+                        "name": "project",
+                        "in": "query",
+                        "description": "Only this project, by id or slug.",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "days",
+                        "in": "query",
+                        "description": "Days back from now.",
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 3660,
+                            "default": 30
+                        }
+                    }
+                ]
+            }
         }
     },
     "webhooks": {
@@ -1175,6 +1791,11 @@
                 "type": "http",
                 "scheme": "bearer",
                 "description": "A project's API key: `Authorization: Bearer <key>`. Keys have scopes: `jobs:read`, `jobs:write` (also for probes and uploads), `presets:write`."
+            },
+            "adminToken": {
+                "type": "http",
+                "scheme": "bearer",
+                "description": "The server's `ECLAIR_ADMIN_TOKEN`: `Authorization: Bearer <token>`. Only for the admin API, never for `/v1`."
             }
         },
         "parameters": {
@@ -1296,6 +1917,26 @@
                     "type": "string",
                     "const": "1.0.0"
                 }
+            },
+            "Project": {
+                "name": "project",
+                "in": "path",
+                "required": true,
+                "description": "The project's id or slug.",
+                "schema": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                }
+            },
+            "StorageNameParameter": {
+                "name": "storage",
+                "in": "path",
+                "required": true,
+                "description": "Name of one of the project's storages.",
+                "schema": {
+                    "$ref": "#/components/schemas/StorageName"
+                }
             }
         },
         "pathItems": {
@@ -1408,6 +2049,26 @@
             },
             "PayloadTooLarge": {
                 "description": "The file is larger than the project's limit for direct uploads. Use a resumable upload, or a URL or storage input.",
+                "content": {
+                    "application/problem+json": {
+                        "schema": {
+                            "$ref": "#/components/schemas/Problem"
+                        }
+                    }
+                }
+            },
+            "AdminUnauthorized": {
+                "description": "No admin token, or the wrong one.",
+                "content": {
+                    "application/problem+json": {
+                        "schema": {
+                            "$ref": "#/components/schemas/Problem"
+                        }
+                    }
+                }
+            },
+            "Conflict": {
+                "description": "It conflicts with what exists: a project slug is taken.",
                 "content": {
                     "application/problem+json": {
                         "schema": {
@@ -2328,6 +2989,413 @@
                     "metadata": {
                         "$ref": "#/components/schemas/ProbeMetadata",
                         "description": "With `?probe=1`."
+                    }
+                }
+            },
+            "ProjectSettings": {
+                "description": "A project's settings. Every one has a default; limits not set use the server's.",
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "concurrency": {
+                        "description": "Tasks of the project that can run at the same time, over every worker.",
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 1000,
+                        "default": 4
+                    },
+                    "maxInputSize": {
+                        "description": "Largest input, in bytes. `ECLAIR_MAX_INPUT_SIZE` when not set.",
+                        "type": "integer",
+                        "minimum": 1
+                    },
+                    "maxDirectUpload": {
+                        "description": "Largest file sent in the body of `POST /v1/probe` or `POST /v1/uploads`, in bytes.",
+                        "type": "integer",
+                        "minimum": 1,
+                        "default": 104857600
+                    },
+                    "taskTimeout": {
+                        "description": "Longest a task may run, in milliseconds. `ECLAIR_TASK_TIMEOUT` when not set.",
+                        "type": "integer",
+                        "minimum": 1000
+                    },
+                    "tempRetention": {
+                        "description": "How long temporary files are kept, in milliseconds, at most `ECLAIR_TEMP_MAX_RETENTION`.",
+                        "type": "integer",
+                        "minimum": 60000
+                    },
+                    "operations": {
+                        "description": "Operations the project may use, by name. All of them when not set.",
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "uniqueItems": true
+                    },
+                    "inputHosts": {
+                        "description": "Hosts that `url` inputs may come from (`cdn.example.com`, `*.example.com`). Any public host when not set.",
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "uniqueItems": true
+                    },
+                    "probesPerMinute": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "default": 600
+                    },
+                    "taskWebhooks": {
+                        "description": "Sends a `task.completed` webhook for each task, besides the job's.",
+                        "type": "boolean",
+                        "default": false
+                    }
+                }
+            },
+            "AdminProject": {
+                "type": "object",
+                "required": [
+                    "id",
+                    "slug",
+                    "name",
+                    "priority",
+                    "webhookUrl",
+                    "settings",
+                    "disabled",
+                    "createdAt",
+                    "updatedAt"
+                ],
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "pattern": "^prj_[0-9A-HJKMNP-TV-Z]{26}$"
+                    },
+                    "slug": {
+                        "type": "string"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "priority": {
+                        "$ref": "#/components/schemas/Priority"
+                    },
+                    "webhookUrl": {
+                        "type": ["string", "null"]
+                    },
+                    "settings": {
+                        "$ref": "#/components/schemas/ProjectSettings"
+                    },
+                    "disabled": {
+                        "type": "boolean"
+                    },
+                    "createdAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "updatedAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    }
+                }
+            },
+            "AdminProjectList": {
+                "type": "object",
+                "required": ["data"],
+                "properties": {
+                    "data": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/AdminProject"
+                        }
+                    }
+                }
+            },
+            "ProjectRequest": {
+                "type": "object",
+                "required": ["slug"],
+                "additionalProperties": false,
+                "properties": {
+                    "slug": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9][a-z0-9-]{0,62}$"
+                    },
+                    "name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 255
+                    },
+                    "priority": {
+                        "$ref": "#/components/schemas/Priority"
+                    },
+                    "webhookUrl": {
+                        "type": "string",
+                        "pattern": "^https://",
+                        "maxLength": 2048
+                    },
+                    "settings": {
+                        "description": "Settings that differ from the defaults (see `ProjectSettings`).",
+                        "type": "object",
+                        "additionalProperties": true
+                    }
+                }
+            },
+            "ProjectCreated": {
+                "type": "object",
+                "required": ["project", "webhookSecret"],
+                "properties": {
+                    "project": {
+                        "$ref": "#/components/schemas/AdminProject"
+                    },
+                    "webhookSecret": {
+                        "description": "Verifies the webhooks and signed storage requests. Shown here once; `GET …/webhook-secret` reads it again.",
+                        "type": "string"
+                    }
+                }
+            },
+            "ProjectPatch": {
+                "type": "object",
+                "additionalProperties": false,
+                "minProperties": 1,
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 255
+                    },
+                    "priority": {
+                        "$ref": "#/components/schemas/Priority"
+                    },
+                    "webhookUrl": {
+                        "description": "`null` removes it.",
+                        "type": ["string", "null"],
+                        "pattern": "^https://",
+                        "maxLength": 2048
+                    },
+                    "settings": {
+                        "description": "Merged into the current settings. A setting set to `null` goes back to its default.",
+                        "type": "object",
+                        "additionalProperties": true
+                    },
+                    "disabled": {
+                        "description": "A disabled project's keys are refused.",
+                        "type": "boolean"
+                    }
+                }
+            },
+            "WebhookSecret": {
+                "type": "object",
+                "required": ["webhookSecret"],
+                "properties": {
+                    "webhookSecret": {
+                        "type": "string"
+                    }
+                }
+            },
+            "Scope": {
+                "type": "string",
+                "enum": ["jobs:read", "jobs:write", "presets:write"]
+            },
+            "ApiKey": {
+                "type": "object",
+                "required": [
+                    "id",
+                    "name",
+                    "prefix",
+                    "scopes",
+                    "createdAt",
+                    "lastUsedAt",
+                    "revoked"
+                ],
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "pattern": "^key_[0-9A-HJKMNP-TV-Z]{26}$"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "prefix": {
+                        "description": "The start of the key, to recognize it.",
+                        "type": "string"
+                    },
+                    "scopes": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/Scope"
+                        }
+                    },
+                    "createdAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "lastUsedAt": {
+                        "type": ["string", "null"],
+                        "format": "date-time"
+                    },
+                    "revoked": {
+                        "type": "boolean"
+                    }
+                }
+            },
+            "ApiKeyList": {
+                "type": "object",
+                "required": ["data"],
+                "properties": {
+                    "data": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/ApiKey"
+                        }
+                    }
+                }
+            },
+            "ApiKeyRequest": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 255
+                    },
+                    "scopes": {
+                        "description": "Every scope when not set.",
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/Scope"
+                        },
+                        "minItems": 1,
+                        "uniqueItems": true
+                    }
+                }
+            },
+            "ApiKeyCreated": {
+                "type": "object",
+                "required": ["key", "token"],
+                "properties": {
+                    "key": {
+                        "$ref": "#/components/schemas/ApiKey"
+                    },
+                    "token": {
+                        "description": "The key, shown once: only its hash is kept.",
+                        "type": "string"
+                    }
+                }
+            },
+            "StorageRequest": {
+                "description": "A storage's kind and configuration. `s3`: `bucket`, `region` (`us-east-1`), `endpoint`, `prefix`, `accessKeyId`, `secretAccessKey`, `forcePathStyle`. `http`: `url`. The configuration is encrypted and never shown again.",
+                "type": "object",
+                "required": ["kind", "config"],
+                "additionalProperties": false,
+                "properties": {
+                    "kind": {
+                        "type": "string",
+                        "enum": ["s3", "http"]
+                    },
+                    "config": {
+                        "type": "object",
+                        "additionalProperties": true
+                    }
+                }
+            },
+            "Storage": {
+                "description": "A storage, without its credentials.",
+                "type": "object",
+                "required": ["name", "kind", "location", "createdAt", "updatedAt"],
+                "properties": {
+                    "name": {
+                        "$ref": "#/components/schemas/StorageName"
+                    },
+                    "kind": {
+                        "type": "string",
+                        "enum": ["s3", "http"]
+                    },
+                    "location": {
+                        "description": "Where it points: `s3://bucket/prefix (endpoint)` or the URL.",
+                        "type": "string"
+                    },
+                    "createdAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "updatedAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    }
+                }
+            },
+            "StorageList": {
+                "type": "object",
+                "required": ["data"],
+                "properties": {
+                    "data": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/Storage"
+                        }
+                    }
+                }
+            },
+            "UsageLine": {
+                "type": "object",
+                "required": [
+                    "project",
+                    "day",
+                    "tasks",
+                    "cpuSeconds",
+                    "mediaSeconds",
+                    "bytesIn",
+                    "bytesOut",
+                    "bytesStored"
+                ],
+                "properties": {
+                    "project": {
+                        "description": "The project's slug.",
+                        "type": "string"
+                    },
+                    "day": {
+                        "description": "UTC day.",
+                        "type": "string",
+                        "format": "date"
+                    },
+                    "tasks": {
+                        "type": "integer",
+                        "minimum": 0
+                    },
+                    "cpuSeconds": {
+                        "description": "Wall-clock time of the tasks, for now.",
+                        "type": "number",
+                        "minimum": 0
+                    },
+                    "mediaSeconds": {
+                        "type": "number",
+                        "minimum": 0
+                    },
+                    "bytesIn": {
+                        "type": "integer",
+                        "minimum": 0
+                    },
+                    "bytesOut": {
+                        "type": "integer",
+                        "minimum": 0
+                    },
+                    "bytesStored": {
+                        "description": "Bytes written to the temporary storage.",
+                        "type": "integer",
+                        "minimum": 0
+                    }
+                }
+            },
+            "UsageReport": {
+                "type": "object",
+                "required": ["data"],
+                "properties": {
+                    "data": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/UsageLine"
+                        }
                     }
                 }
             }
