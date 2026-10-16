@@ -110,6 +110,11 @@ They also return the size of what they wrote as metadata. ffmpeg only opens loca
 | `audio.waveform`  | Waveform data (JSON) and image, with audiowaveform | ✓   |
 | `audio.clip`      | An extract between two times                       |     |
 
+Both read audio files and the soundtrack of videos.
+
+- `audio.transcode`: `codec` (`mp3` by default, `aac` in M4A, `opus` in Ogg), `bitrate` (192 kbit/s for MP3, as the mediatheque's `Mp3` job), `channels`, `sampleRate`, and `normalize` to a `loudness` in LUFS (-16 by default), in two passes. Writes `audio.mp3`, `audio.m4a` or `audio.opus`.
+- `audio.waveform`: `waveform.png` (role `main`) with the size and colors of the mediatheque's audio `Thumbnails` job by default (1200×400, transparent background, black waveform, no axis labels), and `waveform.json` (role `data`), audiowaveform's JSON with `pixelsPerSecond` points a second. `zoom` is `auto` by default, which fits the whole file in the width; the mediatheque's 600 samples per pixel only showed the first seconds of a long file. `image` and `data` turn each file off.
+
 ### Document (`@eclair-js/operations-document`)
 
 | Operation             | Output                                | 1.0 |

@@ -16,6 +16,7 @@
         "packages/operation",
         "packages/operations-core",
         "packages/operations-video",
+        "packages/operations-audio",
         "packages/client",
         "packages/server"
     ],

@@ -124,6 +124,7 @@ Handles, file paths, sources and URLs stay the same, so `laravel-folklore` and t
 | `Video\Thumbnails`           | `video.thumbnails` with `count` and `inMiddle`                     |
 | `Video\HLS`                  | `video.hls` with the same renditions and segment duration          |
 | `Video\MediaConvert`         | Not needed: Eclair replaces it                                     |
+| `Audio\Mp3`                  | `audio.transcode` with `codec: mp3` and the same bitrate           |
 | `Audio\Thumbnails`           | `audio.waveform`, image output with the same size and colors       |
 | `Document\Thumbnails`        | `document.thumbnails` with the same resolution, quality and format |
 | `Font\WebFonts`              | `font.convert`                                                     |

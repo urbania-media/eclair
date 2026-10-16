@@ -11,6 +11,7 @@ import { InvalidValueError, createAjv, groupErrors } from '../validation.ts';
 export const BUILT_IN_PLUGINS = [
     '@eclair-js/operations-core',
     '@eclair-js/operations-video',
+    '@eclair-js/operations-audio',
 ] as const;
 
 /** A plugin can't be loaded, or exports an invalid operation. */
