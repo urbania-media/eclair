@@ -123,6 +123,8 @@ Both read audio files and the soundtrack of videos.
 | `document.text`       | Extracted text, per page              |     |
 | `document.pdf`        | PDF from office documents             |     |
 
+`document.thumbnails` reads PDFs, with poppler's `pdftoppm`: never ImageMagick and Ghostscript, whose policy in the image only allows raster formats. By default it renders every page at 150 dpi in JPEG at quality 100 on a white background, like the mediatheque's document `Thumbnails` job, into `0.jpg`, `1.jpg`… (role `thumbnail`). `count` renders the first pages, `pages` a list of pages numbered from 1; `resolution`, `maxWidth` and `maxHeight` (the resolution is lowered to fit), `format` (`jpeg` or `png`) and `quality`. Up to 1000 pages a task. Office documents come with `document.pdf`.
+
 ### Font (`@eclair-js/operations-font`)
 
 | Operation      | Output                                   | 1.0 |

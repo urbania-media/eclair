@@ -37,6 +37,7 @@ describe('OperationRegistry.load', () => {
         expect(registry.resolve('video.transcode')?.key).toBe('video.transcode@1');
         expect(registry.resolve('video.hls')?.capability).toBe('video');
         expect(registry.resolve('audio.waveform')?.key).toBe('audio.waveform@1');
+        expect(registry.resolve('document.thumbnails')?.key).toBe('document.thumbnails@1');
     });
 
     it('accepts a list or { operations }, and refuses anything else', async () => {

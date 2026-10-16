@@ -39,7 +39,8 @@ packages/
   operations-core/     @eclair-js/operations-core: probe
   operations-video/    @eclair-js/operations-video: transcode, thumbnails, poster, HLS
   operations-audio/    @eclair-js/operations-audio: transcode, waveform
-  operations-image/    @eclair-js/operations-image (and -document, -font, -ai)
+  operations-document/ @eclair-js/operations-document: page thumbnails
+  operations-image/    @eclair-js/operations-image (and -font, -ai)
 docker/                Dockerfile and docker compose examples
 config/                Shared Vitest config of the packages
 docs/                  Architecture, protocol, operations, deployment, decisions
