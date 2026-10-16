@@ -10,6 +10,8 @@ import { readDate, readJson, toJson } from '../database/values.ts';
 import { ConflictError, NotFoundError } from '../errors.ts';
 import { createId } from '../ids.ts';
 import { InvalidValueError } from '../validation.ts';
+import { BUILT_IN_PRESETS } from './built-in.ts';
+import type { BuiltInPreset } from './built-in.ts';
 
 /** The scope of the presets that every project can use. */
 export const GLOBAL_SCOPE = 'global';
@@ -25,9 +27,29 @@ export type TaskChecker = (
 ) => void | Promise<void>;
 
 export interface StoredPreset extends Preset {
-    id: string;
+    /** `undefined` for a built-in preset. */
+    id: string | undefined;
     projectId: string | undefined;
     updatedAt: Date;
+    /** Whether it ships with Eclair rather than being stored in the database. */
+    builtIn: boolean;
+}
+
+/** When the built-in presets of this version of Eclair were loaded. */
+const LOADED_AT = new Date();
+
+function toBuiltIn(name: string, preset: BuiltInPreset): StoredPreset {
+    return {
+        id: undefined,
+        projectId: undefined,
+        name,
+        scope: 'global',
+        version: preset.version,
+        ...(preset.description === undefined ? {} : { description: preset.description }),
+        tasks: structuredClone(preset.tasks),
+        updatedAt: LOADED_AT,
+        builtIn: true,
+    };
 }
 
 /**
@@ -53,17 +75,33 @@ function toPreset(row: Selectable<PresetsTable>): StoredPreset {
         ...(row.description === null ? {} : { description: row.description }),
         tasks: readTasks(row.tasks),
         updatedAt: readDate(row.updated_at),
+        builtIn: false,
     };
 }
 
-/** Presets: named pipelines, global or per project (decision 0004). */
+/**
+ * Presets: named pipelines, global or per project (decision 0004). Below the global presets of the
+ * database come the built-in ones, which ship with Eclair: a global preset with the same name
+ * replaces one.
+ */
 export class Presets {
     readonly #database: Database;
     #checkTasks: TaskChecker | undefined;
+    readonly #builtIn: Record<string, BuiltInPreset>;
 
-    constructor(database: Database, checkTasks?: TaskChecker) {
+    constructor(
+        database: Database,
+        checkTasks?: TaskChecker,
+        builtIn: Record<string, BuiltInPreset> = BUILT_IN_PRESETS,
+    ) {
         this.#database = database;
         this.#checkTasks = checkTasks;
+        this.#builtIn = builtIn;
+    }
+
+    #findBuiltIn(name: string): StoredPreset | undefined {
+        const preset = Object.hasOwn(this.#builtIn, name) ? this.#builtIn[name] : undefined;
+        return preset === undefined ? undefined : toBuiltIn(name, preset);
     }
 
     /** Sets the checker of operations and options, once the operations are loaded. */
@@ -154,7 +192,7 @@ export class Presets {
         return row === undefined ? undefined : toPreset(row);
     }
 
-    /** The preset a project sees under a name: its own, or else the global one. */
+    /** The preset a project sees under a name: its own, or else the global one, or a built-in one. */
     async find(projectId: string | undefined, name: string): Promise<StoredPreset | undefined> {
         if (projectId !== undefined) {
             const own = await this.#find(projectId, name);
@@ -162,7 +200,7 @@ export class Presets {
                 return own;
             }
         }
-        return this.#find(GLOBAL_SCOPE, name);
+        return (await this.#find(GLOBAL_SCOPE, name)) ?? this.#findBuiltIn(name);
     }
 
     async get(projectId: string | undefined, name: string): Promise<StoredPreset> {
@@ -173,7 +211,7 @@ export class Presets {
         return preset;
     }
 
-    /** The presets a project sees: its own, and the global ones it doesn't override. */
+    /** The presets a project sees: its own, and the global and built-in ones it doesn't override. */
     async list(projectId: string | undefined): Promise<StoredPreset[]> {
         const scopes = projectId === undefined ? [GLOBAL_SCOPE] : [projectId, GLOBAL_SCOPE];
         const rows = await this.#database.kysely
@@ -182,14 +220,20 @@ export class Presets {
             .where('scope', 'in', scopes)
             .orderBy('name')
             .execute();
+        // A project's preset replaces a global one, which replaces a built-in one.
+        const rank = (preset: StoredPreset) =>
+            preset.scope === 'project' ? 2 : preset.builtIn ? 0 : 1;
         const presets = new Map<string, StoredPreset>();
-        for (const preset of rows.map(toPreset)) {
+        const builtIn = Object.entries(this.#builtIn).map(([name, preset]) =>
+            toBuiltIn(name, preset),
+        );
+        for (const preset of [...builtIn, ...rows.map(toPreset)]) {
             const current = presets.get(preset.name);
-            if (current === undefined || preset.scope === 'project') {
+            if (current === undefined || rank(preset) > rank(current)) {
                 presets.set(preset.name, preset);
             }
         }
-        return [...presets.values()];
+        return [...presets.values()].sort((a, b) => (a.name < b.name ? -1 : 1));
     }
 
     /** Deletes a preset of a project, or a global preset when `projectId` is `undefined`. */
@@ -200,7 +244,11 @@ export class Presets {
             .where('name', '=', name)
             .executeTakeFirst();
         if (result.numDeletedRows === 0n) {
-            throw new NotFoundError(`There is no preset "${name}".`);
+            throw new NotFoundError(
+                projectId === undefined && this.#findBuiltIn(name) !== undefined
+                    ? `"${name}" is built in: it can't be removed, only replaced by a global preset.`
+                    : `There is no preset "${name}".`,
+            );
         }
     }
 }

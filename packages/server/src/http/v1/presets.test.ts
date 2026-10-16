@@ -63,7 +63,7 @@ describe('/v1 authentication', () => {
     });
 
     it('checks the scope of the key', async () => {
-        const response = await request('PUT', '/v1/presets/web-video', readOnlyToken, preset);
+        const response = await request('PUT', '/v1/presets/site-video', readOnlyToken, preset);
         expect(response.statusCode).toBe(403);
         expect(response.json()).toMatchObject({
             detail: "The API key doesn't have the presets:write scope.",
@@ -73,12 +73,12 @@ describe('/v1 authentication', () => {
 
 describe('/v1/presets', () => {
     it('creates, then replaces a preset', async () => {
-        const created = await request('PUT', '/v1/presets/web-video', token, preset);
+        const created = await request('PUT', '/v1/presets/site-video', token, preset);
         expect(created.statusCode).toBe(201);
         expect(validate('Preset', created.json()).valid).toBe(true);
         // The protocol's defaults are applied when the request is validated (decision 0015).
         expect(created.json()).toEqual({
-            name: 'web-video',
+            name: 'site-video',
             scope: 'project',
             version: 1,
             description: 'Video for the web',
@@ -88,7 +88,7 @@ describe('/v1/presets', () => {
             },
         });
 
-        const replaced = await request('PUT', '/v1/presets/web-video', token, {
+        const replaced = await request('PUT', '/v1/presets/site-video', token, {
             tasks: { probe: { op: 'probe' } },
         });
         expect(replaced.statusCode).toBe(200);
@@ -96,10 +96,10 @@ describe('/v1/presets', () => {
     });
 
     it('takes names with a slash', async () => {
-        const response = await request('PUT', '/v1/presets/mediatheque/video', token, preset);
+        const response = await request('PUT', '/v1/presets/site/video', token, preset);
         expect(response.statusCode).toBe(201);
-        const read = await request('GET', '/v1/presets/mediatheque/video', token);
-        expect(read.json()).toMatchObject({ name: 'mediatheque/video' });
+        const read = await request('GET', '/v1/presets/site/video', token);
+        expect(read.json()).toMatchObject({ name: 'site/video' });
     });
 
     it('answers 422 with the errors of an invalid preset', async () => {
@@ -116,8 +116,8 @@ describe('/v1/presets', () => {
         expect(name.statusCode).toBe(422);
     });
 
-    it("lists a project's presets and the global ones", async () => {
-        await services.presets.put(undefined, 'web-audio', { tasks: { probe: { op: 'probe' } } });
+    it("lists a project's presets, the global ones and the built-in ones", async () => {
+        await services.presets.put(undefined, 'site-audio', { tasks: { probe: { op: 'probe' } } });
         const response = await request('GET', '/v1/presets', token);
         expect(response.statusCode).toBe(200);
         expect(validate('PresetList', response.json()).valid).toBe(true);
@@ -126,23 +126,30 @@ describe('/v1/presets', () => {
                 .json<{ data: { name: string; scope: string }[] }>()
                 .data.map(({ name, scope }) => [name, scope]),
         ).toEqual([
-            ['mediatheque/video', 'project'],
+            ['mediatheque/audio', 'global'],
+            ['mediatheque/document', 'global'],
+            ['mediatheque/font', 'global'],
+            ['mediatheque/video', 'global'],
+            ['site-audio', 'global'],
+            ['site-video', 'project'],
+            ['site/video', 'project'],
             ['web-audio', 'global'],
-            ['web-video', 'project'],
+            ['web-image', 'global'],
+            ['web-video', 'global'],
         ]);
     });
 
     it("never shows another project's presets", async () => {
-        const response = await request('GET', '/v1/presets/web-video', otherToken);
+        const response = await request('GET', '/v1/presets/site-video', otherToken);
         expect(response.statusCode).toBe(404);
-        const removed = await request('DELETE', '/v1/presets/web-video', otherToken);
+        const removed = await request('DELETE', '/v1/presets/site-video', otherToken);
         expect(removed.statusCode).toBe(404);
     });
 
     it('deletes a preset, but not a global one', async () => {
-        const response = await request('DELETE', '/v1/presets/web-video', token);
+        const response = await request('DELETE', '/v1/presets/site-video', token);
         expect(response.statusCode).toBe(204);
-        expect((await request('GET', '/v1/presets/web-video', token)).statusCode).toBe(404);
-        expect((await request('DELETE', '/v1/presets/web-audio', token)).statusCode).toBe(404);
+        expect((await request('GET', '/v1/presets/site-video', token)).statusCode).toBe(404);
+        expect((await request('DELETE', '/v1/presets/site-audio', token)).statusCode).toBe(404);
     });
 });

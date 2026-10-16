@@ -164,16 +164,18 @@ An AI operation asks for a provider by capability (`transcription`, `vision`, `l
 
 ## Presets
 
-Presets combine operations into pipelines. The built-in ones:
+Presets combine operations into pipelines. The built-in ones ship with the server (`packages/server/src/presets/built-in.ts`):
 
-| Preset                 | Tasks                                                                                                 |
-| ---------------------- | ----------------------------------------------------------------------------------------------------- |
-| `web-video`            | `probe`, `h264` (1080p), `hls` (1080p, 720p, 360p), `poster`, `thumbnails` (5)                        |
-| `web-audio`            | `probe`, `mp3`, `waveform`                                                                            |
-| `web-image`            | `probe`, `palette`, `webp`                                                                            |
-| `mediatheque/video`    | The `laravel-mediatheque` video pipeline: `probe`, `h264`, `webm`, `hevc`, `thumbnails` (5, centered) |
-| `mediatheque/audio`    | `probe`, `thumbnails` (waveform image, as in the mediatheque)                                         |
-| `mediatheque/document` | `probe`, `thumbnails` (every page)                                                                    |
-| `mediatheque/font`     | `probe`, `webfonts`                                                                                   |
+| Preset                 | Tasks                                                                                                                                              |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `web-video`            | `probe`, `h264` (H.264 up to 1920 px on both sides: 1080p, landscape or portrait), `hls` (1080p, 720p, 360p), `poster`, `thumbnails` (5, centered) |
+| `web-audio`            | `probe`, `mp3`, `waveform` (image and data)                                                                                                        |
+| `web-image`            | `probe`, `palette`, `webp` (up to 2560 px)                                                                                                         |
+| `mediatheque/video`    | The `laravel-mediatheque` video pipeline: `probe`, `h264`, `webm` (VP9), `hevc`, at the size of the video, and `thumbnails` (5, centered)          |
+| `mediatheque/audio`    | `probe`, `thumbnails` (the waveform image, as in the mediatheque)                                                                                  |
+| `mediatheque/document` | `probe`, `thumbnails` (every page, 150 dpi, JPEG)                                                                                                  |
+| `mediatheque/font`     | `probe`, `webfonts` (WOFF2 and WOFF)                                                                                                               |
+
+Every project sees them, below the global presets of the database: a global preset with the same name replaces one, for every project, and a project's own preset replaces both for that project. A new release of Eclair can change them, with a new preset version, without a migration; jobs record the version they used. They can't be removed, only replaced.
 
 The `mediatheque/*` presets produce the same handles and formats as the jobs of `laravel-mediatheque` 1.x, for its driver. With mediatheque 2, renditions are declared in the application and sent as inline tasks. See [mediatheque.md](mediatheque.md).

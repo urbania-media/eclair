@@ -405,7 +405,7 @@ export const ADMIN_COMMANDS: Record<string, Command> = {
                     ['NAME', 'SCOPE', 'VERSION', 'TASKS'],
                     (await presets.list(projectId)).map((preset) => [
                         preset.name,
-                        preset.scope,
+                        preset.builtIn ? 'built-in' : preset.scope,
                         String(preset.version),
                         Object.keys(preset.tasks).join(', '),
                     ]),
