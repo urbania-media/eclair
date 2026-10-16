@@ -164,6 +164,36 @@ describe('temporary storage', () => {
     });
 });
 
+describe('webhook secret rotation', () => {
+    const v1 = 'a'.repeat(64);
+
+    it('signs with one or several secrets', () => {
+        expect(pointers('Signature', `t=1760536992,v1=${v1}`)).toEqual([]);
+        expect(pointers('Signature', `t=1760536992,v1=${v1},v1=${'b'.repeat(64)}`)).toEqual([]);
+        expect(pointers('Signature', `t=1760536992`)).not.toEqual([]);
+    });
+
+    it('takes a grace period of up to 7 days', () => {
+        expect(pointers('WebhookSecretRotation', {})).toEqual([]);
+        expect(pointers('WebhookSecretRotation', { grace: 0 })).toEqual([]);
+        expect(pointers('WebhookSecretRotation', { grace: 604_800 })).toEqual([]);
+        expect(pointers('WebhookSecretRotation', { grace: 604_801 })).toContain('/grace');
+        expect(pointers('WebhookSecretRotation', { grace: 1.5 })).toContain('/grace');
+        expect(pointers('WebhookSecretRotation', { grace: -1 })).toContain('/grace');
+        expect(pointers('WebhookSecretRotation', { graceHours: 1 })).not.toEqual([]);
+    });
+
+    it('says when the previous secret expires', () => {
+        expect(pointers('WebhookSecret', { webhookSecret: 'whsec_new' })).toEqual([]);
+        expect(
+            pointers('WebhookSecret', {
+                webhookSecret: 'whsec_new',
+                previousSecretExpiresAt: '2026-10-17T14:00:00Z',
+            }),
+        ).toEqual([]);
+    });
+});
+
 describe('toProblemErrors', () => {
     it('groups messages by pointer', () => {
         const result = validate('JobRequest', { input: {}, priority: 'urgent', tasks: {} });

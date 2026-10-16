@@ -346,7 +346,10 @@ export interface paths {
         /** Read a project's webhook secret */
         get: operations["adminGetWebhookSecret"];
         put?: never;
-        /** Replace a project's webhook secret */
+        /**
+         * Replace a project's webhook secret
+         * @description The previous secret stays valid for a grace period, 24 hours by default: until it expires, webhooks and `http` storage requests carry a `v1` value for each secret, so the application can move to the new one without refusing any request. Rotating again during a grace period drops the older secret.
+         */
         post: operations["adminRotateWebhookSecret"];
         delete?: never;
         options?: never;
@@ -911,7 +914,7 @@ export interface components {
         };
         /** @enum {string} */
         WebhookEvent: "job.completed" | "job.failed" | "job.canceled" | "task.completed";
-        /** @description `t=<unix time>,v1=<hex HMAC-SHA256>`. Several `v1` values can follow: the signature is valid if one of them matches. */
+        /** @description `t=<unix time>,v1=<hex HMAC-SHA256>`. Several `v1` values can follow, one per valid secret of the project (the current one first, then the previous one during the grace period of a rotation): the signature is valid if one of them matches. */
         Signature: string;
         /** @description Problem details (RFC 9457). */
         Problem: {
@@ -1100,6 +1103,15 @@ export interface components {
         };
         WebhookSecret: {
             webhookSecret: string;
+            /**
+             * Format: date-time
+             * @description Set while the previous secret is in its grace period after a rotation: when it expires. Until then, Eclair signs with both secrets.
+             */
+            previousSecretExpiresAt?: string;
+        };
+        WebhookSecretRotation: {
+            /** @description Seconds the previous secret stays valid, at most 7 days. 86400 (24 hours) when not set; `0` drops it at once. */
+            grace?: number;
         };
         /** @enum {string} */
         Scope: "jobs:read" | "jobs:write" | "presets:write";
@@ -1277,13 +1289,13 @@ export interface components {
         EclairEvent: components["schemas"]["WebhookEvent"];
         /** @description Id of the delivery. Retries keep it: use it to ignore duplicates. */
         EclairDelivery: string;
-        /** @description `t=<unix time>,v1=<hex>`: the HMAC-SHA256 of `{t}.{body}` with the project's webhook secret. Refuse timestamps older than five minutes. */
+        /** @description `t=<unix time>,v1=<hex>`: the HMAC-SHA256 of `{t}.{body}` with the project's webhook secret. After a rotation, another `v1` value signs with the previous secret until its grace period ends: accept the request if one `v1` matches. Refuse timestamps older than five minutes. */
         EclairSignature: components["schemas"]["Signature"];
         /** @description Id of the job the file belongs to. */
         EclairJob: components["schemas"]["JobId"];
         /** @description SHA-256 of the body, in hex. */
         EclairContentSha256: string;
-        /** @description `t=<unix time>,v1=<hex>`: the HMAC-SHA256 of `{t}.{path}.{sha256 of the body}` with the project's webhook secret. Refuse timestamps older than five minutes. */
+        /** @description `t=<unix time>,v1=<hex>`: the HMAC-SHA256 of `{t}.{path}.{sha256 of the body}` with the project's webhook secret. After a rotation, another `v1` value signs with the previous secret until its grace period ends: accept the request if one `v1` matches. Refuse timestamps older than five minutes. */
         EclairStorageSignature: components["schemas"]["Signature"];
         UploadId: components["schemas"]["UploadId"];
         /** @description tus protocol version. */
@@ -1316,7 +1328,7 @@ export interface components {
                         "Eclair-Event": components["parameters"]["EclairEvent"];
                         /** @description Id of the delivery. Retries keep it: use it to ignore duplicates. */
                         "Eclair-Delivery": components["parameters"]["EclairDelivery"];
-                        /** @description `t=<unix time>,v1=<hex>`: the HMAC-SHA256 of `{t}.{body}` with the project's webhook secret. Refuse timestamps older than five minutes. */
+                        /** @description `t=<unix time>,v1=<hex>`: the HMAC-SHA256 of `{t}.{body}` with the project's webhook secret. After a rotation, another `v1` value signs with the previous secret until its grace period ends: accept the request if one `v1` matches. Refuse timestamps older than five minutes. */
                         "Eclair-Signature": components["parameters"]["EclairSignature"];
                     };
                     path?: never;
@@ -2099,9 +2111,13 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["WebhookSecretRotation"];
+            };
+        };
         responses: {
-            /** @description The new secret. The old one stops working at once. */
+            /** @description The new secret, and when the previous one expires. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -2112,6 +2128,7 @@ export interface operations {
             };
             401: components["responses"]["AdminUnauthorized"];
             404: components["responses"]["NotFound"];
+            422: components["responses"]["Invalid"];
         };
     };
     adminListKeys: {
@@ -2393,7 +2410,7 @@ export interface operations {
                 "Eclair-Event": components["parameters"]["EclairEvent"];
                 /** @description Id of the delivery. Retries keep it: use it to ignore duplicates. */
                 "Eclair-Delivery": components["parameters"]["EclairDelivery"];
-                /** @description `t=<unix time>,v1=<hex>`: the HMAC-SHA256 of `{t}.{body}` with the project's webhook secret. Refuse timestamps older than five minutes. */
+                /** @description `t=<unix time>,v1=<hex>`: the HMAC-SHA256 of `{t}.{body}` with the project's webhook secret. After a rotation, another `v1` value signs with the previous secret until its grace period ends: accept the request if one `v1` matches. Refuse timestamps older than five minutes. */
                 "Eclair-Signature": components["parameters"]["EclairSignature"];
                 /** @description Name of the task that completed. */
                 "Eclair-Task": components["schemas"]["TaskName"];
@@ -2418,7 +2435,7 @@ export interface operations {
                 "Eclair-Job": components["parameters"]["EclairJob"];
                 /** @description SHA-256 of the body, in hex. */
                 "Eclair-Content-Sha256": components["parameters"]["EclairContentSha256"];
-                /** @description `t=<unix time>,v1=<hex>`: the HMAC-SHA256 of `{t}.{path}.{sha256 of the body}` with the project's webhook secret. Refuse timestamps older than five minutes. */
+                /** @description `t=<unix time>,v1=<hex>`: the HMAC-SHA256 of `{t}.{path}.{sha256 of the body}` with the project's webhook secret. After a rotation, another `v1` value signs with the previous secret until its grace period ends: accept the request if one `v1` matches. Refuse timestamps older than five minutes. */
                 "Eclair-Signature": components["parameters"]["EclairStorageSignature"];
             };
             path?: never;
@@ -2446,7 +2463,7 @@ export interface operations {
             header: {
                 /** @description Id of the job the file belongs to. */
                 "Eclair-Job": components["parameters"]["EclairJob"];
-                /** @description `t=<unix time>,v1=<hex>`: the HMAC-SHA256 of `{t}.{path}.{sha256 of the body}` with the project's webhook secret. Refuse timestamps older than five minutes. */
+                /** @description `t=<unix time>,v1=<hex>`: the HMAC-SHA256 of `{t}.{path}.{sha256 of the body}` with the project's webhook secret. After a rotation, another `v1` value signs with the previous secret until its grace period ends: accept the request if one `v1` matches. Refuse timestamps older than five minutes. */
                 "Eclair-Signature": components["parameters"]["EclairStorageSignature"];
             };
             path?: never;

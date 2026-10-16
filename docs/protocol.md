@@ -185,7 +185,7 @@ Eclair-Delivery: whd_01J…
 Eclair-Signature: t=1760536992,v1=5257a869e7…
 ```
 
-The body is the job, as returned by `GET /v1/jobs/{id}`. The signature is the HMAC-SHA256 of `{t}.{body}` with the project's webhook secret. Receivers check it and refuse timestamps older than five minutes. Deliveries are retried with exponential backoff for 24 hours. Receivers must accept duplicates, using `Eclair-Delivery` to detect them.
+The body is the job, as returned by `GET /v1/jobs/{id}`. The signature is the HMAC-SHA256 of `{t}.{body}` with the project's webhook secret. Receivers check it and refuse timestamps older than five minutes. After a rotation of the secret, the previous one stays valid for a grace period (24 hours by default, [0018](decisions/0018-webhook-secret-grace-period.md)): until it ends, the header carries one `v1` value per secret (`t=…,v1=<new>,v1=<previous>`), and a receiver accepts the request if one of them matches its secret. Deliveries are retried with exponential backoff for 24 hours. Receivers must accept duplicates, using `Eclair-Delivery` to detect them.
 
 Events: `job.completed`, `job.failed`, `job.canceled`. A project can also subscribe to `task.completed`, to attach outputs as soon as they exist. Its body is also the whole job, and an `Eclair-Task` header names the task that completed.
 
@@ -200,7 +200,7 @@ Eclair-Job: job_01J…
 Eclair-Signature: t=…,v1=…
 ```
 
-The signature covers the timestamp, the path and the SHA-256 of the body (sent in `Eclair-Content-Sha256`): the HMAC-SHA256 of `{t}.{path}.{sha256}`, where `path` is the storage path as the job names it, without URL encoding. Inputs are read with a signed `GET` on the same endpoint, where the body's SHA-256 is that of an empty body.
+The signature covers the timestamp, the path and the SHA-256 of the body (sent in `Eclair-Content-Sha256`): the HMAC-SHA256 of `{t}.{path}.{sha256}`, where `path` is the storage path as the job names it, without URL encoding. Inputs are read with a signed `GET` on the same endpoint, where the body's SHA-256 is that of an empty body. Like webhooks, these requests carry a `v1` value for the previous secret during the grace period of a rotation.
 
 ## Admin API
 
@@ -210,7 +210,7 @@ Under `/admin/v1`, with the server's admin token (`Authorization: Bearer <ECLAIR
 | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
 | `GET`, `POST /admin/v1/projects`                                                  | List, create (the response has the webhook secret, once)                                         |
 | `GET`, `PATCH`, `DELETE /admin/v1/projects/{project}`                             | Read, change (settings are merged; `null` restores a default), delete with everything it owns    |
-| `GET`, `POST /admin/v1/projects/{project}/webhook-secret`                         | Read, replace                                                                                    |
+| `GET`, `POST /admin/v1/projects/{project}/webhook-secret`                         | Read, replace (`{ "grace": <seconds> }` keeps the previous secret valid, 24 hours by default)    |
 | `GET`, `POST /admin/v1/projects/{project}/keys`                                   | List, create (the key is shown once)                                                             |
 | `POST /admin/v1/keys/{key}/revoke`                                                | Revoke a key                                                                                     |
 | `GET /admin/v1/projects/{project}/storages`, `PUT`, `DELETE …/storages/{storage}` | List without credentials, create or replace, remove                                              |
