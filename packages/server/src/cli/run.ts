@@ -122,6 +122,7 @@ async function start(io: CliIo, roles: { api: boolean; worker: boolean }): Promi
             app = buildApp({
                 services,
                 metrics,
+                adminToken: config.adminToken,
                 version: VERSION,
                 loggerInstance: logger,
                 checks: [

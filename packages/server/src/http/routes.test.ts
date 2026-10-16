@@ -12,7 +12,7 @@ let routes: RouteSummary[];
 
 beforeAll(async () => {
     services = await createTestServices();
-    const app = buildApp({ version: 'test', services });
+    const app = buildApp({ version: 'test', services, adminToken: 'a'.repeat(32) });
     await app.ready();
     routes = app.eclairRoutes;
     await app.close();
@@ -42,7 +42,7 @@ describe('routes', () => {
             ),
         );
         const served = routes
-            .filter(({ url }) => url.startsWith('/v1/'))
+            .filter(({ url }) => url.startsWith('/v1/') || url.startsWith('/admin/v1/'))
             // Fastify adds a HEAD route to each GET route.
             .filter(
                 ({ method, url }) =>

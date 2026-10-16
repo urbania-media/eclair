@@ -9,6 +9,7 @@ import { ConflictError, NotFoundError, RateLimitedError } from '../errors.ts';
 import type { Metrics } from '../metrics.ts';
 import type { Services } from '../services.ts';
 import { InvalidValueError, createAjv, groupErrors } from '../validation.ts';
+import { admin } from './admin/index.ts';
 import { fileRoutes } from './files.ts';
 import { HttpProblem, problems } from './problem.ts';
 import { v1 } from './v1/index.ts';
@@ -45,6 +46,8 @@ export interface AppOptions {
     services?: Services;
     /** Served on `/metrics`, for Prometheus. */
     metrics?: Metrics;
+    /** `ECLAIR_ADMIN_TOKEN`. Without it, there is no admin API. */
+    adminToken?: string | undefined;
 }
 
 const PROBLEM_CONTENT_TYPE = 'application/problem+json; charset=utf-8';
@@ -184,6 +187,13 @@ export function buildApp(options: AppOptions): FastifyInstance {
         void app.register(v1, { prefix: '/v1', services: options.services });
         // Without an API key: the signed token is the authorization.
         void app.register(fileRoutes, { prefix: '/v1', links: options.services.links });
+        if (options.adminToken !== undefined) {
+            void app.register(admin, {
+                prefix: '/admin/v1',
+                services: options.services,
+                adminToken: options.adminToken,
+            });
+        }
     }
 
     return app;
