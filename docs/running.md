@@ -116,14 +116,14 @@ A worker deletes a task's local files when the task ends, whether it succeeds or
 
 Eclair retries each delivery with exponential backoff for 24 hours, then gives up (`outcome="failed"`).
 
-1. The application's route answers `401`: the application doesn't have the project's current webhook secret (`eclair projects:secret <project>`).
+1. The application's route answers `401`: the application doesn't have the project's current webhook secret (`eclair projects:secret <project>`), or a rotation's grace period ended before it got the new one.
 2. It answers `5xx` or times out: the application is down or its listeners fail. Deliveries resume on their own once it answers `2xx`.
 3. After 24 hours, the application finds the jobs it missed through the API: `GET /v1/jobs?status=completed&createdAfter=…` (with `laravel-eclair`, `Eclair::jobs()->all([...])`), and handles them as if their webhooks had come.
 
 ### A key or a secret leaked
 
 - **An API key:** create a new one (`eclair keys:create`), give it to the application, then revoke the old one (`eclair keys:revoke <key-id>`; `eclair keys:list <project>` lists them).
-- **A project's webhook secret:** `eclair projects:secret <project> --rotate` replaces it at once, then give the new one to the application. The same secret signs the requests to the project's `http` storages: until the application has it, its webhooks and storage requests are refused, and Eclair retries them.
+- **A project's webhook secret:** `eclair projects:secret <project> --rotate` replaces it and prints the new one; give it to the application. The previous secret stays valid for 24 hours ([decision 0018](decisions/0018-webhook-secret-grace-period.md)): until then, Eclair signs webhooks and the requests to the project's `http` storages with both secrets, so nothing is refused while the application is deployed with the new one. A leaked secret stops being a risk as soon as the application only trusts the new one: Eclair never accepts anything signed with it. `--grace 2h` shortens the grace period (at most `7d`), and `--grace 0` drops the previous secret at once, at the cost of refused webhooks and storage requests, which Eclair retries, until the application has the new one.
 - **`ECLAIR_SECRET_KEY`:** it decrypts the storages' credentials. Rotate the credentials of every storage with their owners, register them again with a new key, and restart every process with it.
 - **`ECLAIR_ADMIN_TOKEN`:** replace it and restart the API processes.
 

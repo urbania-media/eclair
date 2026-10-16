@@ -37,6 +37,9 @@ export interface ProjectsTable {
     webhook_url: Nullable<string>;
     /** The webhook secret, encrypted with `ECLAIR_SECRET_KEY`. */
     webhook_secret: string;
+    /** After a rotation, the previous webhook secret, encrypted, until it expires (decision 0018). */
+    previous_webhook_secret: Nullable<string>;
+    previous_webhook_secret_expires_at: NullableTimestamp;
     created_at: Timestamp;
     updated_at: Timestamp;
     disabled_at: NullableTimestamp;
@@ -225,6 +228,8 @@ export const COLUMNS = {
         'settings',
         'webhook_url',
         'webhook_secret',
+        'previous_webhook_secret',
+        'previous_webhook_secret_expires_at',
         'created_at',
         'updated_at',
         'disabled_at',

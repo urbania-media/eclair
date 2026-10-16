@@ -8,13 +8,25 @@ import type { ProjectsTable } from '../database/tables.ts';
 import { readDate, readJson, readOptionalDate, toJson } from '../database/values.ts';
 import { ConflictError, NotFoundError } from '../errors.ts';
 import { createId, isId } from '../ids.ts';
-import { createValidator } from '../validation.ts';
+import { InvalidValueError, createValidator } from '../validation.ts';
 import { ProjectSettingsSchema } from './settings.ts';
 import type { ProjectSettings } from './settings.ts';
 
 export const PRIORITIES = ['low', 'normal', 'high'] as const;
 
 export type Priority = (typeof PRIORITIES)[number];
+
+/** How long the previous webhook secret stays valid after a rotation by default, in milliseconds. */
+export const DEFAULT_SECRET_GRACE = 24 * 60 * 60 * 1000;
+
+/** The longest grace period of a rotation, in milliseconds (decision 0018). */
+export const MAX_SECRET_GRACE = 7 * 24 * 60 * 60 * 1000;
+
+export interface WebhookSecrets {
+    webhookSecret: string;
+    /** When the previous secret expires, while it's still valid after a rotation. */
+    previousSecretExpiresAt: Date | undefined;
+}
 
 export interface Project {
     id: string;
@@ -199,32 +211,83 @@ export class Projects {
         return this.get(project.id);
     }
 
-    /** The secret that signs the project's webhooks and HTTP storage requests. */
-    async webhookSecret(projectId: string): Promise<string> {
+    /** The encrypted secrets of a project; the previous one only while it's valid. */
+    async #secrets(projectId: string, now: Date) {
         const row = await this.#database.kysely
             .selectFrom('projects')
-            .select('webhook_secret')
+            .select([
+                'webhook_secret',
+                'previous_webhook_secret',
+                'previous_webhook_secret_expires_at',
+            ])
             .where('id', '=', projectId)
             .executeTakeFirst();
         if (row === undefined) {
             throw new NotFoundError(`There is no project "${projectId}".`);
         }
-        return decryptSecret(this.#secretKey, row.webhook_secret);
+        const expiresAt = readOptionalDate(row.previous_webhook_secret_expires_at);
+        const previous =
+            row.previous_webhook_secret !== null && expiresAt !== undefined && expiresAt > now
+                ? { secret: row.previous_webhook_secret, expiresAt }
+                : undefined;
+        return { current: row.webhook_secret, previous };
     }
 
-    /** Replaces the webhook secret and returns the new one. */
-    async rotateWebhookSecret(idOrSlug: string): Promise<string> {
+    /** The current webhook secret, and when the previous one expires while it's still valid. */
+    async webhookSecrets(projectId: string, now = new Date()): Promise<WebhookSecrets> {
+        const { current, previous } = await this.#secrets(projectId, now);
+        return {
+            webhookSecret: decryptSecret(this.#secretKey, current),
+            previousSecretExpiresAt: previous?.expiresAt,
+        };
+    }
+
+    /** The current webhook secret. */
+    async webhookSecret(projectId: string): Promise<string> {
+        return (await this.webhookSecrets(projectId)).webhookSecret;
+    }
+
+    /**
+     * The secrets that sign the project's webhooks and HTTP storage requests: the current one,
+     * then the previous one during the grace period of a rotation (decision 0018).
+     */
+    async signingSecrets(projectId: string, now = new Date()): Promise<string[]> {
+        const { current, previous } = await this.#secrets(projectId, now);
+        return [current, ...(previous === undefined ? [] : [previous.secret])].map((secret) =>
+            decryptSecret(this.#secretKey, secret),
+        );
+    }
+
+    /**
+     * Replaces the webhook secret. The current one stays valid for `grace` milliseconds (24 hours
+     * by default, `0` drops it at once), replacing any previous secret still in its grace period.
+     */
+    async rotateWebhookSecret(
+        idOrSlug: string,
+        { grace = DEFAULT_SECRET_GRACE }: { grace?: number } = {},
+    ): Promise<WebhookSecrets> {
+        if (!Number.isInteger(grace) || grace < 0 || grace > MAX_SECRET_GRACE) {
+            throw new InvalidValueError({
+                '/grace': ['must be a duration between 0 and 7 days'],
+            });
+        }
         const project = await this.get(idOrSlug);
+        const now = new Date();
+        const { current } = await this.#secrets(project.id, now);
         const webhookSecret = randomToken('whsec_');
+        const previousSecretExpiresAt = grace === 0 ? undefined : new Date(now.getTime() + grace);
         await this.#database.kysely
             .updateTable('projects')
             .set({
                 webhook_secret: encryptSecret(this.#secretKey, webhookSecret),
-                updated_at: new Date(),
+                // Still encrypted with the same key: it moves as is.
+                previous_webhook_secret: previousSecretExpiresAt === undefined ? null : current,
+                previous_webhook_secret_expires_at: previousSecretExpiresAt ?? null,
+                updated_at: now,
             })
             .where('id', '=', project.id)
             .execute();
-        return webhookSecret;
+        return { webhookSecret, previousSecretExpiresAt };
     }
 
     /** Deletes a project and everything that belongs to it. */

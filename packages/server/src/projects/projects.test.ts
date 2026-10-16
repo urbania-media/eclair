@@ -4,6 +4,7 @@ import { ConflictError, NotFoundError } from '../errors.ts';
 import type { Services } from '../services.ts';
 import { createTestServices } from '../testing.ts';
 import { InvalidValueError } from '../validation.ts';
+import { DEFAULT_SECRET_GRACE, MAX_SECRET_GRACE } from './projects.ts';
 
 let services: Services;
 
@@ -103,12 +104,98 @@ describe('Projects', () => {
         ).toBeUndefined();
     });
 
-    it('rotates the webhook secret', async () => {
+    it('rotates the webhook secret, keeping the previous one for 24 hours', async () => {
         const project = await services.projects.get('niche');
         const before = await services.projects.webhookSecret(project.id);
+        const start = Date.now();
         const after = await services.projects.rotateWebhookSecret('niche');
-        expect(after).not.toBe(before);
-        expect(await services.projects.webhookSecret(project.id)).toBe(after);
+        expect(after.webhookSecret).not.toBe(before);
+        expect(after.webhookSecret).toMatch(/^whsec_/);
+        const expiresAt = after.previousSecretExpiresAt?.getTime() ?? 0;
+        expect(expiresAt - start).toBeGreaterThanOrEqual(DEFAULT_SECRET_GRACE);
+        expect(expiresAt - Date.now()).toBeLessThanOrEqual(DEFAULT_SECRET_GRACE);
+
+        expect(await services.projects.webhookSecret(project.id)).toBe(after.webhookSecret);
+        expect(await services.projects.webhookSecrets(project.id)).toEqual(after);
+        expect(await services.projects.signingSecrets(project.id)).toEqual([
+            after.webhookSecret,
+            before,
+        ]);
+
+        // Encrypted, like the current one.
+        const row = await services.database.kysely
+            .selectFrom('projects')
+            .select('previous_webhook_secret')
+            .where('id', '=', project.id)
+            .executeTakeFirstOrThrow();
+        expect(row.previous_webhook_secret).not.toBeNull();
+        expect(row.previous_webhook_secret).not.toContain(before);
+    });
+
+    it('stops signing with the previous secret when its grace period ends', async () => {
+        const project = await services.projects.get('niche');
+        const before = await services.projects.webhookSecret(project.id);
+        const { webhookSecret, previousSecretExpiresAt } =
+            await services.projects.rotateWebhookSecret('niche', { grace: 60_000 });
+        const expiresAt = previousSecretExpiresAt ?? new Date(0);
+
+        const justBefore = new Date(expiresAt.getTime() - 1);
+        expect(await services.projects.signingSecrets(project.id, justBefore)).toEqual([
+            webhookSecret,
+            before,
+        ]);
+        expect(await services.projects.signingSecrets(project.id, expiresAt)).toEqual([
+            webhookSecret,
+        ]);
+        expect(await services.projects.webhookSecrets(project.id, expiresAt)).toEqual({
+            webhookSecret,
+            previousSecretExpiresAt: undefined,
+        });
+    });
+
+    it('keeps at most two secrets', async () => {
+        const project = await services.projects.get('niche');
+        await services.projects.rotateWebhookSecret('niche');
+        const second = await services.projects.rotateWebhookSecret('niche');
+        const third = await services.projects.rotateWebhookSecret('niche', { grace: 3_600_000 });
+        expect(await services.projects.signingSecrets(project.id)).toEqual([
+            third.webhookSecret,
+            second.webhookSecret,
+        ]);
+        const expiresAt = third.previousSecretExpiresAt?.getTime() ?? 0;
+        expect(expiresAt - Date.now()).toBeLessThanOrEqual(3_600_000);
+    });
+
+    it('drops the previous secret at once with a grace period of 0', async () => {
+        const project = await services.projects.get('niche');
+        await services.projects.rotateWebhookSecret('niche');
+        const rotated = await services.projects.rotateWebhookSecret('niche', { grace: 0 });
+        expect(rotated.previousSecretExpiresAt).toBeUndefined();
+        expect(await services.projects.signingSecrets(project.id)).toEqual([rotated.webhookSecret]);
+        const row = await services.database.kysely
+            .selectFrom('projects')
+            .select(['previous_webhook_secret', 'previous_webhook_secret_expires_at'])
+            .where('id', '=', project.id)
+            .executeTakeFirstOrThrow();
+        expect(row).toEqual({
+            previous_webhook_secret: null,
+            previous_webhook_secret_expires_at: null,
+        });
+    });
+
+    it('refuses a grace period longer than 7 days', async () => {
+        const before = await services.projects.webhookSecret(
+            (await services.projects.get('niche')).id,
+        );
+        for (const grace of [MAX_SECRET_GRACE + 1, -1, 1.5]) {
+            await expect(services.projects.rotateWebhookSecret('niche', { grace })).rejects.toThrow(
+                InvalidValueError,
+            );
+        }
+        await services.projects.rotateWebhookSecret('niche', { grace: MAX_SECRET_GRACE });
+        expect(
+            await services.projects.signingSecrets((await services.projects.get('niche')).id),
+        ).toContain(before);
     });
 
     it('deletes a project with what it owns', async () => {

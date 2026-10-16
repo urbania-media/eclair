@@ -30,8 +30,8 @@ export class StorageResolver {
         }
         const storage = await this.#storages.get(projectId, name);
         if (storage.kind === 'http') {
-            // Not cached: it signs with the project's secret, which can be rotated.
-            return new HttpDriver(storage.config, await this.#projects.webhookSecret(projectId));
+            // Not cached: it signs with the project's secrets, which can be rotated.
+            return new HttpDriver(storage.config, await this.#projects.signingSecrets(projectId));
         }
         const key = `${storage.id}@${storage.updatedAt.getTime()}`;
         let driver = this.#drivers.get(key);

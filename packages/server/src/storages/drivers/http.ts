@@ -3,23 +3,24 @@ import { pipeline } from 'node:stream/promises';
 import { request } from 'undici';
 
 import { EMPTY_SHA256, signStorageRequest } from '../signing.ts';
+import type { SigningSecrets } from '../signing.ts';
 import type { HttpStorageConfig } from '../storages.ts';
 import { SizeLimit } from './s3.ts';
 import { StorageError, checkStoragePath } from './types.ts';
 import type { ReadOptions, StorageDriver, WriteOptions } from './types.ts';
 
 /**
- * An endpoint of the application that serves and receives files, signed with the project's secret
+ * An endpoint of the application that serves and receives files, signed with the project's secrets
  * (`storage.read` and `storage.write` in the protocol). The endpoint is set by an admin, not by a
  * request, so it may be on a private network.
  */
 export class HttpDriver implements StorageDriver {
     readonly #url: string;
-    readonly #secret: string;
+    readonly #secrets: SigningSecrets;
 
-    constructor(config: HttpStorageConfig, secret: string) {
+    constructor(config: HttpStorageConfig, secrets: SigningSecrets) {
         this.#url = config.url.replace(/\/+$/, '');
-        this.#secret = secret;
+        this.#secrets = secrets;
     }
 
     #location(path: string): string {
@@ -28,7 +29,7 @@ export class HttpDriver implements StorageDriver {
 
     #headers(path: string, sha256: string, jobId: string | undefined): Record<string, string> {
         return {
-            'eclair-signature': signStorageRequest(this.#secret, path, sha256),
+            'eclair-signature': signStorageRequest(this.#secrets, path, sha256),
             ...(jobId === undefined ? {} : { 'eclair-job': jobId }),
         };
     }

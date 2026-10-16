@@ -12,18 +12,30 @@ function hmac(secret: string, payload: string): string {
     return createHmac('sha256', secret).update(payload).digest('hex');
 }
 
-/** `t=<unix time>,v1=<hex HMAC-SHA256 of {t}.{payload}>`, as the protocol's `Signature`. */
+/** One secret, or the current and previous secrets of a project during a rotation (decision 0018). */
+export type SigningSecrets = string | readonly string[];
+
+/**
+ * `t=<unix time>,v1=<hex HMAC-SHA256 of {t}.{payload}>`, as the protocol's `Signature`, with one
+ * `v1` value per secret, in order.
+ */
 export function sign(
-    secret: string,
+    secrets: SigningSecrets,
     payload: string,
     timestamp = Math.floor(Date.now() / 1000),
 ): string {
-    return `t=${timestamp},v1=${hmac(secret, `${timestamp}.${payload}`)}`;
+    const values = (typeof secrets === 'string' ? [secrets] : secrets).map(
+        (secret) => `v1=${hmac(secret, `${timestamp}.${payload}`)}`,
+    );
+    if (values.length === 0) {
+        throw new Error('A signature needs at least one secret.');
+    }
+    return [`t=${timestamp}`, ...values].join(',');
 }
 
 /** The signature of a webhook: over the timestamp and the body. */
-export function signWebhook(secret: string, body: string, timestamp?: number): string {
-    return sign(secret, body, timestamp);
+export function signWebhook(secrets: SigningSecrets, body: string, timestamp?: number): string {
+    return sign(secrets, body, timestamp);
 }
 
 /**
@@ -31,12 +43,12 @@ export function signWebhook(secret: string, body: string, timestamp?: number): s
  * URL-encoded) and the SHA-256 of the body.
  */
 export function signStorageRequest(
-    secret: string,
+    secrets: SigningSecrets,
     path: string,
     bodySha256: string,
     timestamp?: number,
 ): string {
-    return sign(secret, `${path}.${bodySha256}`, timestamp);
+    return sign(secrets, `${path}.${bodySha256}`, timestamp);
 }
 
 /**
