@@ -2,37 +2,59 @@
 #
 #   cp .env.example .env    # then fill in the empty values
 #   docker compose up -d
-#   docker compose exec eclair eclair migrate
 #
-# compose.mysql.yml does the same with MySQL. Put a reverse proxy with TLS in front of the API.
+# The migrate service runs the migrations, then Eclair starts. compose.mysql.yml does the same with
+# MySQL. Put a reverse proxy with TLS in front of the API.
 
 name: eclair
 
+# What Eclair and its migrations share.
+x-eclair: &eclair
+    image: ghcr.io/urbania-media/eclair:${ECLAIR_VERSION:-latest}
+    env_file: ${ECLAIR_ENV_FILE:-.env}
+    environment:
+        DATABASE_URL: postgres://eclair:${DATABASE_PASSWORD:?set DATABASE_PASSWORD in .env}@postgres:5432/eclair
+        REDIS_URL: redis://redis:6379
+    volumes:
+        - data:/var/lib/eclair
+        - tmp:/tmp/eclair
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+
 services:
+    migrate:
+        <<: *eclair
+        command: [eclair, migrate]
+        restart: 'no'
+        depends_on:
+            postgres:
+                condition: service_healthy
+
     eclair:
-        image: ghcr.io/urbania-media/eclair:${ECLAIR_VERSION:-latest}
+        <<: *eclair
         build:
             context: ..
             dockerfile: docker/Dockerfile
         command: all
         restart: unless-stopped
-        env_file: .env
-        environment:
-            DATABASE_URL: postgres://eclair:${DATABASE_PASSWORD:?set DATABASE_PASSWORD in .env}@postgres:5432/eclair
-            REDIS_URL: redis://redis:6379
         ports:
             - 127.0.0.1:${ECLAIR_PORT:-8080}:${ECLAIR_PORT:-8080}
-        volumes:
-            - data:/var/lib/eclair
-            - tmp:/tmp/eclair
-        read_only: true
-        cap_drop: [ALL]
-        security_opt: [no-new-privileges:true]
+        healthcheck:
+            test:
+                - CMD
+                - node
+                - -e
+                - "fetch('http://127.0.0.1:' + (process.env.ECLAIR_PORT || 8080) + '/ready').then((response) => process.exit(response.ok ? 0 : 1), () => process.exit(1))"
+            interval: 10s
+            timeout: 5s
+            retries: 6
+            start_period: 30s
         # A worker finishes its running tasks when it stops.
         stop_grace_period: 5m
         depends_on:
-            postgres:
-                condition: service_healthy
+            migrate:
+                condition: service_completed_successfully
             redis:
                 condition: service_healthy
 

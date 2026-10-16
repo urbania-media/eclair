@@ -8,3 +8,4 @@
 .github
 .changeset
 docs
+**/.env.e2e

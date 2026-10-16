@@ -9,6 +9,7 @@ import { readDate } from '../database/values.ts';
 import { createId } from '../ids.ts';
 import type { Jobs } from '../jobs/jobs.ts';
 import type { JobRecord } from '../jobs/records.ts';
+import type { Metrics } from '../metrics.ts';
 import { guardedRequest } from '../net/ssrf.ts';
 import type { GuardOptions } from '../net/ssrf.ts';
 import type { Projects } from '../projects/projects.ts';
@@ -40,6 +41,7 @@ export interface WebhooksOptions {
     guard?: Pick<GuardOptions, 'allowHttp' | 'allowPrivateAddresses'>;
     /** Only for tests: the backoff between attempts. */
     backoff?: (attemptsMade: number) => number;
+    metrics?: Metrics | undefined;
 }
 
 /**
@@ -161,6 +163,9 @@ export class Webhooks {
             })
             .where('id', '=', delivery.id)
             .execute();
+        this.#options.metrics?.webhooks.inc({
+            outcome: delivered ? 'delivered' : expired ? 'failed' : 'retried',
+        });
         if (!delivered) {
             if (expired) {
                 throw new UnrecoverableError(

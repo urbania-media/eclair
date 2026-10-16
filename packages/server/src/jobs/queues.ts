@@ -86,6 +86,17 @@ export class TaskQueues {
         return (await this.#queue(capability).getJob(taskId)) !== undefined;
     }
 
+    /** Tasks in each queue, by state, for the metrics. */
+    async counts(): Promise<Record<string, Record<string, number>>> {
+        const entries = await Promise.all(
+            [...this.#queues].map(async ([capability, queue]) => [
+                capability,
+                await queue.getJobCounts('waiting', 'prioritized', 'active', 'delayed'),
+            ]),
+        );
+        return Object.fromEntries(entries) as Record<string, Record<string, number>>;
+    }
+
     async close(): Promise<void> {
         await Promise.all([...this.#queues.values()].map((queue) => queue.close()));
     }

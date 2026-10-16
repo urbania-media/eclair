@@ -70,6 +70,13 @@ jobs:
                       -v "$PWD/docker/smoke-test.sh:/smoke-test.sh:ro" \
                       "$TEST_TAG" sh /smoke-test.sh > /dev/null
 
+            # The compose files, with this image: migrations, the API and a worker, a probe and a job.
+            - name: Compose end to end
+              run: |
+                  docker tag "$TEST_TAG" ghcr.io/urbania-media/eclair:e2e
+                  ECLAIR_VERSION=e2e sh docker/e2e.sh compose.yml
+                  ECLAIR_VERSION=e2e sh docker/e2e.sh compose.mysql.yml
+
             - uses: actions/setup-node@v5
               with:
                   node-version-file: .nvmrc

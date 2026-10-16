@@ -22,6 +22,7 @@ import { createId } from '../ids.ts';
 import type { OutputRecord, TaskRecord } from '../jobs/records.ts';
 import { toOutputRecord } from '../jobs/records.ts';
 import type { Scheduler } from '../jobs/scheduler.ts';
+import type { Metrics } from '../metrics.ts';
 import type { GuardOptions } from '../net/ssrf.ts';
 import type { OperationRegistry } from '../operations/registry.ts';
 import type { Project, Projects } from '../projects/projects.ts';
@@ -65,6 +66,7 @@ export interface TaskRunnerOptions {
     guard?: Pick<GuardOptions, 'allowHttp' | 'allowPrivateAddresses'>;
     /** Sends `task.completed` webhooks, for projects with `taskWebhooks`. */
     webhooks?: Webhooks | undefined;
+    metrics?: Metrics | undefined;
 }
 
 export interface RunOptions {
@@ -241,6 +243,26 @@ export class TaskRunner {
 
     /** Runs a task. Never throws for a failure of the task: it reports it and returns the outcome. */
     async run(taskId: string, options: RunOptions): Promise<RunOutcome> {
+        const started = process.hrtime.bigint();
+        let operation = 'unknown';
+        const outcome = await this.#run(taskId, options, (key) => {
+            operation = key;
+        });
+        if (outcome !== 'ignored') {
+            this.#options.metrics?.tasks.inc({ operation, outcome });
+            this.#options.metrics?.taskDuration.observe(
+                { operation },
+                Number(process.hrtime.bigint() - started) / 1e9,
+            );
+        }
+        return outcome;
+    }
+
+    async #run(
+        taskId: string,
+        options: RunOptions,
+        onOperation: (key: string) => void,
+    ): Promise<RunOutcome> {
         const { database, scheduler, logger } = this.#options;
         const task = await this.#loadTask(taskId);
         if (task === undefined || (task.status !== 'queued' && task.status !== 'running')) {
@@ -250,6 +272,7 @@ export class TaskRunner {
         if (job === undefined || job.status === 'canceled' || job.endedAt !== undefined) {
             return 'ignored';
         }
+        onOperation(task.operation);
         const operation = this.#options.operations.resolve(task.operation);
         if (operation === undefined) {
             // A worker without this operation's plugin: another worker may have it.

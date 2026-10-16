@@ -6,6 +6,8 @@ import { pathToFileURL } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { BINARIES, loadConfig } from '../config/config.ts';
+import { HostRegistry } from '../hosts.ts';
+import { createRedis } from '../redis.ts';
 import { RUNS_WITH_REDIS, testRedisUrl } from '../testing.ts';
 import { VERSION } from '../version.ts';
 import { EXIT, runCli } from './run.ts';
@@ -132,6 +134,29 @@ describe('runCli', () => {
             stop();
             expect(await running).toBe(EXIT.ok);
             expect(api.output.stderr).toBe('');
+        },
+    );
+
+    it.runIf(RUNS_WITH_REDIS)(
+        'refuses to run on SQLite when another machine runs Eclair',
+        async () => {
+            const env = {
+                DATABASE_URL: sqliteUrl(),
+                REDIS_URL: testRedisUrl() ?? '',
+                ECLAIR_SECRET_KEY: SECRET_KEY,
+                ECLAIR_LOG_LEVEL: 'silent',
+            };
+            expect(await runCli(['migrate'], createIo(env).io)).toBe(EXIT.ok);
+            const redis = createRedis(testRedisUrl() ?? '', 'eclair-test-guard');
+            try {
+                await new HostRegistry(redis, 'another-machine').register();
+                const { io, output } = createIo(env);
+                expect(await runCli(['worker'], io)).toBe(EXIT.unavailable);
+                expect(output.stderr).toContain('Eclair also runs on another-machine');
+            } finally {
+                await redis.zrem('eclair:hosts', 'another-machine');
+                redis.disconnect();
+            }
         },
     );
 
