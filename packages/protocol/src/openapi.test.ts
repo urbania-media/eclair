@@ -48,7 +48,7 @@ describe('OpenAPI document', () => {
     });
 
     it('describes the v1 API', () => {
-        expect(Object.keys(openapi.paths)).toEqual([
+        expect(Object.keys(openapi.paths).filter((path) => path.startsWith('/v1/'))).toEqual([
             '/v1/jobs',
             '/v1/jobs/{id}',
             '/v1/jobs/{id}/cancel',
@@ -71,6 +71,34 @@ describe('OpenAPI document', () => {
             'storage.write',
             'storage.read',
         ]);
+    });
+
+    it('describes the admin API, behind the admin token', () => {
+        const admin = Object.entries(openapi.paths).filter(([path]) =>
+            path.startsWith('/admin/v1/'),
+        );
+        expect(admin.map(([path]) => path)).toEqual([
+            '/admin/v1/projects',
+            '/admin/v1/projects/{project}',
+            '/admin/v1/projects/{project}/webhook-secret',
+            '/admin/v1/projects/{project}/keys',
+            '/admin/v1/keys/{key}/revoke',
+            '/admin/v1/projects/{project}/storages',
+            '/admin/v1/projects/{project}/storages/{storage}',
+            '/admin/v1/presets',
+            '/admin/v1/presets/{name}',
+            '/admin/v1/usage',
+        ]);
+        for (const [, item] of admin) {
+            for (const [method, operation] of Object.entries(item ?? {})) {
+                if (method === 'parameters') {
+                    continue;
+                }
+                expect((operation as { security?: unknown }).security).toEqual([
+                    { adminToken: [] },
+                ]);
+            }
+        }
     });
 
     it('answers errors as problem details', () => {
