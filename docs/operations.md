@@ -79,6 +79,12 @@ A plugin is an npm package that exports one or more operations. The server loads
 
 HEIC and HEIF inputs are converted by the same operations.
 
+They run on libvips and read JPEG, PNG, WebP, GIF (the first frame), AVIF, HEIC, HEIF, TIFF and SVG. libvips' untrusted loaders (ImageMagick and the like) are blocked, except librsvg for SVG inputs, so a file is only read by the loader of its detected type. Outputs are upright, in sRGB and without metadata, and never enlarged.
+
+- `image.convert`: `format` (`webp` by default, `jpeg`, `png`, `avif`), `maxWidth`, `maxHeight` and `quality` (85 for JPEG, 80 for WebP, 50 for AVIF). Transparency is flattened on white in JPEG. Writes `image.webp`…
+- `image.thumbnail`: `sizes`, each with a `width`, a `height` or both, and a `crop` (`none` fits the size, `centre` and `attention` fill it); `format` (`jpeg` by default) and `quality`. Writes `0.jpg`, `1.jpg`…, one per size, with the role `thumbnail`. Also reads the first page of a PDF, rendered by poppler.
+- `image.palette`: the `count` (5) dominant colors, as `{ hex, ratio }` sorted by their share of the opaque pixels, and the `dominant` one, like the palette and dominant color of the mediatheque's `ColorExtractor`. Metadata only.
+
 ### Video (`@eclair-js/operations-video`)
 
 | Operation          | Output                                                                                    | 1.0 |

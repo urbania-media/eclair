@@ -19,6 +19,7 @@
         "packages/operations-audio",
         "packages/operations-document",
         "packages/operations-font",
+        "packages/operations-image",
         "packages/client",
         "packages/server"
     ],

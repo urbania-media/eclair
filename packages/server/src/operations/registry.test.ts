@@ -39,6 +39,7 @@ describe('OperationRegistry.load', () => {
         expect(registry.resolve('audio.waveform')?.key).toBe('audio.waveform@1');
         expect(registry.resolve('document.thumbnails')?.key).toBe('document.thumbnails@1');
         expect(registry.resolve('font.convert')?.key).toBe('font.convert@1');
+        expect(registry.resolve('image.palette')?.key).toBe('image.palette@1');
     });
 
     it('accepts a list or { operations }, and refuses anything else', async () => {

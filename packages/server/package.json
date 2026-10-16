@@ -43,6 +43,7 @@
         "@eclair-js/operations-core": "^0.0.0",
         "@eclair-js/operations-document": "^0.0.0",
         "@eclair-js/operations-font": "^0.0.0",
+        "@eclair-js/operations-image": "^0.0.0",
         "@eclair-js/operations-video": "^0.0.0",
         "@eclair-js/protocol": "^0.0.0",
         "@fastify/multipart": "^10.1.4",
