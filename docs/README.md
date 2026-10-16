@@ -42,6 +42,7 @@ Eclair must be:
 | [protocol.md](protocol.md)         | The HTTP API, the job format and the webhooks (draft)                 |
 | [operations.md](operations.md)     | The operation interface, the built-in operations and the AI providers |
 | [deployment.md](deployment.md)     | Docker image, configuration, one server or many                       |
+| [running.md](running.md)           | Sizing, monitoring, upgrades and incidents                            |
 | [mediatheque.md](mediatheque.md)   | `laravel-eclair` and the `laravel-mediatheque` integration            |
 | [roadmap.md](roadmap.md)           | Phases, what ships in 1.0, open questions                             |
 | [decisions/](decisions/README.md)  | Architecture decision records                                         |

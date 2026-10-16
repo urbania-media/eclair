@@ -53,7 +53,7 @@ Put a reverse proxy with TLS in front of the API. The temporary directory should
 - Workers only need the database, Redis, the temporary storage bucket and access to the project storages. They don't share a disk.
 - Each operation runs on its capability's queue. A server without a GPU never serves `gpu`, so GPU work waits for a GPU worker instead of failing.
 - The database and Redis can be managed services. Use the database you already run: **MySQL 8.4+ or PostgreSQL 15+ is required** with more than one server. SQLite can't be shared between machines, and Eclair refuses to start on SQLite when processes from several hosts use the same Redis.
-- A worker that stops gracefully (`SIGTERM`) finishes its running tasks, up to a timeout, and takes no new ones. A worker that dies has its tasks retried by another worker.
+- A worker that stops gracefully (`SIGTERM`) finishes its running tasks and takes no new ones, until the container's stop timeout. A worker that dies has its tasks retried by another worker.
 
 ## Configuration
 
@@ -101,11 +101,15 @@ Supported but not the default: install Node 24, `npm install -g @eclair-js/serve
 
 ## Upgrades
 
+See [running.md](running.md#upgrades) for rolling upgrades and rollbacks.
+
 - Read the changelog, then pull the new image.
 - Run `eclair migrate` once, from one container (the compose files do it with their `migrate` service). Migrations are additive within a major version, so old and new workers can run side by side during a rolling upgrade.
 - Restart the API, then the workers.
 
 ## Backups and monitoring
+
+See [running.md](running.md#monitoring) for the alerts to set up and what they mean.
 
 - Back up the database. With SQLite, use `VACUUM INTO` or the SQLite backup API, not a copy of the file while Eclair runs. The temporary storage doesn't need backups. Redis only holds queues and can be rebuilt by the scheduler.
 - Scrape `/metrics` with Prometheus: `eclair_queue_tasks` (by queue and state), `eclair_tasks_total` and `eclair_task_duration_seconds` (by operation and outcome), `eclair_jobs_created_total`, `eclair_webhook_deliveries_total`, and the process metrics. Keep `/metrics` off the public internet: let the reverse proxy refuse it from outside. Alert on queue wait time, task failure rate per operation, webhook delivery failures and free space in the temporary directory.
