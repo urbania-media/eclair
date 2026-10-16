@@ -74,6 +74,7 @@ COPY packages/operation/package.json packages/operation/
 COPY packages/operations-core/package.json packages/operations-core/
 COPY packages/operations-video/package.json packages/operations-video/
 COPY packages/operations-audio/package.json packages/operations-audio/
+COPY packages/operations-document/package.json packages/operations-document/
 COPY packages/client/package.json packages/client/
 COPY packages/server/package.json packages/server/
 RUN npm ci --ignore-scripts
