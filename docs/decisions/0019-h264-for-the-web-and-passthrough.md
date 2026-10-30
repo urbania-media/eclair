@@ -12,21 +12,32 @@ The first application on Eclair delivers its videos as progressive MP4 (H.264 an
 
 We measured on a 2-minute extract of that video (1080p, H.264 High at 1.7 Mbit/s, 23.976 fps), with VMAF (`vmaf_v0.6.1`) against the extract, the 720p renditions scaled back to 1080p:
 
-| 1080p                         | Video bitrate | VMAF | Time (relative) |
-| ----------------------------- | ------------- | ---- | --------------- |
-| `fast`, Main, CRF 26 (before) | 1738 kbit/s   | 93.6 | 1.0             |
-| `fast`, Main, CRF 23          | 2300 kbit/s   | 95.7 | 0.9             |
-| `medium`, High, CRF 23        | 2161 kbit/s   | 96.4 | 1.6             |
-| `slow`, High, CRF 23          | 2385 kbit/s¹  | 96.5 | 1.7             |
-| `medium`, High, CRF 21        | 2888 kbit/s¹  | 97.2 | 1.6             |
-| `medium`, High, CRF 25        | 2055 kbit/s¹  | 95.4 | 1.2             |
-| `medium`, keyframe every 4 s  | 2266 kbit/s   | 96.4 |                 |
-| `medium`, keyframe every 5 s  | 2221 kbit/s   | 96.4 |                 |
-| `medium`, keyframe every 2 s  | 2440 kbit/s   | 96.4 |                 |
+| 1080p                         | Video bitrate | VMAF |
+| ----------------------------- | ------------- | ---- |
+| `fast`, Main, CRF 26 (before) | 1738 kbit/s   | 93.6 |
+| `fast`, Main, CRF 23          | 2300 kbit/s   | 95.7 |
+| `medium`, High, CRF 23        | 2161 kbit/s   | 96.4 |
+| `slow`, High, CRF 23          | 2385 kbit/s¹  | 96.5 |
+| `medium`, High, CRF 21        | 2888 kbit/s¹  | 97.2 |
+| `medium`, High, CRF 25        | 2055 kbit/s¹  | 95.4 |
+| `medium`, keyframe every 4 s  | 2266 kbit/s   | 96.4 |
+| `medium`, keyframe every 5 s  | 2221 kbit/s   | 96.4 |
+| `medium`, keyframe every 2 s  | 2440 kbit/s   | 96.4 |
 
 ¹ With a keyframe every 2 seconds.
 
 At 720p, `medium` with a keyframe every 4 seconds gives 1274 kbit/s at VMAF 90.4, against 1246 kbit/s at 89.5 for `fast` and Main. Scaling down to 720p alone costs about 5 points: a near-lossless 720p (CRF 10) scores 95.2.
+
+Then on the whole video, and on a 2-minute source that has to be encoded (the extract in HEVC Main 10 at 10 Mbit/s), with this change's `video.transcode` (`passthrough: true`, the new defaults) against the previous one, both with `quality: 23` as laravel-eclair sends it, on one machine (Apple M1 Max):
+
+| Source             | Rendition | Before                     | After                                 |
+| ------------------ | --------- | -------------------------- | ------------------------------------- |
+| H.264, 14 min 40 s | 1080p     | 308.1 MB, 215 s, VMAF 95.8 | copied: 233.9 MB, 0.7 s, same packets |
+| H.264, 14 min 40 s | 720p      | 172.3 MB, 137 s, VMAF 89.3 | 167.4 MB, 179 s, VMAF 90.1            |
+| HEVC 10-bit, 2 min | 1080p     | 35.4 MB, 33 s, VMAF 95.3   | 34.6 MB, 39 s, VMAF 96.0              |
+| HEVC 10-bit, 2 min | 720p      | 19.8 MB, 52 s², VMAF 89.5  | 19.9 MB, 35 s, VMAF 90.3              |
+
+² An outlier: the 720p is otherwise faster than the 1080p.
 
 Sources for what players need:
 
@@ -38,7 +49,7 @@ Sources for what players need:
 
 **H.264's defaults are for progressive playback on the web**:
 
-- **`medium` preset.** 6 % smaller than `fast` at a higher quality, for 1.6 times the time. `slow` gains nothing more on this content and picks level 5.0 for 1080p, which some phones refuse.
+- **`medium` preset.** Smaller than `fast` (6 % on the extract, 3 % on the whole 720p) at a higher quality (0.7 to 0.8 points of VMAF), for 1.2 to 1.3 times the time. `slow` gains nothing more on this content and picks level 5.0 for 1080p, which some phones refuse.
 - **High profile**, at the level x264 picks from the size and frame rate (4.0 for 1080p at up to 30 fps).
 - **CRF 23**, x264's default and the mediatheque 2 `ffmpeg` driver's. CRF 26 saves a quarter of the bits for 2 points of VMAF less; CRF 21 costs 18 % more for 0.7 more.
 - **A maximum bitrate from the output's size**, when `maxBitrate` isn't given: 1000 kbit/s up to 640 × 360, 2000 up to 960 × 540, 3000 up to 1280 × 720, 6000 up to 1920 × 1080, 10 000 up to 2560 × 1440, 16 000 above, and half again above 30 fps. It is Apple's ladder, used as a ceiling: CRF 23 stays under it on most content, and only grain or fast motion reaches it. The buffer is twice the rate, so peaks stay at most twice the average. It follows the output, not the request: a 720p video asked at 1080p gets the 720p ceiling.
@@ -62,6 +73,6 @@ The other codecs keep their defaults. The `mediatheque/video` preset gets the ne
 
 - A web-ready upload takes seconds instead of minutes, and keeps its quality and size. Applications that want a rendition of every video turn `passthrough` on.
 - A copied video keeps its encoder's choices: its keyframe interval in particular, which can be longer than 4 seconds. Seeking in it reads more.
-- Encoding takes about 1.6 times as long as before, for smaller files at a higher quality.
+- Encoding takes 1.2 to 1.3 times as long as before, for smaller files at a higher quality. A web-ready upload in 1080p and 720p takes about half the time it took, since only the 720p is encoded.
 - A source of 720p or smaller asked at 1080p and at 720p gives the same file twice: copied twice when it fits, encoded twice when it doesn't. A condition on the size of the input would avoid it; it is not in the protocol's `when`, and an application can test the probe's size before it sends the job.
 - The mediatheque 2 `ffmpeg` driver has the same option and defaults ([folkloreinc/laravel-mediatheque#152](https://github.com/folkloreinc/laravel-mediatheque/issues/152)), so a pipeline gives the same renditions on both.
