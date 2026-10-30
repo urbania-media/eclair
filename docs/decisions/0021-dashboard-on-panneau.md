@@ -1,6 +1,6 @@
 # 0021. The dashboard is a Panneau 5 app, served by Eclair
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-10-30
 
 ## Context
