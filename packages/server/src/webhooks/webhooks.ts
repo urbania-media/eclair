@@ -32,6 +32,15 @@ interface DeliveryMessage {
     deliveryId: string;
 }
 
+/** A `task.progress` webhook: not recorded, attempted once (decision 0020). */
+interface ProgressMessage {
+    deliveryId: string;
+    projectId: string;
+    jobId: string;
+    task: string;
+    url: string;
+}
+
 export interface WebhooksOptions {
     database: Database;
     projects: Projects;
@@ -47,17 +56,18 @@ export interface WebhooksOptions {
 /**
  * Webhooks: a signed `POST` of the job to its webhook URL when it ends, or when a task completes
  * for projects that ask (see the protocol). Deliveries go through the SSRF guard, are recorded in
- * `webhook_deliveries`, and are retried with backoff for 24 hours.
+ * `webhook_deliveries`, and are retried with backoff for 24 hours. The `task.progress` webhooks
+ * of the projects that ask are neither recorded nor retried (decision 0020).
  */
 export class Webhooks {
     readonly #options: WebhooksOptions;
-    readonly #queue: Queue<DeliveryMessage>;
+    readonly #queue: Queue<DeliveryMessage | ProgressMessage>;
     #jobs: Jobs | undefined;
-    #worker: Worker<DeliveryMessage> | undefined;
+    #worker: Worker<DeliveryMessage | ProgressMessage> | undefined;
 
     constructor(options: WebhooksOptions) {
         this.#options = options;
-        this.#queue = new Queue<DeliveryMessage>(WEBHOOK_QUEUE, {
+        this.#queue = new Queue<DeliveryMessage | ProgressMessage>(WEBHOOK_QUEUE, {
             connection: options.connection,
             prefix: REDIS_PREFIX,
         });
@@ -102,6 +112,70 @@ export class Webhooks {
                 removeOnFail: true,
             },
         );
+    }
+
+    /**
+     * Queues the `task.progress` webhook of a running task, attempted once. Does nothing for a
+     * job without a webhook URL.
+     */
+    async sendProgress(job: JobRecord, task: string): Promise<void> {
+        if (job.webhookUrl === undefined) {
+            return;
+        }
+        const id = createId('delivery');
+        await this.#queue.add(
+            'progress',
+            { deliveryId: id, projectId: job.projectId, jobId: job.id, task, url: job.webhookUrl },
+            { jobId: id, attempts: 1, removeOnComplete: true, removeOnFail: true },
+        );
+    }
+
+    /**
+     * Sends a `task.progress` webhook, unless its task ended since: its completion supersedes it.
+     * Never throws, so that it is never retried.
+     */
+    async deliverProgress(message: ProgressMessage): Promise<void> {
+        const { projects, logger } = this.#options;
+        if (this.#jobs === undefined) {
+            throw new Error('The webhooks have no jobs to send.');
+        }
+        const job = await this.#jobs.get(message.projectId, message.jobId);
+        if (job.tasks[message.task]?.status !== 'running') {
+            return;
+        }
+        const body = JSON.stringify(job);
+        const secrets = await projects.signingSecrets(message.projectId);
+
+        let status: number | undefined;
+        try {
+            const response = await guardedRequest(message.url, {
+                ...this.#options.guard,
+                method: 'POST',
+                body,
+                headers: {
+                    'content-type': 'application/json',
+                    'user-agent': 'Eclair',
+                    'eclair-event': 'task.progress',
+                    'eclair-delivery': message.deliveryId,
+                    'eclair-task': message.task,
+                    'eclair-signature': signWebhook(secrets, body),
+                },
+                headersTimeout: 10_000,
+                bodyTimeout: 10_000,
+            });
+            status = response.statusCode;
+            await response.body.dump();
+        } catch (error) {
+            logger.warn(
+                { delivery: message.deliveryId, error: (error as Error).message },
+                'Progress webhook not delivered',
+            );
+        }
+        const delivered = status !== undefined && status >= 200 && status < 300;
+        this.#options.metrics?.webhooks.inc({
+            event: 'task.progress',
+            outcome: delivered ? 'delivered' : 'dropped',
+        });
     }
 
     /** Sends one delivery. Throws to have BullMQ try again later. */
@@ -164,6 +238,7 @@ export class Webhooks {
             .where('id', '=', delivery.id)
             .execute();
         this.#options.metrics?.webhooks.inc({
+            event: delivery.event,
             outcome: delivered ? 'delivered' : expired ? 'failed' : 'retried',
         });
         if (!delivered) {
@@ -182,9 +257,12 @@ export class Webhooks {
 
     /** Starts sending the queued deliveries, in a process that runs the API. */
     async start(concurrency = 10): Promise<void> {
-        this.#worker = new Worker<DeliveryMessage>(
+        this.#worker = new Worker<DeliveryMessage | ProgressMessage>(
             WEBHOOK_QUEUE,
-            (job: BullJob<DeliveryMessage>) => this.deliver(job.data.deliveryId),
+            (job: BullJob<DeliveryMessage | ProgressMessage>) =>
+                job.name === 'progress' && 'task' in job.data
+                    ? this.deliverProgress(job.data)
+                    : this.deliver(job.data.deliveryId),
             {
                 connection: this.#options.connection,
                 prefix: REDIS_PREFIX,

@@ -32,8 +32,8 @@ export class Metrics {
 
     readonly webhooks = new Counter({
         name: 'eclair_webhook_deliveries_total',
-        help: 'Webhook attempts from this process, by outcome.',
-        labelNames: ['outcome'],
+        help: 'Webhook attempts from this process, by event and outcome.',
+        labelNames: ['event', 'outcome'],
         registers: [this.registry],
     });
 

@@ -222,6 +222,83 @@ describe.skipIf(!RUNS_WITH_REDIS)('webhooks, events and probes', () => {
         });
     });
 
+    describe('progress webhooks', () => {
+        /** A job whose probe runs, at 40 %. */
+        async function runningJob() {
+            const job = await createJob();
+            await services.database.kysely
+                .updateTable('tasks')
+                .set({ status: 'running', started_at: new Date(), progress: 0.4 })
+                .where('job_id', '=', job.id)
+                .execute();
+            const record = await services.scheduler?.loadJob(job.id);
+            if (record === undefined) {
+                throw new Error('No job.');
+            }
+            return record;
+        }
+
+        const progressOf = (jobId: string) =>
+            received.filter(
+                (delivery) =>
+                    delivery.headers['eclair-event'] === 'task.progress' &&
+                    (JSON.parse(delivery.body) as { id: string }).id === jobId,
+            );
+
+        it('send the job, signed, with the task that runs, without recording it', async () => {
+            const job = await runningJob();
+            await services.webhooks?.sendProgress(job, 'probe');
+            const [delivery] = await until(
+                async () => progressOf(job.id),
+                (deliveries) => deliveries.length > 0,
+            );
+            expect(delivery?.headers['eclair-task']).toBe('probe');
+            expect(delivery?.headers['eclair-delivery']).toMatch(/^whd_/);
+            const secret = await services.projects.webhookSecret(project.id);
+            expect(
+                verifySignature(
+                    String(delivery?.headers['eclair-signature']),
+                    secret,
+                    delivery?.body ?? '',
+                ),
+            ).toBe(true);
+            const body = JSON.parse(delivery?.body ?? '{}') as unknown;
+            expect(validate('Job', body).valid).toBe(true);
+            expect(body).toMatchObject({ tasks: { probe: { status: 'running', progress: 0.4 } } });
+
+            const rows = await services.database.kysely
+                .selectFrom('webhook_deliveries')
+                .select('id')
+                .where('job_id', '=', job.id)
+                .execute();
+            expect(rows).toEqual([]);
+        });
+
+        it('are attempted once', async () => {
+            const job = await runningJob();
+            answers.push(500);
+            await services.webhooks?.sendProgress(job, 'probe');
+            await until(
+                async () => progressOf(job.id),
+                (deliveries) => deliveries.length > 0,
+            );
+            await new Promise((resolve) => setTimeout(resolve, 300));
+            expect(progressOf(job.id)).toHaveLength(1);
+        });
+
+        it('are not sent once the task has ended', async () => {
+            const job = await runningJob();
+            await services.database.kysely
+                .updateTable('tasks')
+                .set({ status: 'completed', ended_at: new Date() })
+                .where('job_id', '=', job.id)
+                .execute();
+            await services.webhooks?.sendProgress(job, 'probe');
+            await new Promise((resolve) => setTimeout(resolve, 300));
+            expect(progressOf(job.id)).toEqual([]);
+        });
+    });
+
     describe('GET /v1/jobs/{id}/events', () => {
         it('streams the current statuses, then the changes, until the job ends', async () => {
             const job = await createJob();

@@ -48,6 +48,7 @@ Scrape `/metrics` of every API and worker process with Prometheus, from inside y
 | Tasks slow down          | The 95th percentile of `eclair_task_duration_seconds` for one `operation`                  | Larger inputs, or a server short of CPU, memory or disk speed                                                            |
 | Webhooks give up         | `eclair_webhook_deliveries_total{outcome="failed"}` increases                              | An application didn't accept a webhook for 24 hours: see [Webhooks fail](#webhooks-fail)                                 |
 | Webhooks are retried     | The rate of `eclair_webhook_deliveries_total{outcome="retried"}`                           | An application's webhook route is down or refuses the signature                                                          |
+| Progress is dropped      | The rate of `eclair_webhook_deliveries_total{event="task.progress",outcome="dropped"}`     | An application with `progressWebhooks` refuses them: its route may not know the event yet. Nothing is retried            |
 | The temporary disk fills | Free space of `ECLAIR_TMP_DIR` and of the local temporary storage (from the node exporter) | Too many large tasks at once, or a retention too long: see [The disk is full](#the-disk-is-full)                         |
 | Eclair is not ready      | `/ready` answers `503`                                                                     | The database or Redis is unreachable                                                                                     |
 
