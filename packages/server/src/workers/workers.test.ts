@@ -20,6 +20,8 @@ import { ProjectSlots } from './slots.ts';
 import { TaskWorkers } from './workers.ts';
 
 const empty = Type.Object({}, { additionalProperties: false });
+/** A ThumbHash, as an operation gives it to a file. */
+const HASH = '1QcSHQRnh493V4dIh4eXh1h4kJUI';
 let flakyRuns = 0;
 let running = 0;
 let mostRunning = 0;
@@ -39,7 +41,7 @@ const operations = [
             const path = join(context.workdir, 'copy.txt');
             await copyFile(context.input.path, path);
             context.progress(0.5);
-            context.output('copy.txt', path, { mime: 'text/plain', role: 'main' });
+            context.output('copy.txt', path, { mime: 'text/plain', role: 'main', thumbhash: HASH });
             return { metadata: { size: context.input.size, kind: context.input.kind } };
         },
     }),
@@ -61,6 +63,22 @@ const operations = [
             const path = join(context.workdir, 'shout.txt');
             await writeFile(path, stdout);
             context.output('shout.txt', path);
+            return {};
+        },
+    }),
+    defineOperation({
+        name: 'test.placeholder',
+        version: 1,
+        description: 'Gives its file a placeholder that is not a ThumbHash',
+        accepts: {},
+        capability: 'cpu',
+        binaries: [],
+        options: empty,
+        outputs: { files: true, metadata: false },
+        async run(context) {
+            const path = join(context.workdir, 'copy.txt');
+            await copyFile(context.input.path, path);
+            context.output('copy.txt', path, { thumbhash: 'not a "hash"' });
             return {};
         },
     }),
@@ -283,11 +301,13 @@ describe.skipIf(!RUNS_WITH_REDIS)('workers', () => {
             },
         });
         expect(done.startedAt).toBeDefined();
+        expect(done.tasks['shout']?.outputs?.files?.[0]).not.toHaveProperty('thumbhash');
         expect(done.tasks['copy']?.outputs?.files?.[0]).toMatchObject({
             path: `jobs/${job.id}/copy/copy.txt`,
             role: 'main',
             mime: 'text/plain',
             checksum: expect.stringMatching(/^[0-9a-f]{64}$/),
+            thumbhash: HASH,
             expiresAt: expect.any(String),
             // A local temporary storage: a signed link on ECLAIR_PUBLIC_URL.
             url: expect.stringMatching(/^https:\/\/eclair\.test\/v1\/files\/[\w-]+\.[\w-]+$/),
@@ -350,6 +370,18 @@ describe.skipIf(!RUNS_WITH_REDIS)('workers', () => {
                 },
                 after: { status: 'failed', error: { code: 'dependency_failed' } },
             },
+        });
+    });
+
+    it('fails a task that gives a file a placeholder that is not a ThumbHash', async () => {
+        const { job } = await (services.jobs as NonNullable<Services['jobs']>).create(project, {
+            input: await input('b.txt', 'b'),
+            tasks: { placeholder: { op: 'test.placeholder', keep: false } },
+        });
+        const done = await waitForJob(project.id, job.id);
+        expect(done.tasks['placeholder']).toMatchObject({
+            status: 'failed',
+            error: { code: 'operation_failed' },
         });
     });
 

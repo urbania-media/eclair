@@ -2,7 +2,13 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { Type } from 'typebox';
 
-import { defineOperation, ffmpegInput, ffmpegProgress } from '@eclair-js/operation';
+import {
+    defineOperation,
+    ffmpegInput,
+    ffmpegProgress,
+    thumbhash,
+    thumbhashOption,
+} from '@eclair-js/operation';
 import type { OperationContext } from '@eclair-js/operation';
 
 import { FRAME_FORMATS, extractFrame, frameOptions, lastFrameTime, readVideo } from './media.ts';
@@ -47,6 +53,7 @@ const ThumbnailsOptions = Type.Object(
                 'Frames at the `count` clearest scene changes, instead of even intervals. Reads the whole video.',
         }),
         ...frameOptions,
+        ...thumbhashOption,
     },
     { additionalProperties: false },
 );
@@ -118,7 +125,7 @@ export const thumbnails = defineOperation({
         'Frames at even intervals, at given times, every few seconds, or at scene changes, as JPEG, PNG or WebP.',
     accepts: { kinds: ['video'] },
     capability: 'video',
-    binaries: ['ffprobe', 'ffmpeg'],
+    binaries: ['ffprobe', 'ffmpeg', 'vips'],
     options: ThumbnailsOptions,
     outputs: { files: true, metadata: true },
 
@@ -151,7 +158,11 @@ export const thumbnails = defineOperation({
             const name = `${index}.${extension}`;
             const path = join(context.workdir, name);
             size = await extractFrame(context, video, time, path, options);
-            context.output(name, path, { mime, role: 'thumbnail' });
+            context.output(name, path, {
+                mime,
+                role: 'thumbnail',
+                thumbhash: options.thumbhash ? await thumbhash(context, path) : undefined,
+            });
             context.progress(start + ((1 - start) * (index + 1)) / times.length);
         }
         return {

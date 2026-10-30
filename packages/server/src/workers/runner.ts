@@ -82,6 +82,9 @@ export interface RunOptions {
     onProgress?: (progress: number) => void;
 }
 
+/** A ThumbHash in base64, as `OutputFile.thumbhash` allows it. */
+const THUMBHASH_PATTERN = /^[A-Za-z0-9+/]+={0,2}$/;
+
 interface DeclaredFile extends OutputOptions {
     name: string;
     path: string;
@@ -631,6 +634,16 @@ export class TaskRunner {
                         `${operation.key} declared a file outside its work directory.`,
                     );
                 }
+                if (
+                    outputOptions?.thumbhash !== undefined &&
+                    (outputOptions.thumbhash.length > 64 ||
+                        !THUMBHASH_PATTERN.test(outputOptions.thumbhash))
+                ) {
+                    throw new OperationError(
+                        'operation_failed',
+                        `${operation.key} gave ${name} a placeholder that isn't a ThumbHash.`,
+                    );
+                }
                 files.push({ name: checkOutputName(name), path: full, ...outputOptions });
             },
         };
@@ -707,6 +720,7 @@ export class TaskRunner {
                 size: info.size,
                 checksum: info.sha256,
                 role: file.role ?? null,
+                data: file.thumbhash === undefined ? null : toJson({ thumbhash: file.thumbhash }),
                 expires_at: expiresAt ?? null,
                 expired: false,
                 created_at: new Date(),

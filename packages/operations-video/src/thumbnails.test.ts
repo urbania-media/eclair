@@ -111,4 +111,16 @@ describe.skipIf(skipWithoutBinaries(thumbnails.binaries))('video.thumbnails', ()
             await result.cleanup();
         }
     });
+
+    it('adds a ThumbHash placeholder to each frame when asked', async () => {
+        const result = await runOn(thumbnails, 'video.mp4', { count: 2, thumbhash: true });
+        try {
+            expect(result.files).toHaveLength(2);
+            for (const file of result.files) {
+                expect(file.thumbhash).toMatch(/^[A-Za-z0-9+/]+={0,2}$/);
+            }
+        } finally {
+            await result.cleanup();
+        }
+    });
 });

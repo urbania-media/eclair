@@ -23,6 +23,8 @@ export interface OutputOptions {
     mime?: string;
     /** What the file is to the application: `main`, `segment`, `poster`… */
     role?: string;
+    /** The ThumbHash placeholder of an image file, in base64, from `thumbhash()`. */
+    thumbhash?: string | undefined;
 }
 
 export interface OperationLogger {

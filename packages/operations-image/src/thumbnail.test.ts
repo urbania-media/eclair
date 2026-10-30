@@ -69,4 +69,20 @@ describe.skipIf(skipWithoutBinaries(thumbnail.binaries))('image.thumbnail', () =
             runOn(thumbnail, 'photo.jpg', { sizes: [{ width: 10, crop: 'centre' }] }),
         ).rejects.toMatchObject({ code: 'operation_failed' });
     });
+
+    it('adds a ThumbHash placeholder to each thumbnail when asked', async () => {
+        const result = await runOn(thumbnail, 'palette.png', {
+            sizes: [{ width: 64 }, { width: 32, height: 32, crop: 'centre' }],
+            format: 'webp',
+            thumbhash: true,
+        });
+        try {
+            expect(result.files).toHaveLength(2);
+            for (const file of result.files) {
+                expect(file.thumbhash).toMatch(/^[A-Za-z0-9+/]+={0,2}$/);
+            }
+        } finally {
+            await result.cleanup();
+        }
+    });
 });

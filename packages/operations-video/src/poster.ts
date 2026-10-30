@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import { Type } from 'typebox';
 
-import { defineOperation } from '@eclair-js/operation';
+import { defineOperation, thumbhash, thumbhashOption } from '@eclair-js/operation';
 
 import { FRAME_FORMATS, extractFrame, frameOptions, lastFrameTime, readVideo } from './media.ts';
 
@@ -18,6 +18,7 @@ const PosterOptions = Type.Object(
             }),
         ),
         ...frameOptions,
+        ...thumbhashOption,
     },
     { additionalProperties: false },
 );
@@ -37,7 +38,7 @@ export const poster = defineOperation({
     description: 'One representative frame, or the frame at a given time, as JPEG, PNG or WebP.',
     accepts: { kinds: ['video'] },
     capability: 'video',
-    binaries: ['ffprobe', 'ffmpeg'],
+    binaries: ['ffprobe', 'ffmpeg', 'vips'],
     options: PosterOptions,
     outputs: { files: true, metadata: true },
 
@@ -57,7 +58,11 @@ export const poster = defineOperation({
                 ? { filters: ['fps=2', `thumbnail=${WINDOW * 2}`] }
                 : {}),
         });
-        context.output(name, path, { mime, role: 'poster' });
+        context.output(name, path, {
+            mime,
+            role: 'poster',
+            thumbhash: options.thumbhash ? await thumbhash(context, path) : undefined,
+        });
         return { metadata: { width: size.width, height: size.height } };
     },
 });

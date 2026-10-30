@@ -93,4 +93,20 @@ describe.skipIf(skipWithoutBinaries(thumbnails.binaries))('document.thumbnails',
             code: 'input_unreadable',
         });
     });
+
+    it('adds a ThumbHash placeholder to each page when asked', async () => {
+        const result = await runOn(thumbnails, 'document.pdf', {
+            count: 2,
+            resolution: 36,
+            thumbhash: true,
+        });
+        try {
+            expect(result.files.length).toBeGreaterThan(0);
+            for (const file of result.files) {
+                expect(file.thumbhash).toMatch(/^[A-Za-z0-9+/]+={0,2}$/);
+            }
+        } finally {
+            await result.cleanup();
+        }
+    });
 });

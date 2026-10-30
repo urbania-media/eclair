@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import { Type } from 'typebox';
 
-import { OperationError, defineOperation } from '@eclair-js/operation';
+import { OperationError, defineOperation, thumbhash, thumbhashOption } from '@eclair-js/operation';
 import type { OperationContext } from '@eclair-js/operation';
 
 /** The most pages one task renders. */
@@ -56,6 +56,7 @@ const ThumbnailsOptions = Type.Object(
             default: 100,
             description: 'JPEG quality, from 1 to 100.',
         }),
+        ...thumbhashOption,
     },
     { additionalProperties: false },
 );
@@ -129,7 +130,7 @@ export const thumbnails = defineOperation({
         'One JPEG or PNG image per page of a PDF, or for some pages, at a resolution or within a size.',
     accepts: { mimes: ['application/pdf'] },
     capability: 'cpu',
-    binaries: ['pdfinfo', 'pdftoppm'],
+    binaries: ['pdfinfo', 'pdftoppm', 'vips'],
     options: ThumbnailsOptions,
     outputs: { files: true, metadata: true },
 
@@ -185,7 +186,12 @@ export const thumbnails = defineOperation({
                 join(context.workdir, String(index)),
             ]);
             const name = `${index}.${extension}`;
-            context.output(name, join(context.workdir, name), { mime, role: 'thumbnail' });
+            const path = join(context.workdir, name);
+            context.output(name, path, {
+                mime,
+                role: 'thumbnail',
+                thumbhash: options.thumbhash ? await thumbhash(context, path) : undefined,
+            });
             context.progress((index + 1) / pages.length);
         }
         return {

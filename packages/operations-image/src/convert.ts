@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import { Type } from 'typebox';
 
-import { defineOperation } from '@eclair-js/operation';
+import { defineOperation, thumbhash, thumbhashOption } from '@eclair-js/operation';
 
 import {
     FORMATS,
@@ -31,6 +31,7 @@ const ConvertOptions = Type.Object(
             }),
         ),
         quality: Quality,
+        ...thumbhashOption,
     },
     { additionalProperties: false },
 );
@@ -61,7 +62,11 @@ export const convert = defineOperation({
             vipsTarget(path, options.format, options.quality),
             { width: options.maxWidth, height: options.maxHeight },
         );
-        context.output(name, path, { mime, role: 'main' });
+        context.output(name, path, {
+            mime,
+            role: 'main',
+            thumbhash: options.thumbhash ? await thumbhash(context, path) : undefined,
+        });
         return { metadata: { ...(await imageSize(context, path, options.format)) } };
     },
 });

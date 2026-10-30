@@ -101,4 +101,16 @@ describe.skipIf(skipWithoutBinaries(convert.binaries))('image.convert', () => {
             await result.cleanup();
         }
     });
+
+    it('adds a ThumbHash placeholder to the image when asked', async () => {
+        const plain = await runOn(convert, 'photo.jpg', { maxWidth: 100 });
+        const result = await runOn(convert, 'photo.jpg', { maxWidth: 100, thumbhash: true });
+        try {
+            expect(plain.files[0]?.thumbhash).toBeUndefined();
+            expect(result.files[0]?.thumbhash).toMatch(/^[A-Za-z0-9+/]+={0,2}$/);
+        } finally {
+            await plain.cleanup();
+            await result.cleanup();
+        }
+    });
 });

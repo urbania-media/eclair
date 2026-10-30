@@ -8,6 +8,7 @@ export { execBinary } from './exec.ts';
 export { FFMPEG_DEMUXERS, ffmpegInput, ffmpegProgress } from './ffmpeg.ts';
 export type { ExecOptions, ExecResult } from './exec.ts';
 export { acceptsInput, defineOperation } from './operation.ts';
+export { thumbhash, thumbhashOption } from './thumbhash.ts';
 export type {
     JsonSchemaObject,
     Operation,
