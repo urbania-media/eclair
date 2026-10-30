@@ -24,3 +24,4 @@ Architecture decision records for Eclair. Each record is short: context, decisio
 | [0018](0018-webhook-secret-grace-period.md)        | The previous webhook secret stays valid for a grace period         | Accepted                                                                |
 | [0019](0019-h264-for-the-web-and-passthrough.md)   | H.264 for progressive playback on the web, and `passthrough`       | Proposed                                                                |
 | [0020](0020-progress-webhooks.md)                  | Progress webhooks for running tasks                                | Accepted                                                                |
+| [0021](0021-dashboard-on-panneau.md)               | The dashboard is a Panneau 5 app, served by Eclair                 | Proposed                                                                |

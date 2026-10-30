@@ -42,6 +42,7 @@ The operations that `laravel-mediatheque` runs today, with the same outputs:
 - The `eclair` transcoder and prober of the `laravel-mediatheque` 2.x `Transcoder` contract, in `laravel-eclair` ([decision 0017](decisions/0017-mediatheque-2-transcoder-first.md)).
 - Deploy a shared Eclair and move Niche, the pilot application, to it through the 2.x transcoder, one type at a time.
 - Operations guide: sizing, monitoring, upgrades, incidents.
+- Operations dashboard on Panneau 5, served at `/dashboard` ([decision 0021](decisions/0021-dashboard-on-panneau.md), #77).
 
 ## Phase 4: AI and advanced operations
 
