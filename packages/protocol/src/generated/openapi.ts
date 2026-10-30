@@ -143,7 +143,7 @@ export interface paths {
         put?: never;
         /**
          * Probe a file
-         * @description Returns the file's metadata in the response, as the `probe` operation does. The input is a URL, a storage path or an upload (JSON body), or the file itself. The file, as `multipart/form-data` (a `file` part) or as the raw body with its `Content-Type`. With a file body, `timeout` and `checksum` are query parameters.
+         * @description Returns the file's metadata in the response, as the `probe` operation does. The input is a URL, a storage path or an upload (JSON body), or the file itself. The file, as `multipart/form-data` (a `file` part) or as the raw body with its `Content-Type`. With a file body, `timeout`, `checksum` and `thumbhash` are query parameters.
          */
         post: operations["probe"];
         delete?: never;
@@ -996,6 +996,8 @@ export interface components {
             exif?: {
                 [key: string]: unknown;
             };
+            /** @description A ThumbHash placeholder (https://evanw.github.io/thumbhash/) of an image other than SVG, in base64, when asked for: its first frame, upright, in sRGB, fitted in 100×100. Missing when the image can't be decoded. */
+            thumbhash?: string;
         };
         ProbeRequest: {
             input: components["schemas"]["Input"];
@@ -1009,6 +1011,11 @@ export interface components {
              * @default false
              */
             checksum?: boolean;
+            /**
+             * @description Add a ThumbHash placeholder of an image other than SVG. It decodes the image, so it can take longer.
+             * @default false
+             */
+            thumbhash?: boolean;
         };
         ProbeResult: {
             metadata: components["schemas"]["ProbeMetadata"];
@@ -1572,6 +1579,8 @@ export interface operations {
                 timeout?: number;
                 /** @description With a file body: add a SHA-256 of the whole file. */
                 checksum?: boolean;
+                /** @description With a file body: add a ThumbHash placeholder of an image. */
+                thumbhash?: boolean;
             };
             header?: never;
             path?: never;

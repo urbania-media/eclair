@@ -413,7 +413,7 @@
                 "operationId": "probe",
                 "tags": ["Probe"],
                 "summary": "Probe a file",
-                "description": "Returns the file's metadata in the response, as the `probe` operation does. The input is a URL, a storage path or an upload (JSON body), or the file itself. The file, as `multipart/form-data` (a `file` part) or as the raw body with its `Content-Type`. With a file body, `timeout` and `checksum` are query parameters.",
+                "description": "Returns the file's metadata in the response, as the `probe` operation does. The input is a URL, a storage path or an upload (JSON body), or the file itself. The file, as `multipart/form-data` (a `file` part) or as the raw body with its `Content-Type`. With a file body, `timeout`, `checksum` and `thumbhash` are query parameters.",
                 "security": [
                     {
                         "apiKey": ["jobs:write"]
@@ -435,6 +435,15 @@
                         "name": "checksum",
                         "in": "query",
                         "description": "With a file body: add a SHA-256 of the whole file.",
+                        "schema": {
+                            "type": "boolean",
+                            "default": false
+                        }
+                    },
+                    {
+                        "name": "thumbhash",
+                        "in": "query",
+                        "description": "With a file body: add a ThumbHash placeholder of an image.",
                         "schema": {
                             "type": "boolean",
                             "default": false
@@ -2938,6 +2947,12 @@
                         "description": "A summary of the EXIF data. GPS data is never included.",
                         "type": "object",
                         "additionalProperties": true
+                    },
+                    "thumbhash": {
+                        "description": "A ThumbHash placeholder (https://evanw.github.io/thumbhash/) of an image other than SVG, in base64, when asked for: its first frame, upright, in sRGB, fitted in 100×100. Missing when the image can't be decoded.",
+                        "type": "string",
+                        "pattern": "^[A-Za-z0-9+/]+={0,2}$",
+                        "maxLength": 64
                     }
                 }
             },
@@ -2958,6 +2973,11 @@
                     },
                     "checksum": {
                         "description": "Add a SHA-256 of the whole file. It reads all of it, so it can take longer.",
+                        "type": "boolean",
+                        "default": false
+                    },
+                    "thumbhash": {
+                        "description": "Add a ThumbHash placeholder of an image other than SVG. It decodes the image, so it can take longer.",
                         "type": "boolean",
                         "default": false
                     }
