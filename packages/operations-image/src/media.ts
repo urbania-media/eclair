@@ -3,7 +3,10 @@ import { Type } from 'typebox';
 import { OperationError } from '@eclair-js/operation';
 import type { OperationContext } from '@eclair-js/operation';
 
-/** Image types the operations read, with libvips. GIFs are read at their first frame. */
+/**
+ * Image types the operations read, with libvips. GIFs are read at their first frame, HEIC and HEIF
+ * sequences at their primary image.
+ */
 export const IMAGE_MIMES = [
     'image/jpeg',
     'image/png',
@@ -12,6 +15,8 @@ export const IMAGE_MIMES = [
     'image/avif',
     'image/heic',
     'image/heif',
+    'image/heic-sequence',
+    'image/heif-sequence',
     'image/tiff',
     'image/svg+xml',
 ];

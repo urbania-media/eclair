@@ -172,7 +172,7 @@ export async function uploadRoutes(
     const runProbe = (
         project: Project,
         input: Input,
-        options: { timeout: number; checksum: boolean },
+        options: { timeout: number; checksum: boolean; thumbhash?: boolean },
     ) => {
         if (probes === undefined) {
             throw new HttpProblem(503, 'Service Unavailable', {
@@ -189,6 +189,7 @@ export async function uploadRoutes(
         let input: Input;
         let timeout: number;
         let checksum: boolean;
+        let thumbhash: boolean;
         if (request.headers['content-type']?.split(';')[0]?.trim() === 'application/json') {
             const result = validate('ProbeRequest', await readJsonBody(request.raw));
             if (!result.valid) {
@@ -200,13 +201,15 @@ export async function uploadRoutes(
             input = result.value.input;
             timeout = result.value.timeout ?? 10;
             checksum = result.value.checksum ?? false;
+            thumbhash = result.value.thumbhash ?? false;
         } else {
             timeout = probeTimeout(query['timeout']);
             checksum = flag(query['checksum']);
+            thumbhash = flag(query['thumbhash']);
             input = { upload: (await storeBody(request, project)).id };
         }
 
-        const outcome = await runProbe(project, input, { timeout, checksum });
+        const outcome = await runProbe(project, input, { timeout, checksum, thumbhash });
         if (outcome.status === 'completed') {
             return reply.code(200).send({ metadata: outcome.metadata } satisfies ProbeResult);
         }

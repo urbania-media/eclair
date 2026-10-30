@@ -1,5 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { thumbHashToApproximateAspectRatio, thumbHashToAverageRGBA } from 'thumbhash';
 import { describe, expect, it } from 'vitest';
 
 import { runOperation } from '@eclair-js/operation/testing';
@@ -131,6 +132,59 @@ describe.skipIf(missing.length > 0 && !required)('probe', () => {
             height: 20,
             animated: true,
         });
+    });
+
+    it('reads HEIC and HEIF sequences at their primary image', async () => {
+        expect(await probeFixture('sequence.heic')).toMatchObject({
+            kind: 'image',
+            mime: 'image/heic-sequence',
+            width: 64,
+            height: 64,
+        });
+        expect(await probeFixture('sequence.heif')).toMatchObject({
+            kind: 'image',
+            mime: 'image/heif-sequence',
+            width: 64,
+            height: 64,
+        });
+    });
+
+    it('adds a ThumbHash placeholder of an image when asked, upright', async () => {
+        expect(await probeFixture('photo.jpg')).not.toHaveProperty('thumbhash');
+
+        const metadata = await probeFixture('photo.jpg', { thumbhash: true });
+        const hash = Buffer.from(String(metadata?.['thumbhash']), 'base64');
+        // The fixture is 40 × 30 with the EXIF orientation 6: upright, it is 30 × 40.
+        expect(thumbHashToApproximateAspectRatio(hash)).toBeCloseTo(0.75, 1);
+    });
+
+    it('keeps the colors and the transparency in the placeholder', async () => {
+        const square = await probeFixture('image.png', { thumbhash: true });
+        const color = thumbHashToAverageRGBA(Buffer.from(String(square?.['thumbhash']), 'base64'));
+        // The fixture is one color, srgb(51,102,204).
+        expect(color.r * 255).toBeCloseTo(51, -1);
+        expect(color.g * 255).toBeCloseTo(102, -1);
+        expect(color.b * 255).toBeCloseTo(204, -1);
+        expect(color.a).toBe(1);
+
+        const transparent = await probeFixture('transparent.png', { thumbhash: true });
+        const average = thumbHashToAverageRGBA(
+            Buffer.from(String(transparent?.['thumbhash']), 'base64'),
+        );
+        // Its right fifth is transparent.
+        expect(average.a).toBeLessThan(0.95);
+
+        const sequence = await probeFixture('sequence.heic', { thumbhash: true });
+        expect(sequence?.['thumbhash']).toEqual(expect.any(String));
+    });
+
+    it('gives no placeholder to an SVG, a video or an unreadable image', async () => {
+        expect(await probeFixture('image.svg', { thumbhash: true })).not.toHaveProperty(
+            'thumbhash',
+        );
+        expect(await probeFixture('video.mp4', { thumbhash: true })).not.toHaveProperty(
+            'thumbhash',
+        );
     });
 
     it('reads a PDF', async () => {

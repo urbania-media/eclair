@@ -66,6 +66,8 @@ A plugin is an npm package that exports one or more operations. The server loads
 | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --- |
 | `probe`   | Kind, mime, extension, size, checksum; width, height, rotation; duration, frame rate, bitrate, codecs, audio channels; page count; font names; EXIF summary; animated or not | ✓   |
 
+Options: `checksum` (`false`) adds a SHA-256 of the whole file; `exif` (`true`) the EXIF summary of images, never their GPS data; `thumbhash` (`false`) a [ThumbHash](https://evanw.github.io/thumbhash/) placeholder of images other than SVG, in base64: their first frame, upright, in sRGB, fitted in 100×100 by libvips. An image libvips can't read has no `thumbhash`, and the probe doesn't fail. HEIC and HEIF sequences are read at their primary image.
+
 ### Image (`@eclair-js/operations-image`)
 
 | Operation         | Output                                                                                           | 1.0 |
@@ -79,7 +81,7 @@ A plugin is an npm package that exports one or more operations. The server loads
 
 HEIC and HEIF inputs are converted by the same operations.
 
-They run on libvips and read JPEG, PNG, WebP, GIF (the first frame), AVIF, HEIC, HEIF, TIFF and SVG. libvips' untrusted loaders (ImageMagick and the like) are blocked, except librsvg for SVG inputs, so a file is only read by the loader of its detected type. Outputs are upright, in sRGB and without metadata, and never enlarged.
+They run on libvips and read JPEG, PNG, WebP, GIF (the first frame), AVIF, HEIC, HEIF (and their sequences, at their primary image), TIFF and SVG. libvips' untrusted loaders (ImageMagick and the like) are blocked, except librsvg for SVG inputs, so a file is only read by the loader of its detected type. Outputs are upright, in sRGB and without metadata, and never enlarged.
 
 - `image.convert`: `format` (`webp` by default, `jpeg`, `png`, `avif`), `maxWidth`, `maxHeight` and `quality` (85 for JPEG, 80 for WebP, 50 for AVIF). Transparency is flattened on white in JPEG. Writes `image.webp`…
 - `image.thumbnail`: `sizes`, each with a `width`, a `height` or both, and a `crop` (`none` fits the size, `centre` and `attention` fill it); `format` (`jpeg` by default) and `quality`. Writes `0.jpg`, `1.jpg`…, one per size, with the role `thumbnail`. Also reads the first page of a PDF, rendered by poppler.
