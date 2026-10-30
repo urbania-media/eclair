@@ -13,7 +13,7 @@ A server-side client has no long-running process to hold a stream, and polling e
 
 - **A `task.progress` webhook, opt-in per project.** The project setting `progressWebhooks` (default `false`) subscribes to it, like `taskWebhooks` for `task.completed`. Its body is the whole job, as returned by `GET /v1/jobs/{id}`, and `Eclair-Task` names the task. It is signed like every webhook.
 - **Throttled per task.** At most one every `progressWebhookInterval` milliseconds (default 5000, at least 1000), only when the task's progress changed since the previous one, and never once the task has ended. A task that ends sooner sends none.
-- **Attempted once, not retried, not stored.** A lost progress is superseded by the next one, or by the task's completion. Deliveries are not recorded in `webhook_deliveries`, so a long transcode doesn't fill the table; they are counted in `eclair_webhook_deliveries_total`, with their event.
+- **Attempted once, not retried, not stored.** A lost progress is superseded by the next one, or by the task's completion. Deliveries are not recorded in `webhook_deliveries`, so a long transcode doesn't fill the table. They are counted in `eclair_webhook_deliveries_total` under `event="task.progress"`, where one that isn't accepted is `dropped`: `failed` stays the outcome of a delivery that gave up after 24 hours, which the operators' alert watches.
 - **Receivers are tolerant of order.** A `task.progress` can arrive after another one, or after `task.completed`: receivers keep the highest progress they saw for a task and ignore progress for a task that has ended. `Eclair-Delivery` is still unique per delivery.
 
 ## Consequences
