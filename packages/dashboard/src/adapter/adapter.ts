@@ -1,4 +1,11 @@
-import type { ActionResponse, DataAdapter, LoginCredentials, Values } from '@panneau/data';
+import {
+    type ActionResponse,
+    type DataAdapter,
+    type LoginCredentials,
+    UnauthorizedError,
+    ValidationError,
+    type Values,
+} from '@panneau/data';
 import {
     type Definition,
     type Item,
@@ -184,16 +191,31 @@ export function createEclairAdapter({
 
         getSession: ({ signal } = {}) => getSession(signal),
         /**
-         * Signs in with the admin token, as the `password` of the credentials: it is kept once the
-         * server accepts it. Rejects with an `UnauthorizedError` when it refuses it.
+         * Signs in with the admin token (`{ token }`): it is kept once the server accepts it.
+         * A token it refuses is a `ValidationError` on `token`, which the login page shows under
+         * the field. An email and a password are an `UnauthorizedError`.
          */
-        // A token, not an email and a password: https://github.com/folkloreinc/panneau-js/issues/136
         async login(credentials: LoginCredentials, { signal } = {}) {
-            const token = credentials.password.trim();
-            if (token === '') {
+            if (!('token' in credentials)) {
                 throw unauthorized();
             }
-            await check(token, signal);
+            const token = credentials.token.trim();
+            try {
+                if (token === '') {
+                    throw unauthorized();
+                }
+                await check(token, signal);
+            } catch (error) {
+                if (error instanceof UnauthorizedError) {
+                    throw new ValidationError({
+                        type: 'about:blank',
+                        title: 'Unprocessable Content',
+                        status: 422,
+                        errors: { token: [t(intl, 'login.invalid')] },
+                    });
+                }
+                throw error;
+            }
             tokens.set(token);
             return session();
         },

@@ -1,5 +1,4 @@
 import react from '@vitejs/plugin-react';
-import { fileURLToPath } from 'node:url';
 import { defaultClientConditions, defineConfig } from 'vite';
 
 // `npm run dev -w @eclair-js/dashboard` serves the dashboard at /dashboard/, against the admin API
@@ -10,13 +9,6 @@ export default defineConfig({
     base: '/dashboard/',
     plugins: [react()],
     resolve: {
-        alias: [
-            // Only the icons the dashboard names: https://github.com/folkloreinc/panneau-js/issues/141
-            {
-                find: /^@panneau\/ui\/named-icons$/,
-                replacement: fileURLToPath(new URL('src/named-icons.ts', import.meta.url)),
-            },
-        ],
         conditions: ['@eclair-js/source', ...defaultClientConditions],
     },
     build: {

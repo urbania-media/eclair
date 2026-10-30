@@ -1,4 +1,4 @@
-import { NotFoundError, UnauthorizedError } from '@panneau/data';
+import { NotFoundError, UnauthorizedError, ValidationError } from '@panneau/data';
 import { describe, expect, it } from 'vitest';
 
 import { MemoryStorage, json, mockFetch, problem } from '../testing/fetch.ts';
@@ -24,7 +24,7 @@ function setup(options: Partial<EclairAdapterOptions> = {}, token: string | null
 describe('createEclairAdapter', () => {
     it('signs in with the admin token, and keeps it once the server accepts it', async () => {
         const { adapter, tokens, requests } = setup({}, null);
-        await expect(adapter.login({ email: '', password: ` ${ADMIN_TOKEN} ` })).resolves.toEqual({
+        await expect(adapter.login({ token: ` ${ADMIN_TOKEN} ` })).resolves.toEqual({
             user: { id: 'admin', name: 'Admin token' },
         });
         expect(tokens.get()).toBe(ADMIN_TOKEN);
@@ -33,12 +33,20 @@ describe('createEclairAdapter', () => {
 
     it('refuses a token the server refuses, and keeps none', async () => {
         const { adapter, tokens } = setup({}, null);
-        await expect(adapter.login({ email: '', password: 'wrong' })).rejects.toBeInstanceOf(
-            UnauthorizedError,
-        );
-        await expect(adapter.login({ email: '', password: '  ' })).rejects.toBeInstanceOf(
-            UnauthorizedError,
-        );
+        // Under the field of the login page
+        for (const token of ['wrong', '  ']) {
+            const error: unknown = await adapter
+                .login({ token })
+                .catch((caught: unknown) => caught);
+            expect(error).toBeInstanceOf(ValidationError);
+            expect((error as ValidationError).errors).toEqual({
+                token: ["This isn't the server's admin token."],
+            });
+        }
+        // Not an email and a password: the dashboard signs in with the token only.
+        await expect(
+            adapter.login({ email: 'ops@example.com', password: ADMIN_TOKEN }),
+        ).rejects.toBeInstanceOf(UnauthorizedError);
         expect(tokens.get()).toBeNull();
     });
 
@@ -69,12 +77,12 @@ describe('createEclairAdapter', () => {
             name: 'Eclair',
             locale: 'fr',
             api: { baseUrl: '/admin/v1' },
-            auth: { mode: 'panneau' },
+            auth: { mode: 'panneau', token: { label: 'Jeton admin' } },
             user: { id: 'admin', name: 'Jeton admin' },
         });
-        expect(definition.pages?.['sign-out']).toEqual({
-            component: 'eclair-sign-out',
-            label: 'Se déconnecter',
+        expect(definition.pages?.home).toEqual({
+            component: 'eclair-overview',
+            label: 'Vue d’ensemble',
         });
         await expect(setup({}, null).adapter.getDefinition()).rejects.toBeInstanceOf(
             UnauthorizedError,

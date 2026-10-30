@@ -1,5 +1,6 @@
 import type {
     ActionInput,
+    Auth,
     DefinitionInput,
     Field,
     LayoutNode,
@@ -432,6 +433,17 @@ function presetsResource(intl: IntlShape): ResourceInput {
     };
 }
 
+/**
+ * How the operator signs in: the server's admin token, on Panneau's login page, which shows before
+ * the definition (decision 0021). In the boot config and in the definition.
+ */
+export function createAuth(intl: IntlShape): Auth {
+    return {
+        mode: 'panneau',
+        token: { label: t(intl, 'login.token'), help: t(intl, 'login.tokenHelp') },
+    };
+}
+
 const JOB_STATUSES = ['running', 'pending', 'completed', 'failed', 'canceled'] as const;
 
 function jobsResource(
@@ -556,25 +568,21 @@ export function createDefinition({
             presetsResource(intl),
         ],
         pages: {
-            overview: { component: 'eclair-overview', label: t(intl, 'overview.title') },
+            // The overview is the home: the sidebar's first link.
+            home: { component: 'eclair-overview', label: t(intl, 'overview.title') },
             job: { component: 'eclair-job', label: t(intl, 'job.title') },
             usage: { component: 'eclair-usage', label: t(intl, 'usage.title') },
-            'sign-out': { component: 'eclair-sign-out', label: t(intl, 'signOut.label') },
         },
         menus: {
             // Keys and storages are on the page of their project, a job on its own page.
             main: [
-                { type: 'page', page: 'overview', icon: 'layout-dashboard' },
                 { type: 'resource', resource: 'jobs' },
                 { type: 'resource', resource: 'projects' },
                 { type: 'page', page: 'usage', icon: 'chart-line' },
                 { type: 'resource', resource: 'presets' },
-                { type: 'separator' },
-                { type: 'page', page: 'sign-out', icon: 'log-out' },
             ],
         },
-        // Signing in is the dashboard's own page: the admin token (decision 0021).
-        auth: { mode: 'panneau', password: false },
+        auth: createAuth(intl),
         search: { enabled: false },
         user,
     };
