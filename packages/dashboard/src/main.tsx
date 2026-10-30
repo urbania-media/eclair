@@ -4,18 +4,12 @@ import { createRoot } from 'react-dom/client';
 import { App } from './App.tsx';
 import { createEclairAdapter } from './adapter/adapter.ts';
 import { createTokenStore } from './adapter/token.ts';
-import { pickLocale } from './messages/index.ts';
-
-// The overview is the dashboard's home: Panneau's home page ignores `pages.home` of the
-// definition, https://github.com/folkloreinc/panneau-js/issues/139
-if (/^\/dashboard\/?$/.test(window.location.pathname)) {
-    window.history.replaceState(null, '', '/dashboard/pages/overview');
-}
+import { createAuth } from './definition.ts';
+import { createMessages, pickLocale } from './messages/index.ts';
 
 const locale = pickLocale();
 document.documentElement.lang = locale;
-const tokens = createTokenStore();
-const adapter = createEclairAdapter({ tokens, locale });
+const adapter = createEclairAdapter({ tokens: createTokenStore(), locale });
 
 const element = document.getElementById('eclair');
 if (element === null) {
@@ -23,6 +17,6 @@ if (element === null) {
 }
 createRoot(element).render(
     <StrictMode>
-        <App adapter={adapter} tokens={tokens} locale={locale} />
+        <App adapter={adapter} locale={locale} auth={createAuth(createMessages(locale))} />
     </StrictMode>,
 );

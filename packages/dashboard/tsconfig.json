@@ -1,10 +1,6 @@
 {
     "extends": "../../tsconfig.base.json",
     "compilerOptions": {
-        // A bundled browser app. Panneau's types don't resolve under NodeNext either:
-        // https://github.com/folkloreinc/panneau-js/issues/140
-        "module": "Preserve",
-        "moduleResolution": "Bundler",
         "lib": ["ES2024", "DOM", "DOM.Iterable"],
         "types": ["node", "vite/client"],
         "jsx": "react-jsx",

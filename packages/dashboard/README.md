@@ -2,7 +2,7 @@
 
 The operations dashboard of [Eclair](https://github.com/urbania-media/eclair): a [Panneau 5](https://github.com/folkloreinc/panneau-js) app on the admin API (`/admin/v1`), in English and French ([decision 0021](../../docs/decisions/0021-dashboard-on-panneau.md)).
 
-Eclair implements no Panneau protocol. The dashboard ships a static definition and a Panneau `DataAdapter` that maps it onto the admin API, with the admin token as a bearer token. Operators sign in by pasting the server's `ECLAIR_ADMIN_TOKEN`, which stays in the tab's `sessionStorage` until they close it or sign out.
+Eclair implements no Panneau protocol. The dashboard ships a static definition and a Panneau `DataAdapter` that maps it onto the admin API, with the admin token as a bearer token. Operators sign in on Panneau's login page by pasting the server's `ECLAIR_ADMIN_TOKEN`, which stays in the tab's `sessionStorage` until they close it or log out.
 
 ## Build and development
 
@@ -21,9 +21,9 @@ The package also exports the adapter, for an app of its own:
 import { createEclairAdapter, createTokenStore } from '@eclair-js/dashboard';
 
 const adapter = createEclairAdapter({ tokens: createTokenStore(), locale: 'en' });
-await adapter.login({ email: '', password: adminToken });
+await adapter.login({ token: adminToken });
 ```
 
 - **Errors.** The admin API's problem details become Panneau's errors (`UnauthorizedError`, `ValidationError`…), with validation errors keyed by dot path (`settings.concurrency`) instead of JSON pointer (`/settings/concurrency`).
-- **Sign-in.** `login()` takes the admin token as the `password` and keeps it once the server accepts it. `logout()` forgets it.
+- **Sign-in.** `login({ token })` keeps the admin token once the server accepts it. A token it refuses is a `ValidationError` on `token`, shown under the field of the login page. `logout()` forgets it.
 - **Plugin pages** read their data with `getWidgetData('name?query')`, through the adapter, until Panneau has dashboard widgets.
