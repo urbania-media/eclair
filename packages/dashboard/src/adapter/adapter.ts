@@ -13,6 +13,8 @@ import type { AdminProjectList } from '@eclair-js/protocol';
 
 import { createDefinition } from '../definition.ts';
 import { type Locale, createMessages, t } from '../messages/index.ts';
+import { resources as builtInResources } from '../resources/index.ts';
+import { widgets as builtInWidgets } from '../widgets.ts';
 import { type AdminClient, createAdminClient, notFound, unauthorized } from './client.ts';
 import type { TokenStore } from './token.ts';
 
@@ -54,7 +56,9 @@ export interface EclairAdapterOptions {
     locale: Locale;
     /** The URL of the admin API. Defaults to `/admin/v1`, on the dashboard's origin. */
     baseUrl?: string;
+    /** How each resource maps onto the admin API. Defaults to the dashboard's. */
     resources?: Record<string, ResourceHandler>;
+    /** The data of plugin pages. Defaults to the dashboard's. */
     widgets?: Record<string, WidgetHandler>;
     fetch?: typeof globalThis.fetch;
 }
@@ -68,8 +72,8 @@ export function createEclairAdapter({
     tokens,
     locale,
     baseUrl = '/admin/v1',
-    resources = {},
-    widgets = {},
+    resources = builtInResources,
+    widgets = builtInWidgets,
     fetch,
 }: EclairAdapterOptions): DataAdapter {
     const client = createAdminClient({
