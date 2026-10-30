@@ -194,6 +194,25 @@ describe('webhook secret rotation', () => {
     });
 });
 
+describe('progress webhooks', () => {
+    it('are an event of their own', () => {
+        expect(pointers('WebhookEvent', 'task.progress')).toEqual([]);
+    });
+
+    it('are opt-in, at most once a second per task', () => {
+        expect(pointers('ProjectSettings', { progressWebhooks: true })).toEqual([]);
+        expect(
+            pointers('ProjectSettings', { progressWebhooks: true, progressWebhookInterval: 1000 }),
+        ).toEqual([]);
+        expect(pointers('ProjectSettings', { progressWebhookInterval: 999 })).toContain(
+            '/progressWebhookInterval',
+        );
+        expect(pointers('ProjectSettings', { progressWebhookInterval: 1500.5 })).toContain(
+            '/progressWebhookInterval',
+        );
+    });
+});
+
 describe('toProblemErrors', () => {
     it('groups messages by pointer', () => {
         const result = validate('JobRequest', { input: {}, priority: 'urgent', tasks: {} });

@@ -194,6 +194,8 @@ The body is the job, as returned by `GET /v1/jobs/{id}`. The signature is the HM
 
 Events: `job.completed`, `job.failed`, `job.canceled`. A project can also subscribe to `task.completed`, to attach outputs as soon as they exist. Its body is also the whole job, and an `Eclair-Task` header names the task that completed.
 
+A project can subscribe to `task.progress` too (`progressWebhooks`), to show how far a task is without holding `GET /v1/jobs/{id}/events` open ([0020](decisions/0020-progress-webhooks.md)). It is sent while a task runs, at most once per task every `progressWebhookInterval` milliseconds (5 seconds by default, at least 1), only when its progress changed, and never once the task has ended. Its body is the whole job, and `Eclair-Task` names the task. A `task.progress` delivery is attempted once and not retried: the next one, or the task's completion, supersedes it. Deliveries can arrive out of order, after `task.completed` included: receivers keep the highest progress they saw for a task, and ignore progress for a task that has ended.
+
 ## HTTP storage uploads
 
 With an `http` storage, workers send each output file to the application:

@@ -68,6 +68,7 @@ describe('OpenAPI document', () => {
             'job.failed',
             'job.canceled',
             'task.completed',
+            'task.progress',
             'storage.write',
             'storage.read',
         ]);

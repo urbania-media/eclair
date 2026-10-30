@@ -575,6 +575,26 @@ export interface webhooks {
         patch?: never;
         trace?: never;
     };
+    "task.progress": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * A task progressed
+         * @description Sent while a task runs, to projects that subscribe to it (`progressWebhooks`), so they can show how far it is: at most once per task every `progressWebhookInterval` milliseconds, only when its progress changed, and never once it has ended. The body is the whole job, and `Eclair-Task` names the task. Attempted once and not retried: the next one, or the task's completion, supersedes a lost one. Deliveries can arrive out of order, after `task.completed` included: receivers keep the highest progress they saw, and ignore progress for a task that has ended.
+         */
+        post: operations["taskProgressWebhook"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "storage.write": {
         parameters: {
             query?: never;
@@ -913,7 +933,7 @@ export interface components {
             data: components["schemas"]["Operation"][];
         };
         /** @enum {string} */
-        WebhookEvent: "job.completed" | "job.failed" | "job.canceled" | "task.completed";
+        WebhookEvent: "job.completed" | "job.failed" | "job.canceled" | "task.completed" | "task.progress";
         /** @description `t=<unix time>,v1=<hex HMAC-SHA256>`. Several `v1` values can follow, one per valid secret of the project (the current one first, then the previous one during the grace period of a rotation): the signature is valid if one of them matches. */
         Signature: string;
         /** @description Problem details (RFC 9457). */
@@ -1064,6 +1084,16 @@ export interface components {
              * @default false
              */
             taskWebhooks?: boolean;
+            /**
+             * @description Sends a `task.progress` webhook while each task runs, besides the job's.
+             * @default false
+             */
+            progressWebhooks?: boolean;
+            /**
+             * @description The shortest time between two `task.progress` webhooks of a task, in milliseconds.
+             * @default 5000
+             */
+            progressWebhookInterval?: number;
         };
         AdminProject: {
             id: string;
@@ -2422,6 +2452,30 @@ export interface operations {
                 /** @description `t=<unix time>,v1=<hex>`: the HMAC-SHA256 of `{t}.{body}` with the project's webhook secret. After a rotation, another `v1` value signs with the previous secret until its grace period ends: accept the request if one `v1` matches. Refuse timestamps older than five minutes. */
                 "Eclair-Signature": components["parameters"]["EclairSignature"];
                 /** @description Name of the task that completed. */
+                "Eclair-Task": components["schemas"]["TaskName"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Job"];
+            };
+        };
+        responses: {
+            "2XX": components["responses"]["WebhookReceived"];
+        };
+    };
+    taskProgressWebhook: {
+        parameters: {
+            query?: never;
+            header: {
+                "Eclair-Event": components["parameters"]["EclairEvent"];
+                /** @description Id of the delivery. Retries keep it: use it to ignore duplicates. */
+                "Eclair-Delivery": components["parameters"]["EclairDelivery"];
+                /** @description `t=<unix time>,v1=<hex>`: the HMAC-SHA256 of `{t}.{body}` with the project's webhook secret. After a rotation, another `v1` value signs with the previous secret until its grace period ends: accept the request if one `v1` matches. Refuse timestamps older than five minutes. */
+                "Eclair-Signature": components["parameters"]["EclairSignature"];
+                /** @description Name of the task that progressed. */
                 "Eclair-Task": components["schemas"]["TaskName"];
             };
             path?: never;
