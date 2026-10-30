@@ -10,7 +10,14 @@ export function fixture(name: string): string {
 
 /** What ffprobe reads from an output file: its streams and format. */
 export function probeFile(path: string): {
-    streams: { codec_type: string; codec_name: string; width?: number; height?: number }[];
+    streams: {
+        codec_type: string;
+        codec_name: string;
+        profile?: string;
+        width?: number;
+        height?: number;
+        bit_rate?: string;
+    }[];
     format: { format_name: string; duration?: string };
 } {
     const { stdout } = spawnSync(

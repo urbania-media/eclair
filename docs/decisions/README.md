@@ -20,5 +20,6 @@ Architecture decision records for Eclair. Each record is short: context, decisio
 | [0014](0014-kysely.md)                             | Kysely for database access and migrations                          | Accepted                                                                |
 | [0015](0015-typebox-for-options-schemas.md)        | TypeBox for options schemas, Ajv to validate                       | Accepted                                                                |
 | [0016](0016-sqlite-for-single-machine-installs.md) | SQLite for development, tests and single-machine installs          | Accepted                                                                |
-| [0017](0017-mediatheque-2-transcoder-first.md)     | `laravel-eclair` implements the mediatheque 2.x `Transcoder` first | Accepted                                                                |
+| [0017](0017-mediatheque-2-transcoder-first.md)     | `laravel-eclair` implements the mediatheque 2.x `Transcoder` first | Accepted, amended by 0019                                               |
 | [0018](0018-webhook-secret-grace-period.md)        | The previous webhook secret stays valid for a grace period         | Accepted                                                                |
+| [0019](0019-h264-for-the-web-and-passthrough.md)   | H.264 for progressive playback on the web, and `passthrough`       | Proposed                                                                |
