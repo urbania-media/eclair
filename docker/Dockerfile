@@ -70,6 +70,7 @@ WORKDIR /src
 
 COPY package.json package-lock.json tsconfig.base.json tsconfig.json ./
 COPY packages/protocol/package.json packages/protocol/
+COPY packages/dashboard/package.json packages/dashboard/
 COPY packages/operation/package.json packages/operation/
 COPY packages/operations-core/package.json packages/operations-core/
 COPY packages/operations-video/package.json packages/operations-video/

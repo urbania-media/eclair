@@ -37,24 +37,24 @@
     },
     "dependencies": {
         "@eclair-js/protocol": "0.0.0",
-        "@panneau/app": "5.0.0-alpha.7",
-        "@panneau/core": "5.0.0-alpha.7",
         "@panneau/data": "5.0.0-alpha.7",
-        "@panneau/intl": "5.0.0-alpha.7",
-        "@panneau/lists": "5.0.0-alpha.7",
         "@panneau/protocol": "5.0.0-alpha.7",
-        "@panneau/ui": "5.0.0-alpha.7",
-        "@tanstack/react-query": "^5.104.3",
-        "lucide-react": "^1.57.0",
         "react": "^19.2.0",
-        "react-aria-components": "^1.22.1",
-        "react-dom": "^19.2.0",
         "react-intl": "^12.1.4"
     },
     "devDependencies": {
+        "@panneau/app": "5.0.0-alpha.7",
+        "@panneau/core": "5.0.0-alpha.7",
+        "@panneau/intl": "5.0.0-alpha.7",
+        "@panneau/lists": "5.0.0-alpha.7",
+        "@panneau/ui": "5.0.0-alpha.7",
+        "@tanstack/react-query": "^5.104.3",
         "@types/react": "^19.2.0",
         "@types/react-dom": "^19.2.0",
         "@vitejs/plugin-react": "^6.1.2",
+        "lucide-react": "^1.57.0",
+        "react-aria-components": "^1.22.1",
+        "react-dom": "^19.2.0",
         "vite": "^8.3.4"
     }
 }
