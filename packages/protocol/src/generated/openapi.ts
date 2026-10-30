@@ -505,6 +505,176 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/v1/jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the jobs of every project
+         * @description The newest first, with the same filters as `GET /v1/jobs`, plus the project and the operation.
+         */
+        get: operations["adminListJobs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/jobs/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["JobId"];
+            };
+            cookie?: never;
+        };
+        /** Show a job of any project */
+        get: operations["adminGetJob"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/jobs/{id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["JobId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel a job of any project
+         * @description Cancels its pending and running tasks, as `POST /v1/jobs/{id}/cancel`.
+         */
+        post: operations["adminCancelJob"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/jobs/{id}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["JobId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Retry a job of any project
+         * @description Runs its failed and canceled tasks again, as `POST /v1/jobs/{id}/retry`.
+         */
+        post: operations["adminRetryJob"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/jobs/{id}/deliveries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["JobId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * List the webhooks of a job
+         * @description Every webhook of the job, the newest first, with its attempts.
+         */
+        get: operations["adminListDeliveries"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Show the state of the install
+         * @description The checks of `/ready`, the live hosts and their queues, every queue's tasks and slots, and the temporary storage.
+         */
+        get: operations["adminStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Show what the install did over a period
+         * @description Tasks per interval by outcome, operations with their durations, webhook deliveries and created jobs. Jobs older than `ECLAIR_JOB_RETENTION` are gone, and so are their tasks.
+         */
+        get: operations["adminStats"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/projects/{project}/storages/{storage}/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The project's id or slug. */
+                project: components["parameters"]["Project"];
+                /** @description Name of one of the project's storages. */
+                storage: components["parameters"]["StorageNameParameter"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Check a storage
+         * @description Writes a small file under `.eclair/`, reads it back and deletes it. An `http` storage, which has no delete, is only read: a `GET` of a path that doesn't exist must answer `404`.
+         */
+        post: operations["adminCheckStorage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export interface webhooks {
     "job.completed": {
@@ -1221,6 +1391,134 @@ export interface components {
         };
         UsageReport: {
             data: components["schemas"]["UsageLine"][];
+        };
+        /** @description A job, as `GET /v1/jobs/{id}` returns it, with its project. */
+        AdminJob: components["schemas"]["Job"] & {
+            /** @description The slug of the job's project. */
+            project: string;
+        };
+        AdminJobList: {
+            data: components["schemas"]["AdminJob"][];
+            nextCursor: components["schemas"]["NextCursor"];
+        };
+        /** @description One webhook of a job, with its delivery attempts. */
+        WebhookDelivery: {
+            /** @description The `Eclair-Delivery` header of every attempt. */
+            id: string;
+            event: components["schemas"]["WebhookEvent"];
+            /** @description The task of a `task.*` event. */
+            task?: string | null;
+            /** Format: uri */
+            url: string;
+            /**
+             * @description `pending` until the application answers `2xx`, `failed` once Eclair gave up.
+             * @enum {string}
+             */
+            status: "pending" | "delivered" | "failed";
+            attempts: number;
+            /** @description The HTTP status of the last attempt, `null` when it got no response. */
+            responseStatus: number | null;
+            /** Format: date-time */
+            nextAttemptAt: string | null;
+            /** Format: date-time */
+            deliveredAt: string | null;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        WebhookDeliveryList: {
+            data: components["schemas"]["WebhookDelivery"][];
+        };
+        /** @description The state of an install, for its operators. */
+        ServerStatus: {
+            version: string;
+            /** @description What `/ready` answers. */
+            ready: boolean;
+            /** @description Each check of `/ready`, by name. */
+            checks: {
+                [key: string]: "ok" | "failed";
+            };
+            /** @description The machines that run Eclair, and the queues their workers serve. */
+            hosts: {
+                name: string;
+                version?: string;
+                queues: {
+                    name: string;
+                    concurrency: number;
+                }[];
+                /** Format: date-time */
+                seenAt: string;
+            }[];
+            /** @description Every queue of the server, served or not. */
+            queues: {
+                name: string;
+                /** @description Tasks queued and not started. */
+                waiting: number;
+                active: number;
+                /** @description Tasks the live workers can run at once. `0`: no worker serves the queue. */
+                slots: number;
+                /**
+                 * Format: date-time
+                 * @description When the task that has waited longest was queued.
+                 */
+                oldestWaitingAt: string | null;
+            }[];
+            /** @description The temporary storage, when its size can be read. */
+            tempStorage?: {
+                /** @enum {string} */
+                kind: "local" | "s3";
+                files?: number;
+                bytes?: number;
+                /** @description Free space on a local disk. */
+                freeBytes?: number;
+            };
+        };
+        /** @description What the install did over a period, from its jobs and tasks. */
+        Stats: {
+            /** Format: date-time */
+            since: string;
+            /** Format: date-time */
+            until: string;
+            /** @enum {string} */
+            interval: "hour" | "day";
+            /** @description Tasks that ended in each interval, by outcome. */
+            tasks: {
+                /** Format: date-time */
+                start: string;
+                completed: number;
+                failed: number;
+                canceled: number;
+                skipped: number;
+            }[];
+            operations: {
+                name: string;
+                completed: number;
+                failed: number;
+                /** @description Median duration of its tasks, in seconds. */
+                p50: number | null;
+                p95: number | null;
+            }[];
+            webhooks: {
+                delivered: number;
+                pending: number;
+                failed: number;
+            };
+            jobs: {
+                created: number;
+            };
+        };
+        /** @description Whether Eclair reaches a storage with its configuration. */
+        StorageCheck: {
+            ok: boolean;
+            /** @enum {string} */
+            read: "ok" | "failed" | "skipped";
+            /**
+             * @description `skipped` for storages Eclair only reads.
+             * @enum {string}
+             */
+            write: "ok" | "failed" | "skipped";
+            durationMs: number;
+            /** @description Why a step failed, without credentials. */
+            message?: string;
         };
     };
     responses: {
@@ -2442,6 +2740,233 @@ export interface operations {
             401: components["responses"]["AdminUnauthorized"];
             404: components["responses"]["NotFound"];
             422: components["responses"]["Invalid"];
+        };
+    };
+    adminListJobs: {
+        parameters: {
+            query?: {
+                /** @description Only this project, by id or slug. */
+                project?: string;
+                /** @description Only jobs with one of these statuses. */
+                status?: components["schemas"]["JobStatus"][];
+                /** @description Only jobs with a task of this operation. */
+                operation?: string;
+                /** @description Only jobs created after this time. */
+                createdAfter?: string;
+                /** @description Only jobs created before this time. */
+                createdBefore?: string;
+                /** @description Only jobs whose `metadata` has these top-level values: `metadata[mediaId]=42`. Compares as strings. */
+                metadata?: {
+                    [key: string]: string;
+                };
+                /** @description The `nextCursor` of the previous page. */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description Items per page. */
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of jobs. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminJobList"];
+                };
+            };
+            401: components["responses"]["AdminUnauthorized"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["Invalid"];
+        };
+    };
+    adminGetJob: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["JobId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The job. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminJob"];
+                };
+            };
+            401: components["responses"]["AdminUnauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    adminCancelJob: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["JobId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The job. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminJob"];
+                };
+            };
+            401: components["responses"]["AdminUnauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    adminRetryJob: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["JobId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The job. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminJob"];
+                };
+            };
+            401: components["responses"]["AdminUnauthorized"];
+            404: components["responses"]["NotFound"];
+            /** @description The job is still running, or has no failed or canceled task. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    adminListDeliveries: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["JobId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The job's webhooks. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebhookDeliveryList"];
+                };
+            };
+            401: components["responses"]["AdminUnauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    adminStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The install's state. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServerStatus"];
+                };
+            };
+            401: components["responses"]["AdminUnauthorized"];
+        };
+    };
+    adminStats: {
+        parameters: {
+            query?: {
+                /** @description Only this project, by id or slug. */
+                project?: string;
+                /** @description Start of the period. 24 hours before `until` by default. */
+                since?: string;
+                /** @description End of the period. Now by default. */
+                until?: string;
+                /** @description Length of each interval of `tasks`. */
+                interval?: "hour" | "day";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The stats. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Stats"];
+                };
+            };
+            401: components["responses"]["AdminUnauthorized"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["Invalid"];
+        };
+    };
+    adminCheckStorage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The project's id or slug. */
+                project: components["parameters"]["Project"];
+                /** @description Name of one of the project's storages. */
+                storage: components["parameters"]["StorageNameParameter"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The result of each step. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageCheck"];
+                };
+            };
+            401: components["responses"]["AdminUnauthorized"];
+            404: components["responses"]["NotFound"];
         };
     };
     taskCompletedWebhook: {

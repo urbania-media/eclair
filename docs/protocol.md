@@ -213,17 +213,23 @@ The signature covers the timestamp, the path and the SHA-256 of the body (sent i
 
 ## Admin API
 
-Under `/admin/v1`, with the server's admin token (`Authorization: Bearer <ECLAIR_ADMIN_TOKEN>`), never with a project's key. It manages projects, keys, storages, global presets and limits, and reads usage, for tools such as a dashboard. The `eclair` CLI does the same directly on the database, where it runs next to the server.
+Under `/admin/v1`, with the server's admin token (`Authorization: Bearer <ECLAIR_ADMIN_TOKEN>`), never with a project's key. It manages projects, keys, storages, global presets and limits, and reads jobs, the install's state, stats and usage, for tools such as the dashboard ([decision 0021](decisions/0021-dashboard-on-panneau.md)). The `eclair` CLI does the same directly on the database, where it runs next to the server.
 
-| Endpoint                                                                          | What it does                                                                                     |
-| --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| `GET`, `POST /admin/v1/projects`                                                  | List, create (the response has the webhook secret, once)                                         |
-| `GET`, `PATCH`, `DELETE /admin/v1/projects/{project}`                             | Read, change (settings are merged; `null` restores a default), delete with everything it owns    |
-| `GET`, `POST /admin/v1/projects/{project}/webhook-secret`                         | Read, replace (`{ "grace": <seconds> }` keeps the previous secret valid, 24 hours by default)    |
-| `GET`, `POST /admin/v1/projects/{project}/keys`                                   | List, create (the key is shown once)                                                             |
-| `POST /admin/v1/keys/{key}/revoke`                                                | Revoke a key                                                                                     |
-| `GET /admin/v1/projects/{project}/storages`, `PUT`, `DELETE …/storages/{storage}` | List without credentials, create or replace, remove                                              |
-| `GET /admin/v1/presets`, `PUT`, `DELETE …/presets/{name}`                         | Global presets, built-in ones included. A global preset replaces a built-in one of the same name |
-| `GET /admin/v1/usage?project=…&days=30`                                           | Usage per project and UTC day                                                                    |
+| Endpoint                                                                          | What it does                                                                                                                    |
+| --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `GET`, `POST /admin/v1/projects`                                                  | List, create (the response has the webhook secret, once)                                                                        |
+| `GET`, `PATCH`, `DELETE /admin/v1/projects/{project}`                             | Read, change (settings are merged; `null` restores a default), delete with everything it owns                                   |
+| `GET`, `POST /admin/v1/projects/{project}/webhook-secret`                         | Read, replace (`{ "grace": <seconds> }` keeps the previous secret valid, 24 hours by default)                                   |
+| `GET`, `POST /admin/v1/projects/{project}/keys`                                   | List, create (the key is shown once)                                                                                            |
+| `POST /admin/v1/keys/{key}/revoke`                                                | Revoke a key                                                                                                                    |
+| `GET /admin/v1/projects/{project}/storages`, `PUT`, `DELETE …/storages/{storage}` | List without credentials, create or replace, remove                                                                             |
+| `GET /admin/v1/presets`, `PUT`, `DELETE …/presets/{name}`                         | Global presets, built-in ones included. A global preset replaces a built-in one of the same name                                |
+| `GET /admin/v1/usage?project=…&days=30`                                           | Usage per project and UTC day                                                                                                   |
+| `GET /admin/v1/jobs`, `GET /admin/v1/jobs/{id}`                                   | Jobs of every project, with their `project`: the filters of `GET /v1/jobs`, plus `project`, `operation` and `createdBefore`     |
+| `POST /admin/v1/jobs/{id}/cancel`, `…/retry`                                      | As `/v1`, for any project's job                                                                                                 |
+| `GET /admin/v1/jobs/{id}/deliveries`                                              | The job's webhooks, with their status, attempts and last response                                                               |
+| `GET /admin/v1/status`                                                            | The checks of `/ready`, the live hosts and the queues they serve, each queue's waiting, active and slots, the temporary storage |
+| `GET /admin/v1/stats?since=…&until=…&interval=hour`                               | Tasks per interval by outcome, operations with p50 and p95, webhooks, created jobs                                              |
+| `POST /admin/v1/projects/{project}/storages/{storage}/check`                      | Writes, reads back and deletes a file under `.eclair/` (an `http` storage is only read)                                         |
 
 `{project}` is a project's id or slug.
