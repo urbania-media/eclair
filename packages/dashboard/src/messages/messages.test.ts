@@ -23,7 +23,10 @@ describe('messages', () => {
             });
             for (const id of Object.keys(catalogs[locale])) {
                 expect(() =>
-                    intl.formatMessage({ id }, { message: 'x', code: (chunks) => chunks }),
+                    intl.formatMessage(
+                        { id },
+                        { message: 'x', date: 'x', month: 'x', code: (chunks) => chunks },
+                    ),
                 ).not.toThrow();
             }
         }
