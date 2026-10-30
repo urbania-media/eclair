@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import { Type } from 'typebox';
 
-import { OperationError, defineOperation } from '@eclair-js/operation';
+import { OperationError, defineOperation, thumbhash, thumbhashOption } from '@eclair-js/operation';
 
 import {
     FORMATS,
@@ -42,6 +42,7 @@ const ThumbnailOptions = Type.Object(
         }),
         format: Format('jpeg'),
         quality: Quality,
+        ...thumbhashOption,
     },
     { additionalProperties: false },
 );
@@ -117,7 +118,11 @@ export const thumbnail = defineOperation({
                 vipsTarget(path, options.format, options.quality),
                 size,
             );
-            context.output(name, path, { mime: outputMime, role: 'thumbnail' });
+            context.output(name, path, {
+                mime: outputMime,
+                role: 'thumbnail',
+                thumbhash: options.thumbhash ? await thumbhash(context, path) : undefined,
+            });
             sizes.push(await imageSize(context, path, options.format));
             context.progress((index + 1) / options.sizes.length);
         }

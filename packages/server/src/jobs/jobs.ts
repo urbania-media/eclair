@@ -79,6 +79,9 @@ export function toOutputFile(output: OutputRecord): OutputFile {
         mime: output.mime ?? 'application/octet-stream',
         size: output.size ?? 0,
         ...(output.checksum === undefined ? {} : { checksum: output.checksum }),
+        ...(typeof output.data?.['thumbhash'] === 'string'
+            ? { thumbhash: output.data['thumbhash'] }
+            : {}),
         ...(output.role === undefined ? {} : { role: output.role }),
         ...(output.count === undefined ? {} : { count: output.count }),
         ...(output.expiresAt === undefined ? {} : { expiresAt: output.expiresAt.toISOString() }),

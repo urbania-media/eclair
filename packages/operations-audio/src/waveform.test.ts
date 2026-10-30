@@ -82,4 +82,19 @@ describe.skipIf(skipWithoutBinaries(waveform.binaries))('audio.waveform', () => 
             runOn(waveform, 'audio.mp3', { image: false, data: false }),
         ).rejects.toMatchObject({ code: 'operation_failed' });
     });
+
+    it('adds a ThumbHash placeholder to the image when asked, not to the data', async () => {
+        const result = await runOn(waveform, 'audio.mp3', { thumbhash: true });
+        try {
+            const [image, data] = result.files;
+            expect(image).toMatchObject({
+                name: 'waveform.png',
+                thumbhash: expect.stringMatching(/^[A-Za-z0-9+/]+={0,2}$/),
+            });
+            expect(data?.name).toBe('waveform.json');
+            expect(data?.thumbhash).toBeUndefined();
+        } finally {
+            await result.cleanup();
+        }
+    });
 });

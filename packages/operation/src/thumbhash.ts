@@ -1,8 +1,9 @@
-import { readFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { rgbaToThumbHash } from 'thumbhash';
+import { Type } from 'typebox';
 
-import type { OperationContext } from '@eclair-js/operation';
+import type { OperationContext } from './operation.ts';
 
 /** The largest side ThumbHash encodes: more is slower, with no benefit. */
 const MAX_SIZE = 100;
@@ -76,20 +77,38 @@ export function readVipsPixels(buffer: Buffer): Pixels | undefined {
 }
 
 /**
- * The ThumbHash placeholder of an image, in base64: its first frame, upright, in sRGB, fitted in
- * 100×100 by libvips, encoded with the reference implementation. Undefined when libvips can't read
- * it: a placeholder never fails a probe.
+ * The `thumbhash` option of the operations that write images: each image file they write gets its
+ * placeholder (`OutputOptions.thumbhash`).
  */
-export async function thumbhash(context: OperationContext): Promise<string | undefined> {
-    const path = join(context.workdir, 'thumbhash.v');
+export const thumbhashOption = {
+    thumbhash: Type.Boolean({
+        default: false,
+        description:
+            'Add a ThumbHash placeholder to each image file, the one the probe gives it. It decodes the file, so it takes a little longer.',
+    }),
+};
+
+/**
+ * The ThumbHash placeholder of an image, in base64: its first frame, upright, in sRGB, fitted in
+ * 100×100 by libvips, encoded with the reference implementation. Reads the task's input, or `path`
+ * (a file the operation wrote). Undefined when libvips can't read it: a placeholder never fails a
+ * task. The operation declares `vips` in its binaries.
+ */
+export async function thumbhash(
+    context: OperationContext,
+    path: string = context.input.path,
+): Promise<string | undefined> {
+    // A directory of its own, so the files an operation writes in its workdir stay apart.
+    const directory = await mkdtemp(join(context.workdir, 'thumbhash-'));
+    const pixelsPath = join(directory, 'thumbhash.v');
     let pixels: Pixels | undefined;
     try {
         await context.exec(
             'vips',
             [
                 'thumbnail',
-                context.input.path,
                 path,
+                pixelsPath,
                 String(MAX_SIZE),
                 '--height',
                 String(MAX_SIZE),
@@ -101,12 +120,14 @@ export async function thumbhash(context: OperationContext): Promise<string | und
             // Only the loader of the detected type reads the file (SVG has no placeholder).
             { env: { VIPS_BLOCK_UNTRUSTED: '1' } },
         );
-        pixels = readVipsPixels(await readFile(path));
+        pixels = readVipsPixels(await readFile(pixelsPath));
     } catch (error) {
         if (context.signal.aborted) {
             throw error;
         }
         return undefined;
+    } finally {
+        await rm(directory, { recursive: true, force: true });
     }
     if (pixels === undefined || pixels.width > MAX_SIZE || pixels.height > MAX_SIZE) {
         return undefined;

@@ -1,3 +1,4 @@
+import { thumbHashToApproximateAspectRatio } from 'thumbhash';
 import { describe, expect, it } from 'vitest';
 
 import { missingBinaries, skipWithoutBinaries } from '@eclair-js/operation/testing';
@@ -55,6 +56,20 @@ describe.skipIf(skipWithoutBinaries(poster.binaries))('video.poster', () => {
                 width: 90,
                 height: 160,
             });
+        } finally {
+            await result.cleanup();
+        }
+    });
+
+    it('adds a ThumbHash placeholder to the frame when asked', async () => {
+        const result = await runOn(poster, 'video.mp4', { thumbhash: true });
+        try {
+            const hash = result.files[0]?.thumbhash ?? '';
+            expect(hash).toMatch(/^[A-Za-z0-9+/]+={0,2}$/);
+            expect(thumbHashToApproximateAspectRatio(Buffer.from(hash, 'base64'))).toBeCloseTo(
+                320 / 180,
+                1,
+            );
         } finally {
             await result.cleanup();
         }

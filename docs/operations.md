@@ -48,7 +48,7 @@ The **context** gives the operation:
 - `exec(binary, args, limits)`: runs a configured binary with argument arrays, a timeout and the abort signal;
 - `progress(ratio)`, `log`, `signal` (an `AbortSignal` for cancel and timeout);
 - `providers`: the AI providers configured for the project;
-- `output(name, path, { mime, role })`: declares an output file, which the worker uploads.
+- `output(name, path, { mime, role, thumbhash })`: declares an output file, which the worker uploads. `thumbhash` is the file's placeholder, from `thumbhash(context, path)` of `@eclair-js/operation`, and the job reports it on the file.
 
 An operation never reads environment variables, the database or another project's data, and never uploads files itself. Operations are tested with `@eclair-js/operation/testing`, which runs `run()` on a fixture with a real context.
 
@@ -59,6 +59,8 @@ A plugin is an npm package that exports one or more operations. The server loads
 ## Built-in operations
 
 **1.0** marks what ships in 1.0. The others come in 1.x, in the order of the [roadmap](roadmap.md).
+
+The operations that write images (`image.convert`, `image.thumbnail`, `video.poster`, `video.thumbnails`, `audio.waveform`, `document.thumbnails`) take a `thumbhash` option (`false` by default): each image file they write then has a `thumbhash` in the job, its [ThumbHash](https://evanw.github.io/thumbhash/) placeholder in base64. It's the one the probe gives the file with `thumbhash: true`, computed by the same libvips helper. A file libvips can't decode has none, and the task doesn't fail.
 
 ### Probe (`@eclair-js/operations-core`)
 

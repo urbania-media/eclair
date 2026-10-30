@@ -1,7 +1,14 @@
 import { join } from 'node:path';
 import { Type } from 'typebox';
 
-import { OperationError, defineOperation, ffmpegInput, ffmpegProgress } from '@eclair-js/operation';
+import {
+    OperationError,
+    defineOperation,
+    ffmpegInput,
+    ffmpegProgress,
+    thumbhash,
+    thumbhashOption,
+} from '@eclair-js/operation';
 
 import { AUDIO_INPUTS, readAudio } from './media.ts';
 
@@ -57,6 +64,7 @@ const WaveformOptions = Type.Object(
             default: 8,
             description: 'Resolution of the data points.',
         }),
+        ...thumbhashOption,
     },
     { additionalProperties: false },
 );
@@ -73,7 +81,7 @@ export const waveform = defineOperation({
         "Waveform image (PNG) and data (audiowaveform's JSON), from any audio file or the soundtrack of a video.",
     accepts: AUDIO_INPUTS,
     capability: 'cpu',
-    binaries: ['ffprobe', 'ffmpeg', 'audiowaveform'],
+    binaries: ['ffprobe', 'ffmpeg', 'audiowaveform', 'vips'],
     options: WaveformOptions,
     outputs: { files: true, metadata: true },
 
@@ -140,7 +148,11 @@ export const waveform = defineOperation({
                     : ['--axis-label-color', options.axisLabelColor]),
                 options.axisLabels ? '--with-axis-labels' : '--no-axis-labels',
             ]);
-            context.output('waveform.png', path, { mime: 'image/png', role: 'main' });
+            context.output('waveform.png', path, {
+                mime: 'image/png',
+                role: 'main',
+                thumbhash: options.thumbhash ? await thumbhash(context, path) : undefined,
+            });
         }
         context.progress(0.75);
         if (options.data) {

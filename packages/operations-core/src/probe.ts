@@ -3,11 +3,9 @@ import { createReadStream } from 'node:fs';
 import { open } from 'node:fs/promises';
 import { Type } from 'typebox';
 
-import { OperationError, defineOperation, ffmpegInput } from '@eclair-js/operation';
+import { OperationError, defineOperation, ffmpegInput, thumbhash } from '@eclair-js/operation';
 import type { OperationContext } from '@eclair-js/operation';
 import type { ProbeMetadata } from '@eclair-js/protocol';
-
-import { thumbhash } from './thumbhash.ts';
 
 const ProbeOptions = Type.Object(
     {
