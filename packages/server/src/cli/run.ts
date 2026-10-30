@@ -11,6 +11,7 @@ import { checkDatabase } from '../database/dialect.ts';
 import { migrateToLatest, migrationStatus, pendingMigrations } from '../database/migrate.ts';
 import { HostRegistry, sqliteOnSeveralHosts } from '../hosts.ts';
 import { buildApp } from '../http/app.ts';
+import { findDashboard } from '../http/dashboard.ts';
 import { TaskQueues } from '../jobs/queues.ts';
 import { Maintenance } from '../maintenance/maintenance.ts';
 import { Metrics } from '../metrics.ts';
@@ -122,12 +123,23 @@ async function start(io: CliIo, roles: { api: boolean; worker: boolean }): Promi
                 jobRetention: config.jobRetention,
             });
             maintenance.start();
+            let dashboard;
+            if (config.adminToken !== undefined && config.dashboard) {
+                const found = await findDashboard();
+                if (found.files !== undefined) {
+                    dashboard = { files: found.files };
+                    logger.info('Dashboard at /dashboard/');
+                } else {
+                    logger.warn({ err: found.error }, 'The dashboard can’t be served');
+                }
+            }
             app = buildApp({
                 services,
                 metrics,
                 hosts,
                 queues,
                 adminToken: config.adminToken,
+                dashboard,
                 version: VERSION,
                 loggerInstance: logger,
                 checks: [

@@ -96,4 +96,11 @@ echo "== $file: metrics and doctor" >&2
 curl -fsS "$base/metrics" | grep -q '^eclair_tasks_total' || fail 'no task metrics'
 compose exec -T eclair eclair doctor >&2 || true
 
+echo "== $file: dashboard" >&2
+page=$(curl -fsS -D - "$base/dashboard/")
+echo "$page" | grep -qi "^content-security-policy: default-src 'none'" || fail 'no CSP on the dashboard'
+script=$(echo "$page" | grep -o '/dashboard/assets/[^"]*\.js' | head -n 1)
+[ -n "$script" ] || fail "no script in the dashboard's page"
+curl -fsS "$base$script" >/dev/null || fail "the dashboard's script isn't served: $script"
+
 echo "ok    $file end to end" >&2

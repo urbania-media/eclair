@@ -40,6 +40,8 @@ The `migrate` service runs `eclair migrate` before Eclair starts, at every `up`:
 
 Put a reverse proxy with TLS in front of the API. The temporary directory should be on a fast local disk with room for the largest input and its outputs, times the worker concurrency.
 
+The [dashboard](running.md#the-dashboard) is at `https://eclair.example.com/dashboard/` once `ECLAIR_ADMIN_TOKEN` is set. Operators sign in with that token. Serve it over HTTPS only, through the same reverse proxy as the API: it is the same origin, so there is no CORS to set up.
+
 ## Many servers
 
 ```
@@ -64,7 +66,8 @@ Environment variables, with defaults in [`docker/.env.example`](../docker/.env.e
 | `DATABASE_URL`                                                     | Database connection: `mysql://…` or `postgres://…`, or `sqlite:///path/to/eclair.db` on a single server                                                                                                                                                                       |
 | `REDIS_URL`                                                        | Redis connection                                                                                                                                                                                                                                                              |
 | `ECLAIR_SECRET_KEY`                                                | 32 random bytes in base64 (`eclair key:generate`) that encrypt storage credentials and provider keys. Keep it safe: losing it means registering storages again.                                                                                                               |
-| `ECLAIR_ADMIN_TOKEN`                                               | Token for the admin API                                                                                                                                                                                                                                                       |
+| `ECLAIR_ADMIN_TOKEN`                                               | Token for the admin API and the dashboard                                                                                                                                                                                                                                     |
+| `ECLAIR_DASHBOARD`                                                 | `false` turns off the dashboard at `/dashboard/`. It is on (`true`) whenever `ECLAIR_ADMIN_TOKEN` is set                                                                                                                                                                      |
 | `ECLAIR_PUBLIC_URL`                                                | Public URL of the API                                                                                                                                                                                                                                                         |
 | `ECLAIR_PORT`                                                      | Port the API listens on (`8080`)                                                                                                                                                                                                                                              |
 | `ECLAIR_HOST`                                                      | Address the API listens on (`0.0.0.0`)                                                                                                                                                                                                                                        |
