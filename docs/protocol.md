@@ -111,6 +111,8 @@ Job statuses: `pending`, `running`, `completed`, `failed`, `canceled`. Task stat
 
 Files with many parts (HLS segments, thumbnail series) report their main files and a `count` of the others, not every segment.
 
+The operations that write images (`image.convert`, `image.thumbnail`, `video.poster`, `video.thumbnails`, `audio.waveform`, `document.thumbnails`) take a `thumbhash` option (`false` by default). With `thumbhash: true`, each image file they write has a `thumbhash`: its [ThumbHash](https://evanw.github.io/thumbhash/) placeholder in base64, the one the probe gives the file with `thumbhash: true`. A file that can't be decoded has none, and the task doesn't fail.
+
 Files in the temporary storage also have a signed `url` and an `expiresAt`. An expired file keeps its entry with `"expired": true` and no `url`. `GET /v1/jobs/{id}/files` lists every file of the job, segments included, with fresh signed URLs.
 
 With a bucket as temporary storage, `url` is the bucket's presigned URL. With a local directory, it is `GET /v1/files/{token}` on Eclair: the token is signed by the server and expires with the file, so the download needs no API key. An unknown, expired or changed token is a 404.

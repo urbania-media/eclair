@@ -800,6 +800,8 @@ export interface components {
             size: number;
             /** @description SHA-256 of the file, in hex. */
             checksum?: string;
+            /** @description A ThumbHash placeholder (https://evanw.github.io/thumbhash/) of an image file, in base64, when the task asked for it (the `thumbhash` option of the operations that write images): its first frame, upright, in sRGB, fitted in 100×100, as `ProbeMetadata.thumbhash` gives it. Missing when the file can't be decoded. */
+            thumbhash?: string;
             /** @description What the file is for, when a task writes several: `main`, `thumbnail`, `segment`… */
             role?: string;
             /** @description For files with many parts (HLS segments, a thumbnail series): how many parts are not listed. */
