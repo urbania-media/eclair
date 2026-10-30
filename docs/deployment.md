@@ -114,7 +114,7 @@ See [running.md](running.md#upgrades) for rolling upgrades and rollbacks.
 See [running.md](running.md#monitoring) for the alerts to set up and what they mean.
 
 - Back up the database. With SQLite, use `VACUUM INTO` or the SQLite backup API, not a copy of the file while Eclair runs. The temporary storage doesn't need backups. Redis only holds queues and can be rebuilt by the scheduler.
-- Scrape `/metrics` with Prometheus: `eclair_queue_tasks` (by queue and state), `eclair_tasks_total` and `eclair_task_duration_seconds` (by operation and outcome), `eclair_jobs_created_total`, `eclair_webhook_deliveries_total`, and the process metrics. Keep `/metrics` off the public internet: let the reverse proxy refuse it from outside. Alert on queue wait time, task failure rate per operation, webhook delivery failures and free space in the temporary directory.
+- Scrape `/metrics` with Prometheus: `eclair_queue_tasks` (by queue and state), `eclair_tasks_total` and `eclair_task_duration_seconds` (by operation and outcome), `eclair_jobs_created_total`, `eclair_webhook_deliveries_total` (by event and outcome; a `task.progress` that isn't accepted is `dropped`, never retried), and the process metrics. Keep `/metrics` off the public internet: let the reverse proxy refuse it from outside. Alert on queue wait time, task failure rate per operation, webhook delivery failures and free space in the temporary directory.
 - `GET /ready` checks the database and Redis, and with SQLite that no other machine runs Eclair on the same Redis.
 
 ## Maintenance

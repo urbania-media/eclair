@@ -7,11 +7,13 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { OperationError, defineOperation } from '@eclair-js/operation';
 import type { Job } from '@eclair-js/protocol';
 
+import type { JobRecord } from '../jobs/records.ts';
 import { OperationRegistry } from '../operations/registry.ts';
 import type { Project } from '../projects/projects.ts';
 import { createRedis } from '../redis.ts';
 import type { Services } from '../services.ts';
 import { RUNS_WITH_REDIS, createTestServices, testRedisUrl } from '../testing.ts';
+import type { Webhooks } from '../webhooks/webhooks.ts';
 import { CancelBus } from './cancel.ts';
 import { TaskRunner } from './runner.ts';
 import { ProjectSlots } from './slots.ts';
@@ -21,6 +23,7 @@ const empty = Type.Object({}, { additionalProperties: false });
 let flakyRuns = 0;
 let running = 0;
 let mostRunning = 0;
+const progressSent: { job: string; task: string }[] = [];
 
 const operations = [
     defineOperation({
@@ -131,6 +134,23 @@ const operations = [
             return { metadata: {} };
         },
     }),
+    defineOperation({
+        name: 'test.slow',
+        version: 1,
+        description: 'Reports its progress for a few seconds',
+        accepts: {},
+        capability: 'cpu',
+        binaries: [],
+        options: empty,
+        outputs: { files: false, metadata: true },
+        async run(context) {
+            for (const progress of [0.25, 0.5, 0.75]) {
+                context.progress(progress);
+                await new Promise((resolve) => setTimeout(resolve, 1100));
+            }
+            return { metadata: {} };
+        },
+    }),
 ];
 
 let services: Awaited<ReturnType<typeof createTestServices>>;
@@ -168,10 +188,10 @@ async function waitForTask(
 }
 
 /** Writes a text file to the project's temporary storage, as the input of a job. */
-async function input(name: string, content: string) {
+async function input(name: string, content: string, owner: Project = project) {
     const local = join(tmpdir(), `eclair-input-${Date.now()}-${name}`);
     await writeFile(local, content);
-    await services.resolver.temporary.forProject(project.id).write(`inputs/${name}`, local, {
+    await services.resolver.temporary.forProject(owner.id).write(`inputs/${name}`, local, {
         mime: 'text/plain',
         size: content.length,
         sha256: '',
@@ -213,6 +233,13 @@ describe.skipIf(!RUNS_WITH_REDIS)('workers', () => {
                 },
                 worker: 'test-worker',
                 logger,
+                // Records the progress webhooks the runner asks for.
+                webhooks: {
+                    sendProgress: (job: JobRecord, task: string) => {
+                        progressSent.push({ job: job.id, task });
+                        return Promise.resolve();
+                    },
+                } as unknown as Webhooks,
             }),
             slots: new ProjectSlots(redis),
             cancel,
@@ -275,6 +302,33 @@ describe.skipIf(!RUNS_WITH_REDIS)('workers', () => {
             .where('job_id', '=', job.id)
             .execute();
         expect(usage).toHaveLength(2);
+    });
+
+    it('sends the progress of a task, throttled, to a project that subscribes', async () => {
+        const subscribed = (
+            await services.projects.create({
+                slug: 'progress',
+                settings: { progressWebhooks: true, progressWebhookInterval: 1000 },
+            })
+        ).project;
+        const jobs = services.jobs as NonNullable<Services['jobs']>;
+        const { job } = await jobs.create(subscribed, {
+            input: await input('slow.txt', 'slow', subscribed),
+            tasks: { slow: { op: 'test.slow' } },
+        });
+        const other = await jobs.create(project, {
+            input: await input('slow.txt', 'slow'),
+            tasks: { slow: { op: 'test.slow' } },
+        });
+
+        await waitForJob(subscribed.id, job.id);
+        await waitForJob(project.id, other.job.id);
+        // The first progress comes before the interval: the second and the third go out.
+        expect(progressSent.filter((sent) => sent.job === job.id)).toEqual([
+            { job: job.id, task: 'slow' },
+            { job: job.id, task: 'slow' },
+        ]);
+        expect(progressSent.filter((sent) => sent.job === other.job.id)).toEqual([]);
     });
 
     it('fails a task with its error, and the tasks after it', async () => {

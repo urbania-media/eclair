@@ -122,6 +122,8 @@ describe('OperationRegistry', () => {
                     maxDirectUpload: 1,
                     probesPerMinute: 1,
                     taskWebhooks: false,
+                    progressWebhooks: false,
+                    progressWebhookInterval: 5000,
                     operations: ['image.palette'],
                 },
             );
@@ -158,6 +160,8 @@ describe('OperationRegistry', () => {
                 maxDirectUpload: 1,
                 probesPerMinute: 1,
                 taskWebhooks: false,
+                progressWebhooks: false,
+                progressWebhookInterval: 5000,
                 operations: ['image.blurhash'],
             }),
         ).toHaveLength(1);

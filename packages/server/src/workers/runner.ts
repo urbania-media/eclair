@@ -19,7 +19,7 @@ import type { Database } from '../database/connection.ts';
 import type { OutputsTable } from '../database/tables.ts';
 import { toJson } from '../database/values.ts';
 import { createId } from '../ids.ts';
-import type { OutputRecord, TaskRecord } from '../jobs/records.ts';
+import type { JobRecord, OutputRecord, TaskRecord } from '../jobs/records.ts';
 import { toOutputRecord } from '../jobs/records.ts';
 import type { Scheduler } from '../jobs/scheduler.ts';
 import type { Metrics } from '../metrics.ts';
@@ -31,6 +31,7 @@ import { fetchInput } from '../storages/inputs.ts';
 import type { StorageResolver } from '../storages/resolver.ts';
 import { TEMPORARY_STORAGE } from '../storages/storages.ts';
 import type { Uploads } from '../uploads/uploads.ts';
+import { ProgressThrottle } from '../webhooks/progress.ts';
 import type { Webhooks } from '../webhooks/webhooks.ts';
 
 /** What happened to a task. `retry`: it failed for a reason that may pass, and has attempts left. */
@@ -64,7 +65,10 @@ export interface TaskRunnerOptions {
     logger: RunnerLogger;
     /** Only for tests, to read inputs from a local server. */
     guard?: Pick<GuardOptions, 'allowHttp' | 'allowPrivateAddresses'>;
-    /** Sends `task.completed` webhooks, for projects with `taskWebhooks`. */
+    /**
+     * Sends `task.completed` webhooks, for projects with `taskWebhooks`, and `task.progress`
+     * webhooks, for projects with `progressWebhooks`.
+     */
     webhooks?: Webhooks | undefined;
     metrics?: Metrics | undefined;
 }
@@ -368,6 +372,7 @@ export class TaskRunner {
                     controller.signal,
                     files,
                     options,
+                    this.#progressWebhooks(project, job, task),
                 ),
                 task.options as never,
             );
@@ -531,6 +536,32 @@ export class TaskRunner {
         return outputs.find(({ kind }) => kind === 'metadata')?.data as ProbeMetadata | undefined;
     }
 
+    /**
+     * Sends the task's `task.progress` webhooks, for projects with `progressWebhooks`, throttled
+     * by `progressWebhookInterval` (decision 0019).
+     */
+    #progressWebhooks(
+        project: Project,
+        job: JobRecord,
+        task: TaskRecord,
+    ): ((progress: number) => void) | undefined {
+        const webhooks = this.#options.webhooks;
+        if (!project.settings.progressWebhooks || webhooks === undefined) {
+            return undefined;
+        }
+        const throttle = new ProgressThrottle(project.settings.progressWebhookInterval);
+        return (progress) => {
+            if (throttle.accept(progress)) {
+                webhooks.sendProgress(job, task.name).catch((error: unknown) => {
+                    this.#options.logger.warn(
+                        { task: task.id, job: job.id, error: (error as Error).message },
+                        'Progress webhook not queued',
+                    );
+                });
+            }
+        };
+    }
+
     #context(
         operation: Operation,
         task: TaskRecord,
@@ -539,6 +570,7 @@ export class TaskRunner {
         signal: AbortSignal,
         files: DeclaredFile[],
         options: RunOptions,
+        sendProgress: ((progress: number) => void) | undefined,
     ): OperationContext {
         const { binaries } = this.#options.config;
         const log = this.#options.logger;
@@ -571,6 +603,7 @@ export class TaskRunner {
                 lastProgress = now;
                 const progress = Math.min(1, Math.max(0, ratio));
                 options.onProgress?.(progress);
+                sendProgress?.(progress);
                 void this.#options.scheduler.emit({
                     type: 'task.progress',
                     job: task.jobId,
