@@ -3,7 +3,8 @@ import type { Problem } from '@panneau/protocol';
 
 export interface RequestInit {
     method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
-    query?: Record<string, string | number | boolean | undefined>;
+    /** Query parameters: an array repeats its parameter (`status=failed&status=canceled`). */
+    query?: Record<string, string | number | boolean | readonly string[] | undefined>;
     body?: unknown;
     signal?: AbortSignal | undefined;
     /** Sends this token instead of the stored one: to check a token before keeping it. */
@@ -61,7 +62,9 @@ export function createAdminClient({
             }
             const params = new URLSearchParams();
             Object.entries(init.query ?? {}).forEach(([key, value]) => {
-                if (value !== undefined) {
+                if (Array.isArray(value)) {
+                    value.forEach((entry: string) => params.append(key, entry));
+                } else if (value !== undefined) {
                     params.set(key, String(value));
                 }
             });
