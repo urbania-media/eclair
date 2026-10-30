@@ -1,0 +1,14 @@
+{
+    "extends": "../../tsconfig.base.json",
+    "compilerOptions": {
+        // As in tsconfig.json: https://github.com/folkloreinc/panneau-js/issues/140
+        "module": "Preserve",
+        "moduleResolution": "Bundler",
+        "lib": ["ES2024", "DOM", "DOM.Iterable"],
+        "types": [],
+        "rootDir": "src",
+        "outDir": "dist",
+        "customConditions": []
+    },
+    "files": ["src/index.ts"]
+}

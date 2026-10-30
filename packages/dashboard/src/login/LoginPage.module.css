@@ -1,0 +1,24 @@
+.page {
+    display: grid;
+    min-height: 100vh;
+    place-items: center;
+    padding: var(--panneau-space-4);
+    background: var(--panneau-color-surface-sunken);
+    box-sizing: border-box;
+}
+
+.card {
+    width: 100%;
+    max-width: 26rem;
+}
+
+.brand {
+    display: flex;
+    align-items: center;
+    gap: var(--panneau-space-2);
+}
+
+.code {
+    font-family: var(--panneau-font-family-mono, monospace);
+    font-size: 0.95em;
+}

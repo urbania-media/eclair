@@ -1,0 +1,60 @@
+{
+    "name": "@eclair-js/dashboard",
+    "version": "0.0.0",
+    "description": "Eclair's operations dashboard: a Panneau 5 app on the admin API",
+    "type": "module",
+    "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/urbania-media/eclair.git",
+        "directory": "packages/dashboard"
+    },
+    "engines": {
+        "node": ">=24"
+    },
+    "sideEffects": [
+        "*.css",
+        "./src/main.tsx"
+    ],
+    "exports": {
+        ".": {
+            "@eclair-js/source": "./src/index.ts",
+            "types": "./dist/index.d.ts",
+            "default": "./dist/index.js"
+        },
+        "./package.json": "./package.json"
+    },
+    "files": [
+        "dist"
+    ],
+    "scripts": {
+        "build": "tsc -p tsconfig.build.json && vite build",
+        "dev": "vite",
+        "typecheck": "tsc -p tsconfig.json"
+    },
+    "publishConfig": {
+        "access": "public"
+    },
+    "dependencies": {
+        "@eclair-js/protocol": "0.0.0",
+        "@panneau/data": "5.0.0-alpha.7",
+        "@panneau/protocol": "5.0.0-alpha.7",
+        "react": "^19.2.0",
+        "react-intl": "^12.1.4"
+    },
+    "devDependencies": {
+        "@panneau/app": "5.0.0-alpha.7",
+        "@panneau/core": "5.0.0-alpha.7",
+        "@panneau/intl": "5.0.0-alpha.7",
+        "@panneau/lists": "5.0.0-alpha.7",
+        "@panneau/ui": "5.0.0-alpha.7",
+        "@tanstack/react-query": "^5.104.3",
+        "@types/react": "^19.2.0",
+        "@types/react-dom": "^19.2.0",
+        "@vitejs/plugin-react": "^6.1.2",
+        "lucide-react": "^1.57.0",
+        "react-aria-components": "^1.22.1",
+        "react-dom": "^19.2.0",
+        "vite": "^8.3.4"
+    }
+}

@@ -26,5 +26,11 @@ export default defineConfig([
             ],
         },
     },
+    {
+        files: ['packages/dashboard/src/**'],
+        languageOptions: {
+            globals: { ...globals.browser },
+        },
+    },
     prettier,
 ]);
