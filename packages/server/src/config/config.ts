@@ -67,6 +67,10 @@ const EnvironmentSchema = Type.Object({
     ECLAIR_ADMIN_TOKEN: Type.Optional(
         Type.String({ minLength: 32, description: 'at least 32 characters' }),
     ),
+    ECLAIR_DASHBOARD: Type.Union([Type.Literal('true'), Type.Literal('false')], {
+        default: 'true',
+        description: 'true or false',
+    }),
     ECLAIR_QUEUES: Type.String({
         pattern: '^[a-z]+(:[0-9]+)?(,[a-z]+(:[0-9]+)?)*$',
         default: 'cpu',
@@ -112,6 +116,8 @@ export interface Config {
     /** 32 bytes that encrypt storage credentials and provider keys. */
     secretKey: Buffer | undefined;
     adminToken: string | undefined;
+    /** Serves the dashboard at `/dashboard/`, with the admin API. */
+    dashboard: boolean;
     queues: QueueConfig[];
     tmpDir: string;
     /**
@@ -253,6 +259,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
                 ? undefined
                 : Buffer.from(environment.ECLAIR_SECRET_KEY, 'base64'),
         adminToken: environment.ECLAIR_ADMIN_TOKEN,
+        dashboard: environment.ECLAIR_DASHBOARD === 'true',
         queues,
         tmpDir: environment.ECLAIR_TMP_DIR,
         tempStorage: environment.ECLAIR_TEMP_STORAGE,

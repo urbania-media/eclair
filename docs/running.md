@@ -29,6 +29,14 @@ Each operation runs on its capability's queue: `cpu`, `video`, `gpu`, `ai`, and 
 
 Add workers when tasks wait: one server per capability that is short, with `ECLAIR_QUEUES` set to that capability. Workers don't share a disk. They need the database, Redis, the temporary storage (a bucket, with more than one server) and the projects' storages. Run two API processes behind the reverse proxy for availability. Move from SQLite to MySQL or PostgreSQL before adding a second server ([decision 0016](decisions/0016-sqlite-for-single-machine-installs.md)).
 
+## The dashboard
+
+The API serves the operations dashboard at `/dashboard/` when `ECLAIR_ADMIN_TOKEN` is set, unless `ECLAIR_DASHBOARD=false` ([decision 0021](decisions/0021-dashboard-on-panneau.md)). It shows the server's health and queues, the jobs of every project, the projects with their keys, storages and settings, global presets, and usage and costs, in English or French. It reads and writes through the admin API, as the CLI does.
+
+- **Signing in** is pasting the admin token. The tab keeps it in `sessionStorage` until it is closed or the operator signs out, and sends it as a bearer token, never as a cookie. Whoever can open the dashboard holds the admin token: give it to operators only, and [replace it](#a-key-or-a-secret-leaked) when one leaves.
+- **Its page has a strict Content Security Policy:** its own scripts, styles and images only, requests to its own origin only, and no framing. Its assets have hashed names and are cached for good.
+- **Without a built dashboard** (a checkout where `npm run build` didn't run), the API logs a warning and serves the rest. The image always has it.
+
 ## Monitoring
 
 ### Health

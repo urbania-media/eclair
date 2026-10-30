@@ -14,6 +14,7 @@ import { InvalidValueError, createAjv, groupErrors } from '../validation.ts';
 import { admin } from './admin/index.ts';
 import { runChecks } from './checks.ts';
 import type { ReadinessCheck } from './checks.ts';
+import { type DashboardOptions, dashboardRoutes } from './dashboard.ts';
 import { fileRoutes } from './files.ts';
 import { HttpProblem, problems } from './problem.ts';
 import { v1 } from './v1/index.ts';
@@ -51,6 +52,8 @@ export interface AppOptions {
     hosts?: HostRegistry | undefined;
     /** The task queues, for `GET /admin/v1/status`. */
     queues?: TaskQueues | undefined;
+    /** The built dashboard, served at `/dashboard/` with the admin API (decision 0021). */
+    dashboard?: DashboardOptions | undefined;
 }
 
 const PROBLEM_CONTENT_TYPE = 'application/problem+json; charset=utf-8';
@@ -162,6 +165,11 @@ export function buildApp(options: AppOptions): FastifyInstance {
         );
         return reply.code(ready ? 200 : 503).send({ status: ready ? 'ready' : 'unready', checks });
     });
+
+    // The dashboard is useless without the admin API, and the admin token is its sign-in.
+    if (options.dashboard !== undefined && options.adminToken !== undefined) {
+        void app.register(dashboardRoutes, options.dashboard);
+    }
 
     if (options.services !== undefined) {
         void app.register(v1, { prefix: '/v1', services: options.services });

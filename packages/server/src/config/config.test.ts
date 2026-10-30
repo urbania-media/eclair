@@ -31,6 +31,7 @@ describe('loadConfig', () => {
             maxInputSize: 2 * 1024 ** 3,
             taskTimeout: 3_600_000,
             logLevel: 'info',
+            dashboard: true,
         });
         expect(config.queues).toEqual([
             { name: 'cpu', concurrency: availableParallelism() },
@@ -48,6 +49,7 @@ describe('loadConfig', () => {
             ECLAIR_PUBLIC_URL: 'https://eclair.example.com/',
             ECLAIR_SECRET_KEY: key,
             ECLAIR_ADMIN_TOKEN: 'a'.repeat(32),
+            ECLAIR_DASHBOARD: 'false',
             ECLAIR_QUEUES: 'cpu:4,video:1,probe:0',
             ECLAIR_PLUGINS: '@acme/eclair-ops, eclair-plugin-x',
             ECLAIR_MAX_INPUT_SIZE: '500MB',
@@ -57,6 +59,7 @@ describe('loadConfig', () => {
         expect(config).toMatchObject({
             databaseUrl: 'postgres://eclair:secret@db/eclair',
             redisUrl: 'redis://redis:6379',
+            dashboard: false,
             port: 9000,
             publicUrl: 'https://eclair.example.com',
             adminToken: 'a'.repeat(32),
