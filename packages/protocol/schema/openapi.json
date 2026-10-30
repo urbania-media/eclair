@@ -1741,6 +1741,48 @@
                 }
             }
         },
+        "task.progress": {
+            "post": {
+                "operationId": "taskProgressWebhook",
+                "summary": "A task progressed",
+                "description": "Sent while a task runs, to projects that subscribe to it (`progressWebhooks`), so they can show how far it is: at most once per task every `progressWebhookInterval` milliseconds, only when its progress changed, and never once it has ended. The body is the whole job, and `Eclair-Task` names the task. Attempted once and not retried: the next one, or the task's completion, supersedes a lost one. Deliveries can arrive out of order, after `task.completed` included: receivers keep the highest progress they saw, and ignore progress for a task that has ended.",
+                "parameters": [
+                    {
+                        "$ref": "#/components/parameters/EclairEvent"
+                    },
+                    {
+                        "$ref": "#/components/parameters/EclairDelivery"
+                    },
+                    {
+                        "$ref": "#/components/parameters/EclairSignature"
+                    },
+                    {
+                        "name": "Eclair-Task",
+                        "in": "header",
+                        "required": true,
+                        "description": "Name of the task that progressed.",
+                        "schema": {
+                            "$ref": "#/components/schemas/TaskName"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/Job"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "2XX": {
+                        "$ref": "#/components/responses/WebhookReceived"
+                    }
+                }
+            }
+        },
         "storage.write": {
             "put": {
                 "operationId": "httpStorageWrite",
@@ -2765,7 +2807,13 @@
             },
             "WebhookEvent": {
                 "type": "string",
-                "enum": ["job.completed", "job.failed", "job.canceled", "task.completed"]
+                "enum": [
+                    "job.completed",
+                    "job.failed",
+                    "job.canceled",
+                    "task.completed",
+                    "task.progress"
+                ]
             },
             "Signature": {
                 "description": "`t=<unix time>,v1=<hex HMAC-SHA256>`. Several `v1` values can follow, one per valid secret of the project (the current one first, then the previous one during the grace period of a rotation): the signature is valid if one of them matches.",
@@ -3084,6 +3132,17 @@
                         "description": "Sends a `task.completed` webhook for each task, besides the job's.",
                         "type": "boolean",
                         "default": false
+                    },
+                    "progressWebhooks": {
+                        "description": "Sends a `task.progress` webhook while each task runs, besides the job's.",
+                        "type": "boolean",
+                        "default": false
+                    },
+                    "progressWebhookInterval": {
+                        "description": "The shortest time between two `task.progress` webhooks of a task, in milliseconds.",
+                        "type": "integer",
+                        "minimum": 1000,
+                        "default": 5000
                     }
                 }
             },
