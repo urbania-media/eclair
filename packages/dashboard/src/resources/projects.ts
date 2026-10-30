@@ -9,6 +9,7 @@ import type {
     ProjectPatch,
     ProjectRequest,
     ProjectSettings,
+    Stats,
     StorageList,
     UsageReport,
     WebhookSecret,
@@ -120,7 +121,10 @@ async function mapSettingErrors<T>(request: Promise<T>): Promise<T> {
 
 const path = (project: string) => `/projects/${encodeURIComponent(project)}`;
 
-/** The keys, storages and task time of each project, for the list. */
+/**
+ * The keys, storages, task time over 30 days and activity over 24 hours of each project, for the
+ * list. A few requests per project: an install has a few projects.
+ */
 async function summaries({ client, signal }: HandlerContext, projects: readonly AdminProject[]) {
     const [usage, ...perProject] = await Promise.all([
         client.request<UsageReport>('/usage', { query: { days: 30 }, signal }),
@@ -128,14 +132,32 @@ async function summaries({ client, signal }: HandlerContext, projects: readonly 
             Promise.all([
                 client.request<ApiKeyList>(`${path(project.id)}/keys`, { signal }),
                 client.request<StorageList>(`${path(project.id)}/storages`, { signal }),
+                client.request<Stats>('/stats', {
+                    query: { project: project.id, interval: 'day' },
+                    signal,
+                }),
             ]),
         ),
     ]);
     return projects.map((project, index) => {
-        const [keys, storages] = perProject[index] ?? [{ data: [] }, { data: [] }];
+        const [keys, storages, stats] = perProject[index] ?? [];
+        const failures = (stats?.tasks ?? []).reduce((sum, interval) => sum + interval.failed, 0);
+        const webhooks = stats?.webhooks;
         return {
-            keys: keys.data.filter((key) => !key.revoked).length,
-            storages: storages.data
+            jobs: stats?.jobs.created ?? 0,
+            failures,
+            webhooks:
+                webhooks === undefined
+                    ? null
+                    : webhooks.failed > 0
+                      ? 'failed'
+                      : webhooks.pending > 0
+                        ? 'pending'
+                        : webhooks.delivered > 0
+                          ? 'delivered'
+                          : null,
+            keys: (keys?.data ?? []).filter((key) => !key.revoked).length,
+            storages: (storages?.data ?? [])
                 .map((storage) => `${storage.name} (${storage.kind})`)
                 .join(', '),
             taskTime: Math.round(

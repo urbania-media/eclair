@@ -3,10 +3,21 @@ import { EmptyValue } from '@panneau/lists';
 import { Badge, type BadgeTone } from '@panneau/ui';
 import { useIntl } from 'react-intl';
 
-const TONES: Record<string, BadgeTone> = {
+import styles from './displays.module.css';
+
+/** The tone of each status: of projects, keys, jobs, tasks and webhook deliveries. */
+export const TONES: Record<string, BadgeTone> = {
     active: 'success',
     disabled: 'neutral',
     revoked: 'neutral',
+    pending: 'neutral',
+    queued: 'neutral',
+    running: 'info',
+    completed: 'success',
+    delivered: 'success',
+    failed: 'danger',
+    canceled: 'warning',
+    skipped: 'neutral',
 };
 
 /**
@@ -44,4 +55,39 @@ export function formatHours(formatNumber: (value: number) => string, seconds: nu
     return hours > 0
         ? `${formatNumber(hours)} h ${String(minutes % 60).padStart(2, '0')} min`
         : `${minutes} min`;
+}
+
+/** The tasks of a job that are done, out of all: a bar and `2 / 4`. */
+export function TasksDisplay({ value }: DisplayProps) {
+    const tasks = value as { done?: number; total?: number; failed?: boolean } | null;
+    if (tasks === null || typeof tasks.total !== 'number' || tasks.total === 0) {
+        return <EmptyValue />;
+    }
+    const done = tasks.done ?? 0;
+    return (
+        <span className={styles.tasks}>
+            <span className={styles.track} aria-hidden="true">
+                <span
+                    className={tasks.failed === true ? styles.barFailed : styles.bar}
+                    style={{ width: `${(done / tasks.total) * 100}%` }}
+                />
+            </span>
+            <span className={styles.count}>
+                {done} / {tasks.total}
+            </span>
+        </span>
+    );
+}
+
+/** How a project's webhooks went over 24 hours. */
+export function WebhooksDisplay({ value }: DisplayProps) {
+    const intl = useIntl();
+    if (typeof value !== 'string') {
+        return <EmptyValue />;
+    }
+    return (
+        <Badge tone={TONES[value] ?? 'neutral'}>
+            {intl.formatMessage({ id: `webhooks.${value}` })}
+        </Badge>
+    );
 }

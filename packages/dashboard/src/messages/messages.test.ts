@@ -21,12 +21,12 @@ describe('messages', () => {
                     throw error;
                 },
             });
-            for (const id of Object.keys(catalogs[locale])) {
+            for (const [id, message] of Object.entries(catalogs[locale])) {
+                // Every placeholder gets a number, which plurals need too.
+                const names = [...message.matchAll(/\{(\w+)/g)].map(([, name]) => name ?? '');
+                const values = Object.fromEntries(names.map((name) => [name, 1]));
                 expect(() =>
-                    intl.formatMessage(
-                        { id },
-                        { message: 'x', date: 'x', month: 'x', code: (chunks) => chunks },
-                    ),
+                    intl.formatMessage({ id }, { ...values, code: (chunks) => chunks }),
                 ).not.toThrow();
             }
         }

@@ -49,8 +49,8 @@ export function App({
     const [messages] = useState(() => withPanneauMessages(locale, catalogs[locale]));
 
     const signOut = () => {
-        // Back to the home: signing in again mustn't open the sign-out page.
-        window.history.replaceState(null, '', basePath);
+        // Back to the overview: signing in again mustn't open the sign-out page.
+        window.history.replaceState(null, '', `${basePath}/pages/overview`);
         setNotice('signedOut');
         void adapter.logout();
     };

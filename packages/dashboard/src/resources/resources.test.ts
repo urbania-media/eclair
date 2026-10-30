@@ -61,6 +61,27 @@ describe('projects', () => {
                 json({ data: [apiKey(), apiKey({ id: SECOND_KEY, revoked: true })] }),
             [`GET /admin/v1/projects/${project().id}/storages`]: () =>
                 json({ data: [storage(), storage({ name: 'legacy', kind: 'http' })] }),
+            'GET /admin/v1/stats': ({ url }) =>
+                json(
+                    {
+                        since: '2026-10-29T19:00:00.000Z',
+                        until: '2026-10-30T19:00:00.000Z',
+                        interval: 'day',
+                        tasks: [
+                            {
+                                start: '2026-10-30T00:00:00.000Z',
+                                completed: 40,
+                                failed: url.searchParams.get('project') === project().id ? 3 : 0,
+                                canceled: 0,
+                                skipped: 0,
+                            },
+                        ],
+                        operations: [],
+                        webhooks: { delivered: 12, pending: 2, failed: 0 },
+                        jobs: { created: 14 },
+                    },
+                    { schema: 'Stats' },
+                ),
             [`GET /admin/v1/projects/${urbania.id}/keys`]: () => json({ data: [] }),
             [`GET /admin/v1/projects/${urbania.id}/storages`]: () => json({ data: [] }),
         });
@@ -77,6 +98,9 @@ describe('projects', () => {
             keys: 1,
             storages: 'media (s3), legacy (http)',
             taskTime: 1800,
+            jobs: 14,
+            failures: 3,
+            webhooks: 'pending',
         });
         expect(requests.find(({ url }) => url.pathname.endsWith('/usage'))?.url.search).toBe(
             '?days=30',

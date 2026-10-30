@@ -16,7 +16,12 @@ export interface DefinitionOptions {
     /** The URL of the admin API. */
     baseUrl: string;
     user: User;
+    /** The projects, for the filters of lists. */
+    projects?: readonly { slug: string; name: string }[];
 }
+
+/** The path of the dashboard, for links. */
+export const BASE_PATH = '/dashboard';
 
 const SLUG = '^[a-z0-9][a-z0-9-]{0,62}$';
 const STORAGE_NAME = '^[a-z0-9][a-z0-9_-]{0,63}$';
@@ -63,6 +68,15 @@ function projectsResource(intl: IntlShape): ResourceInput {
             icon: 'circle-check',
             scope: ['item'],
             placement: ['form'],
+        },
+        {
+            id: 'jobs',
+            label: m('projects.actions.jobs'),
+            icon: 'list',
+            kind: 'link',
+            scope: ['item'],
+            placement: ['form'],
+            url: `${BASE_PATH}/resources/jobs?filter[project]={slug}`,
         },
     ];
     return {
@@ -140,6 +154,11 @@ function projectsResource(intl: IntlShape): ResourceInput {
         ],
         form: {
             layout: [
+                {
+                    type: 'component',
+                    component: 'eclair-item-actions',
+                    props: { resource: 'projects', idField: 'slug' },
+                },
                 row(['name', 6], ['slug', 4], ['status', 2]),
                 {
                     type: 'section',
@@ -174,6 +193,18 @@ function projectsResource(intl: IntlShape): ResourceInput {
                 { id: 'storages', label: m('projects.columns.storages'), display: 'text' },
                 { id: 'keys', label: m('projects.columns.keys'), display: 'number', align: 'end' },
                 { field: 'concurrency', label: m('projects.columns.concurrency'), align: 'end' },
+                { id: 'jobs', label: m('projects.columns.jobs'), display: 'number', align: 'end' },
+                {
+                    id: 'failures',
+                    label: m('projects.columns.failures'),
+                    display: 'number',
+                    align: 'end',
+                },
+                {
+                    id: 'webhooks',
+                    label: m('projects.columns.webhooks'),
+                    display: 'eclair-webhooks',
+                },
                 {
                     id: 'taskTime',
                     label: m('projects.columns.taskTime'),
@@ -189,7 +220,7 @@ function projectsResource(intl: IntlShape): ResourceInput {
                     options: status,
                 },
             ],
-            sorts: ['name', 'slug', 'concurrency', 'taskTime'],
+            sorts: ['name', 'slug', 'concurrency', 'jobs', 'failures', 'taskTime'],
             defaultSort: 'name',
             search: true,
             perPage: 50,
@@ -308,6 +339,13 @@ function storagesResource(intl: IntlShape): ResourceInput {
         },
         actions: [
             {
+                id: 'check',
+                label: m('storages.actions.check'),
+                icon: 'plug-zap',
+                scope: ['item'],
+                placement: ['row'],
+            },
+            {
                 id: 'remove',
                 label: m('storages.actions.remove'),
                 icon: 'trash-2',
@@ -348,6 +386,19 @@ function presetsResource(intl: IntlShape): ResourceInput {
                 rules: [{ rule: 'required' }],
             }),
         ],
+        form: {
+            layout: [
+                {
+                    type: 'component',
+                    component: 'eclair-item-actions',
+                    props: { resource: 'presets', idField: 'name' },
+                },
+                { type: 'field', name: 'name' },
+                { type: 'field', name: 'revision' },
+                { type: 'field', name: 'description' },
+                { type: 'field', name: 'tasks' },
+            ],
+        },
         list: {
             columns: [
                 { field: 'name' },
@@ -381,6 +432,105 @@ function presetsResource(intl: IntlShape): ResourceInput {
     };
 }
 
+const JOB_STATUSES = ['running', 'pending', 'completed', 'failed', 'canceled'] as const;
+
+function jobsResource(
+    intl: IntlShape,
+    projects: DefinitionOptions['projects'] = [],
+): ResourceInput {
+    const { m, options, field } = messages(intl);
+    return {
+        id: 'jobs',
+        label: { singular: m('jobs.singular'), plural: m('jobs.plural') },
+        description: m('jobs.description'),
+        icon: 'list',
+        itemTitle: 'id',
+        abilities: { viewAny: true, create: false },
+        fields: [
+            field('jobs', 'id', 'text', { readOnly: true, display: 'eclair-code' }),
+            field('jobs', 'project', 'select', {
+                readOnly: true,
+                options: projects.map(({ slug, name }) => ({ value: slug, label: name })),
+                display: 'text',
+            }),
+            field('jobs', 'status', 'select', {
+                readOnly: true,
+                options: options('jobs.statuses', JOB_STATUSES),
+                display: 'eclair-status',
+            }),
+            field('jobs', 'tasks', 'json', { readOnly: true, display: 'eclair-tasks' }),
+            field('jobs', 'what', 'text', { readOnly: true, display: 'eclair-code' }),
+            field('jobs', 'metadata', 'text', { readOnly: true, display: 'eclair-code' }),
+            field('jobs', 'duration', 'duration', { readOnly: true }),
+            field('jobs', 'createdAt', 'datetime', { readOnly: true }),
+        ],
+        list: {
+            columns: [
+                { field: 'id' },
+                { field: 'project' },
+                { field: 'status' },
+                { field: 'tasks' },
+                { field: 'what' },
+                { field: 'metadata' },
+                { field: 'duration', align: 'end' },
+                { field: 'createdAt', align: 'end' },
+            ],
+            filters: [
+                {
+                    id: 'status',
+                    type: 'select',
+                    label: m('jobs.fields.status'),
+                    options: options('jobs.statuses', JOB_STATUSES),
+                    multiple: true,
+                },
+                {
+                    id: 'project',
+                    type: 'select',
+                    label: m('jobs.fields.project'),
+                    options: projects.map(({ slug, name }) => ({ value: slug, label: name })),
+                },
+                { id: 'operation', type: 'text', label: m('jobs.filters.operation') },
+                { id: 'created', type: 'date-range', label: m('jobs.fields.createdAt') },
+            ],
+            // The newest first, always: the admin API pages jobs with a cursor.
+            sorts: [],
+            search: true,
+            perPage: 50,
+        },
+        actions: [
+            {
+                id: 'open',
+                label: m('jobs.actions.open'),
+                icon: 'external-link',
+                kind: 'link',
+                scope: ['item'],
+                placement: ['row'],
+                url: `${BASE_PATH}/pages/job?id={id}`,
+            },
+            {
+                id: 'cancel',
+                label: m('jobs.actions.cancel'),
+                icon: 'circle-off',
+                scope: ['item'],
+                placement: ['row'],
+                destructive: true,
+                confirm: {
+                    title: m('jobs.actions.cancelTitle'),
+                    message: m('jobs.actions.cancelMessage'),
+                    confirmLabel: m('jobs.actions.cancelConfirm'),
+                },
+            },
+            {
+                id: 'retry',
+                label: m('jobs.actions.retry'),
+                icon: 'rotate-ccw',
+                scope: ['item'],
+                placement: ['row'],
+            },
+        ],
+    };
+}
+
 /**
  * The dashboard's definition: Eclair implements no Panneau protocol, so the definition is static,
  * in the operator's locale, and the adapter maps it onto the admin API (decision 0021).
@@ -390,6 +540,7 @@ export function createDefinition({
     locale,
     baseUrl,
     user,
+    projects,
 }: DefinitionOptions): DefinitionInput {
     return {
         protocol: 1,
@@ -398,18 +549,23 @@ export function createDefinition({
         locales: [locale],
         api: { baseUrl },
         resources: [
+            jobsResource(intl, projects),
             projectsResource(intl),
             keysResource(intl),
             storagesResource(intl),
             presetsResource(intl),
         ],
         pages: {
+            overview: { component: 'eclair-overview', label: t(intl, 'overview.title') },
+            job: { component: 'eclair-job', label: t(intl, 'job.title') },
             usage: { component: 'eclair-usage', label: t(intl, 'usage.title') },
             'sign-out': { component: 'eclair-sign-out', label: t(intl, 'signOut.label') },
         },
         menus: {
-            // Keys and storages are on the page of their project.
+            // Keys and storages are on the page of their project, a job on its own page.
             main: [
+                { type: 'page', page: 'overview', icon: 'layout-dashboard' },
+                { type: 'resource', resource: 'jobs' },
                 { type: 'resource', resource: 'projects' },
                 { type: 'page', page: 'usage', icon: 'chart-line' },
                 { type: 'resource', resource: 'presets' },

@@ -6,6 +6,12 @@ import { createEclairAdapter } from './adapter/adapter.ts';
 import { createTokenStore } from './adapter/token.ts';
 import { pickLocale } from './messages/index.ts';
 
+// The overview is the dashboard's home: Panneau's home page ignores `pages.home` of the
+// definition, https://github.com/folkloreinc/panneau-js/issues/139
+if (/^\/dashboard\/?$/.test(window.location.pathname)) {
+    window.history.replaceState(null, '', '/dashboard/pages/overview');
+}
+
 const locale = pickLocale();
 document.documentElement.lang = locale;
 const tokens = createTokenStore();

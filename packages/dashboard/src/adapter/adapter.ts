@@ -13,7 +13,7 @@ import type { AdminProjectList } from '@eclair-js/protocol';
 
 import { createDefinition } from '../definition.ts';
 import { type Locale, createMessages, t } from '../messages/index.ts';
-import { resources as builtInResources } from '../resources/index.ts';
+import { createResources } from '../resources/index.ts';
 import { widgets as builtInWidgets } from '../widgets.ts';
 import { type AdminClient, createAdminClient, notFound, unauthorized } from './client.ts';
 import type { TokenStore } from './token.ts';
@@ -72,7 +72,7 @@ export function createEclairAdapter({
     tokens,
     locale,
     baseUrl = '/admin/v1',
-    resources = builtInResources,
+    resources = createResources(),
     widgets = builtInWidgets,
     fetch,
 }: EclairAdapterOptions): DataAdapter {
@@ -113,8 +113,14 @@ export function createEclairAdapter({
 
     return {
         async getDefinition({ signal } = {}): Promise<Definition> {
-            const { user } = await getSession(signal);
-            const result = validateDefinition(createDefinition({ intl, locale, baseUrl, user }));
+            if (tokens.get() === null) {
+                throw unauthorized();
+            }
+            // Checks the token, and gives the projects for the filters.
+            const { data } = await check(undefined, signal);
+            const result = validateDefinition(
+                createDefinition({ intl, locale, baseUrl, user: session().user, projects: data }),
+            );
             if (!result.success) {
                 const issues = result.issues.map(({ path, message }) => `${path}: ${message}`);
                 throw new Error(`The dashboard's definition is invalid:\n${issues.join('\n')}`);

@@ -28,3 +28,23 @@
     align-items: flex-end;
     gap: var(--panneau-space-3);
 }
+
+.actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--panneau-space-2);
+}
+
+.actionLink {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--panneau-space-1);
+    color: var(--panneau-color-link);
+    font-size: var(--panneau-font-size-sm);
+    text-decoration: none;
+}
+
+.actionLink:hover {
+    text-decoration: underline;
+}

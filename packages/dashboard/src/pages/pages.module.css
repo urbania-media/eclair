@@ -120,3 +120,221 @@
     color: var(--panneau-color-text-muted);
     font-size: var(--panneau-font-size-xs);
 }
+
+.columns {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 26rem), 1fr));
+    gap: var(--panneau-space-4);
+    align-items: start;
+}
+
+.kpis {
+    margin: 0;
+}
+
+.kpi {
+    display: flex;
+    flex-direction: column;
+    gap: var(--panneau-space-1);
+    padding: var(--panneau-space-4);
+    border: var(--panneau-border-width) solid var(--panneau-color-border);
+    border-radius: var(--panneau-radius-lg);
+    background: var(--panneau-color-surface);
+}
+
+.kpi dd {
+    margin: 0;
+}
+
+.kpiLabel {
+    color: var(--panneau-color-text-muted);
+    font-size: var(--panneau-font-size-sm);
+}
+
+.kpiValue {
+    font-size: 1.75rem;
+    font-weight: var(--panneau-font-weight-bold);
+    font-variant-numeric: tabular-nums;
+    line-height: var(--panneau-line-height-tight);
+}
+
+.meter {
+    display: block;
+    width: 6rem;
+    height: 0.375rem;
+    overflow: hidden;
+    border-radius: 9999px;
+    background: var(--panneau-color-surface-sunken);
+}
+
+.meterFill {
+    display: block;
+    height: 100%;
+    background: var(--panneau-color-text);
+}
+
+.plainList {
+    display: flex;
+    flex-direction: column;
+    gap: var(--panneau-space-2);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--panneau-space-2);
+}
+
+.failure {
+    display: flex;
+    flex-direction: column;
+    gap: var(--panneau-space-1);
+    padding-top: var(--panneau-space-2);
+    border-top: var(--panneau-border-width) solid var(--panneau-color-border);
+}
+
+.failure:first-child {
+    padding-top: 0;
+    border-top: 0;
+}
+
+.failure p {
+    margin: 0;
+}
+
+.link {
+    color: var(--panneau-color-link);
+    font-size: var(--panneau-font-size-sm);
+    text-decoration: none;
+}
+
+.link:hover {
+    text-decoration: underline;
+}
+
+.danger {
+    color: var(--panneau-color-danger);
+}
+
+.warning {
+    color: var(--panneau-color-warning);
+}
+
+.stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--panneau-space-6);
+    margin: 0;
+}
+
+.stats dt {
+    color: var(--panneau-color-text-muted);
+    font-size: var(--panneau-font-size-sm);
+}
+
+.stats dd {
+    margin: 0;
+    font-size: 1.25rem;
+    font-weight: var(--panneau-font-weight-bold);
+    font-variant-numeric: tabular-nums;
+}
+
+.cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+    gap: var(--panneau-space-4);
+    align-items: start;
+}
+
+.details {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    gap: var(--panneau-space-2) var(--panneau-space-3);
+    margin: 0;
+    font-size: var(--panneau-font-size-sm);
+}
+
+.details dt {
+    color: var(--panneau-color-text-muted);
+}
+
+.details dd {
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
+.timelineColumn {
+    width: 40%;
+    min-width: 12rem;
+}
+
+.timeline {
+    position: relative;
+    display: block;
+    height: 0.875rem;
+    border-radius: var(--panneau-radius-sm);
+    background: var(--panneau-color-surface-sunken);
+}
+
+.wait,
+.run,
+.runFailed {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    border-radius: var(--panneau-radius-sm);
+}
+
+.wait {
+    background: var(--panneau-color-border);
+}
+
+.run {
+    background: var(--panneau-color-text);
+}
+
+.runFailed {
+    background: var(--panneau-color-danger);
+}
+
+.taskName {
+    display: block;
+    font-weight: var(--panneau-font-weight-medium);
+}
+
+.taskOp {
+    color: var(--panneau-color-text-muted);
+    font-size: var(--panneau-font-size-xs);
+    font-weight: normal;
+    white-space: normal;
+}
+
+.json {
+    max-height: 32rem;
+    margin: 0;
+    padding: var(--panneau-space-3);
+    overflow: auto;
+    border: var(--panneau-border-width) solid var(--panneau-color-border);
+    border-radius: var(--panneau-radius-md);
+    background: var(--panneau-color-surface-sunken);
+    font-size: var(--panneau-font-size-xs);
+}
+
+/* A wide card and a narrow one, side by side when there is room. */
+.wideNarrow {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--panneau-space-4);
+    align-items: start;
+}
+
+@container panneau-root (min-width: 72rem) {
+    .wideNarrow {
+        grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+    }
+}

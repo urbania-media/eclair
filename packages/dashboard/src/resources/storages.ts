@@ -1,6 +1,6 @@
 import type { Item } from '@panneau/protocol';
 
-import type { Storage, StorageList, StorageRequest } from '@eclair-js/protocol';
+import type { Storage, StorageCheck, StorageList, StorageRequest } from '@eclair-js/protocol';
 
 import type { ResourceHandler } from '../adapter/adapter.ts';
 import { notFound } from '../adapter/client.ts';
@@ -37,7 +37,7 @@ export function storageItem(storage: Storage, project: string): Item {
     return {
         id: storageId(project, storage.name),
         version: null,
-        abilities: { update: false, remove: true },
+        abilities: { update: false, remove: true, check: true },
         project,
         name: storage.name,
         kind: storage.kind,
@@ -98,7 +98,51 @@ export const storages: ResourceHandler = {
         return storageItem(storage, project);
     },
 
-    async runAction(action, request, { client, signal }) {
+    async runAction(action, request, { client, signal, intl }) {
+        if (action === 'check') {
+            // Writes, reads back and deletes a file under `.eclair/`: its outcome is the result.
+            const outcomes = await Promise.all(
+                selectedIds(request).map(async (id) => {
+                    const { project, name } = parseId(id);
+                    const check = await client.request<StorageCheck>(
+                        `${storagePath(project, name)}/check`,
+                        { method: 'POST', signal },
+                    );
+                    return { id, name, check };
+                }),
+            );
+            const failed = outcomes.filter(({ check }) => !check.ok);
+            return {
+                result: {
+                    message: outcomes
+                        .map(({ name, check }) =>
+                            intl.formatMessage(
+                                { id: check.ok ? 'storages.check.ok' : 'storages.check.failed' },
+                                {
+                                    name,
+                                    read: intl.formatMessage({ id: `storages.step.${check.read}` }),
+                                    write: intl.formatMessage({
+                                        id: `storages.step.${check.write}`,
+                                    }),
+                                    duration: check.durationMs,
+                                },
+                            ),
+                        )
+                        .join(' '),
+                    summary: {
+                        succeeded: outcomes.length - failed.length,
+                        failed: failed.length,
+                        skipped: 0,
+                    },
+                    results: failed.map(({ id, check }) => ({
+                        id,
+                        status: 'failed' as const,
+                        message: check.message ?? '',
+                    })),
+                    refresh: 'none' as const,
+                },
+            };
+        }
         if (action !== 'remove') {
             throw notFound(`Storages have no action "${action}".`);
         }
