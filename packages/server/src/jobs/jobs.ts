@@ -48,6 +48,9 @@ export interface JobsOptions {
 export interface JobFilters {
     status?: JobStatus[];
     createdAfter?: Date;
+    createdBefore?: Date;
+    /** Jobs with a task of this operation. */
+    operation?: string;
     metadata?: Record<string, string>;
     cursor?: string;
     limit: number;
@@ -405,15 +408,13 @@ export class Jobs {
         return this.get(projectId, row.id);
     }
 
-    async #record(projectId: string, id: string): Promise<JobRecord> {
-        const row = isId('job', id)
-            ? await this.#database.kysely
-                  .selectFrom('jobs')
-                  .selectAll()
-                  .where('project_id', '=', projectId)
-                  .where('id', '=', id)
-                  .executeTakeFirst()
-            : undefined;
+    /** A job of the project, or of any project without one (the admin API). */
+    async #record(projectId: string | undefined, id: string): Promise<JobRecord> {
+        let query = this.#database.kysely.selectFrom('jobs').selectAll().where('id', '=', id);
+        if (projectId !== undefined) {
+            query = query.where('project_id', '=', projectId);
+        }
+        const row = isId('job', id) ? await query.executeTakeFirst() : undefined;
         if (row === undefined) {
             throw new NotFoundError(`There is no job "${id}".`);
         }
@@ -512,17 +513,48 @@ export class Jobs {
 
     /** The project's jobs, newest first, a page at a time. */
     async list(projectId: string, filters: JobFilters): Promise<JobList> {
+        const { records, nextCursor } = await this.#page(projectId, filters);
+        return { data: await this.#responses(records), nextCursor };
+    }
+
+    /** The jobs of every project, or of one, newest first, with their project's id (admin API). */
+    async listAll(
+        filters: JobFilters & { projectId?: string | undefined },
+    ): Promise<{ data: { projectId: string; job: Job }[]; nextCursor: string | null }> {
+        const { records, nextCursor } = await this.#page(filters.projectId, filters);
+        const jobs = await this.#responses(records);
+        return {
+            data: jobs.map((job, index) => ({ projectId: records[index]?.projectId ?? '', job })),
+            nextCursor,
+        };
+    }
+
+    async #page(
+        projectId: string | undefined,
+        filters: JobFilters,
+    ): Promise<{ records: JobRecord[]; nextCursor: string | null }> {
         let query = this.#database.kysely
             .selectFrom('jobs')
             .selectAll()
-            .where('project_id', '=', projectId)
             .orderBy('id', 'desc')
             .limit(filters.limit + 1);
+        if (projectId !== undefined) {
+            query = query.where('project_id', '=', projectId);
+        }
         if (filters.status !== undefined && filters.status.length > 0) {
             query = query.where('status', 'in', filters.status);
         }
         if (filters.createdAfter !== undefined) {
             query = query.where('created_at', '>', filters.createdAfter);
+        }
+        if (filters.createdBefore !== undefined) {
+            query = query.where('created_at', '<', filters.createdBefore);
+        }
+        if (filters.operation !== undefined) {
+            const operation = filters.operation;
+            query = query.where('id', 'in', (eb) =>
+                eb.selectFrom('tasks').select('job_id').where('operation', '=', operation),
+            );
         }
         if (filters.cursor !== undefined) {
             query = query.where('id', '<', filters.cursor);
@@ -531,11 +563,16 @@ export class Jobs {
             query = query.where(jsonText(this.#database.dialect, 'metadata', key), '=', value);
         }
         const rows = await query.execute();
-        const page = rows.slice(0, filters.limit).map(toJobRecord);
+        const records = rows.slice(0, filters.limit).map(toJobRecord);
         return {
-            data: await this.#responses(page),
-            nextCursor: rows.length > filters.limit ? (page.at(-1)?.id ?? null) : null,
+            records,
+            nextCursor: rows.length > filters.limit ? (records.at(-1)?.id ?? null) : null,
         };
+    }
+
+    /** The id of a job's project, for the admin API, which reads the jobs of every project. */
+    async projectOf(id: string): Promise<string> {
+        return (await this.#record(undefined, id)).projectId;
     }
 
     /** The files of a job, a page at a time, segments included. */

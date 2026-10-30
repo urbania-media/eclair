@@ -13,7 +13,7 @@ import type {
 import { JSON_KEY_PATTERN } from '../../database/json.ts';
 import { isId } from '../../ids.ts';
 import type { JobEvents } from '../../jobs/events.ts';
-import type { Jobs } from '../../jobs/jobs.ts';
+import type { JobFilters, Jobs } from '../../jobs/jobs.ts';
 import { authOf } from '../auth.ts';
 import { problems } from '../problem.ts';
 
@@ -53,6 +53,73 @@ function page(
     return { limit, ...(typeof cursor === 'string' ? { cursor } : {}) };
 }
 
+/**
+ * The filters of a list of jobs, checked: those of `GET /v1/jobs`, and with `admin`, the
+ * `createdBefore` and `operation` of `GET /admin/v1/jobs`.
+ */
+export function jobFilters(
+    query: Record<string, unknown>,
+    options: { admin?: boolean } = {},
+): JobFilters {
+    const errors: Record<string, string[]> = {};
+
+    const status =
+        typeof query['status'] === 'string'
+            ? query['status'].split(',').filter((value) => value !== '')
+            : [];
+    if (status.some((value) => !JOB_STATUSES.includes(value as JobStatus))) {
+        errors['?status'] = [`must be some of ${JOB_STATUSES.join(', ')}`];
+    }
+
+    const date = (name: string): Date | undefined => {
+        if (query[name] === undefined) {
+            return undefined;
+        }
+        const value = new Date(String(query[name]));
+        if (Number.isNaN(value.getTime())) {
+            errors[`?${name}`] = ['must be a date-time'];
+        }
+        return value;
+    };
+    const createdAfter = date('createdAfter');
+    const createdBefore = options.admin === true ? date('createdBefore') : undefined;
+
+    let operation: string | undefined;
+    if (options.admin === true && query['operation'] !== undefined) {
+        if (typeof query['operation'] !== 'string' || query['operation'] === '') {
+            errors['?operation'] = ['must be the name of an operation'];
+        } else {
+            operation = query['operation'];
+        }
+    }
+
+    const metadata: Record<string, string> = {};
+    for (const [name, value] of Object.entries(query)) {
+        const key = /^metadata\[(.*)\]$/.exec(name)?.[1];
+        if (key === undefined) {
+            continue;
+        }
+        if (!JSON_KEY_PATTERN.test(key) || typeof value !== 'string') {
+            errors[`?${name}`] = ['must be one value, for a key of letters, digits, - and _'];
+        } else {
+            metadata[key] = value;
+        }
+    }
+
+    if (Object.keys(errors).length > 0) {
+        throw problems.invalid(errors, 'The query is invalid.');
+    }
+
+    return {
+        ...page(query, 'job'),
+        ...(status.length === 0 ? {} : { status: status as JobStatus[] }),
+        ...(createdAfter === undefined ? {} : { createdAfter }),
+        ...(createdBefore === undefined ? {} : { createdBefore }),
+        ...(operation === undefined ? {} : { operation }),
+        metadata,
+    };
+}
+
 /** `/v1/jobs` (decision 0004). */
 export function jobRoutes(app: FastifyInstance, jobs: Jobs, events: JobEvents): void {
     app.post(
@@ -75,50 +142,9 @@ export function jobRoutes(app: FastifyInstance, jobs: Jobs, events: JobEvents): 
         },
     );
 
-    app.get('/jobs', { config: { scope: 'jobs:read' } }, async (request): Promise<JobList> => {
-        const { project } = authOf(request);
-        const query = request.query as Record<string, unknown>;
-        const errors: Record<string, string[]> = {};
-
-        const status =
-            typeof query['status'] === 'string'
-                ? query['status'].split(',').filter((value) => value !== '')
-                : [];
-        if (status.some((value) => !JOB_STATUSES.includes(value as JobStatus))) {
-            errors['?status'] = [`must be some of ${JOB_STATUSES.join(', ')}`];
-        }
-
-        let createdAfter: Date | undefined;
-        if (query['createdAfter'] !== undefined) {
-            createdAfter = new Date(String(query['createdAfter']));
-            if (Number.isNaN(createdAfter.getTime())) {
-                errors['?createdAfter'] = ['must be a date-time'];
-            }
-        }
-
-        const metadata: Record<string, string> = {};
-        for (const [name, value] of Object.entries(query)) {
-            const key = /^metadata\[(.*)\]$/.exec(name)?.[1];
-            if (key === undefined) {
-                continue;
-            }
-            if (!JSON_KEY_PATTERN.test(key) || typeof value !== 'string') {
-                errors[`?${name}`] = ['must be one value, for a key of letters, digits, - and _'];
-            } else {
-                metadata[key] = value;
-            }
-        }
-        if (Object.keys(errors).length > 0) {
-            throw problems.invalid(errors, 'The query is invalid.');
-        }
-
-        return jobs.list(project.id, {
-            ...page(query, 'job'),
-            ...(status.length === 0 ? {} : { status: status as JobStatus[] }),
-            ...(createdAfter === undefined ? {} : { createdAfter }),
-            metadata,
-        });
-    });
+    app.get('/jobs', { config: { scope: 'jobs:read' } }, async (request): Promise<JobList> =>
+        jobs.list(authOf(request).project.id, jobFilters(request.query as Record<string, unknown>)),
+    );
 
     app.get('/jobs/:id', { config: { scope: 'jobs:read' } }, async (request): Promise<Job> =>
         jobs.get(authOf(request).project.id, idOf(request)),

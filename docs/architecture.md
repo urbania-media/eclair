@@ -90,7 +90,7 @@ Every worker serves the `probe` queue by default, with reserved slots, so transc
 | `tasks`              | Job, name, operation and version, options, dependencies, status, attempts, progress, error                                      |
 | `outputs`            | Task, kind (file or metadata), storage, path, mime, size, checksum, data, expiry for temporary files                            |
 | `usage`              | Project, task, operation, CPU seconds, media seconds, bytes in and out, bytes kept in temporary storage, provider cost if known |
-| `webhook_deliveries` | Job, attempt, status code, next retry                                                                                           |
+| `webhook_deliveries` | Job, task of a `task.*` event, attempt, status code, next retry                                                                 |
 
 Old jobs are pruned after a configurable retention. Usage is aggregated per project and per day before pruning.
 

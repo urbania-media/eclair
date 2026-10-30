@@ -44,7 +44,10 @@ async function start(io: CliIo, roles: { api: boolean; worker: boolean }): Promi
     const database = await openMigratedDatabase(config.databaseUrl ?? '');
     const name = roles.api && roles.worker ? 'all' : roles.api ? 'api' : 'worker';
     const redis = createRedis(config.redisUrl ?? '', `eclair-${name}`);
-    const hosts = new HostRegistry(redis);
+    const hosts = new HostRegistry(redis, hostname(), undefined, {
+        version: VERSION,
+        queues: roles.worker ? config.queues : [],
+    });
 
     // SQLite is for one machine (decision 0016): refuse to join an install that runs on another.
     if (database.dialect === 'sqlite') {
@@ -122,6 +125,8 @@ async function start(io: CliIo, roles: { api: boolean; worker: boolean }): Promi
             app = buildApp({
                 services,
                 metrics,
+                hosts,
+                queues,
                 adminToken: config.adminToken,
                 version: VERSION,
                 loggerInstance: logger,

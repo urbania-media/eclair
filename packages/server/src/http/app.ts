@@ -6,10 +6,14 @@ import { STATUS_CODES } from 'node:http';
 import { jsonSchema } from '@eclair-js/protocol';
 
 import { ConflictError, NotFoundError, RateLimitedError } from '../errors.ts';
+import type { HostRegistry } from '../hosts.ts';
+import type { TaskQueues } from '../jobs/queues.ts';
 import type { Metrics } from '../metrics.ts';
 import type { Services } from '../services.ts';
 import { InvalidValueError, createAjv, groupErrors } from '../validation.ts';
 import { admin } from './admin/index.ts';
+import { runChecks } from './checks.ts';
+import type { ReadinessCheck } from './checks.ts';
 import { fileRoutes } from './files.ts';
 import { HttpProblem, problems } from './problem.ts';
 import { v1 } from './v1/index.ts';
@@ -26,12 +30,7 @@ declare module 'fastify' {
     }
 }
 
-/** A dependency that `/ready` checks: the database, Redis, the binaries… */
-export interface ReadinessCheck {
-    name: string;
-    /** Resolves when the dependency works, rejects with a message that says what's wrong. */
-    check(): Promise<void>;
-}
+export type { ReadinessCheck } from './checks.ts';
 
 export interface AppOptions {
     version: string;
@@ -48,6 +47,10 @@ export interface AppOptions {
     metrics?: Metrics;
     /** `ECLAIR_ADMIN_TOKEN`. Without it, there is no admin API. */
     adminToken?: string | undefined;
+    /** The hosts of the install, for `GET /admin/v1/status`. */
+    hosts?: HostRegistry | undefined;
+    /** The task queues, for `GET /admin/v1/status`. */
+    queues?: TaskQueues | undefined;
 }
 
 const PROBLEM_CONTENT_TYPE = 'application/problem+json; charset=utf-8';
@@ -98,17 +101,6 @@ function toHttpProblem(error: FastifyError | Error): HttpProblem | undefined {
         return new HttpProblem(status, STATUS_CODES[status], { detail: error.message });
     }
     return undefined;
-}
-
-function withTimeout(promise: Promise<void>, milliseconds: number): Promise<void> {
-    let timer: NodeJS.Timeout | undefined;
-    const timeout = new Promise<never>((_, reject) => {
-        timer = setTimeout(
-            () => reject(new Error(`no answer after ${milliseconds} ms`)),
-            milliseconds,
-        );
-    });
-    return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
 /**
@@ -163,24 +155,12 @@ export function buildApp(options: AppOptions): FastifyInstance {
     }
 
     app.get('/ready', async (request, reply) => {
-        const checks = options.checks ?? [];
-        const results = await Promise.all(
-            checks.map(async ({ name, check }) => {
-                try {
-                    await withTimeout(check(), options.checkTimeout ?? 5000);
-                    return [name, 'ok'] as const;
-                } catch (error) {
-                    const message = error instanceof Error ? error.message : String(error);
-                    // The reason goes to the logs only: it can name hosts or paths.
-                    request.log.warn({ check: name, error: message }, 'Readiness check failed');
-                    return [name, 'failed'] as const;
-                }
-            }),
+        const { ready, checks } = await runChecks(
+            options.checks ?? [],
+            options.checkTimeout ?? 5000,
+            request.log,
         );
-        const ready = results.every(([, result]) => result === 'ok');
-        return reply
-            .code(ready ? 200 : 503)
-            .send({ status: ready ? 'ready' : 'unready', checks: Object.fromEntries(results) });
+        return reply.code(ready ? 200 : 503).send({ status: ready ? 'ready' : 'unready', checks });
     });
 
     if (options.services !== undefined) {
@@ -192,6 +172,11 @@ export function buildApp(options: AppOptions): FastifyInstance {
                 prefix: '/admin/v1',
                 services: options.services,
                 adminToken: options.adminToken,
+                version: options.version,
+                checks: options.checks ?? [],
+                checkTimeout: options.checkTimeout ?? 5000,
+                hosts: options.hosts,
+                queues: options.queues,
             });
         }
     }

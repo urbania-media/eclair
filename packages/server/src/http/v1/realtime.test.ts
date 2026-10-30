@@ -158,6 +158,32 @@ describe.skipIf(!RUNS_WITH_REDIS)('webhooks, events and probes', () => {
             });
         });
 
+        it('name the task of a task.completed webhook, and record it', async () => {
+            const job = await createJob();
+            const record = await services.scheduler?.loadJob(job.id);
+            if (record === undefined) {
+                throw new Error('No job.');
+            }
+            const before = received.length;
+            await services.webhooks?.send(record, 'task.completed', 'probe');
+            await until(
+                async () => received.length,
+                (count) => count > before,
+            );
+            const delivery = received.at(-1);
+            expect(delivery?.headers['eclair-event']).toBe('task.completed');
+            expect(delivery?.headers['eclair-task']).toBe('probe');
+            const rows = await services.database.kysely
+                .selectFrom('webhook_deliveries')
+                .select(['event', 'task'])
+                .where('job_id', '=', job.id)
+                .execute();
+            expect(rows).toEqual([{ event: 'task.completed', task: 'probe' }]);
+            expect(
+                received.find((r) => r.headers['eclair-event'] === 'job.completed')?.headers,
+            ).not.toHaveProperty('eclair-task');
+        });
+
         it('are signed with both secrets during the grace period of a rotation', async () => {
             const before = await services.projects.webhookSecret(project.id);
             const { webhookSecret } = await services.projects.rotateWebhookSecret('niche');

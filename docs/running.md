@@ -37,6 +37,14 @@ Add workers when tasks wait: one server per capability that is short, with `ECLA
 - `GET /ready` checks the database and Redis (and, with SQLite, that no other machine uses the same Redis). It answers `503` with the failed checks, while the reasons go to the logs. Use it as a readiness check and in the load balancer.
 - `eclair doctor` checks the configuration, Redis, the database and its schema, and the binaries. Run it after every change to a server.
 
+### Status and stats
+
+The dashboard ([decision 0021](decisions/0021-dashboard-on-panneau.md)) reads the admin API ([protocol](protocol.md#admin-api)), which any tool with the admin token can read too:
+
+- `GET /admin/v1/status` runs the checks of `/ready` and lists the live hosts: every process registers its host in Redis every 10 seconds, with its version and the queues its workers serve, and drops out 30 seconds after it stops. A queue's `waiting` counts the tasks in BullMQ that no worker took, retries waiting for their backoff included; `oldestWaitingAt` comes from the database. `slots` sums the concurrency of the live hosts' workers for the queue: `0` with waiting tasks means that no worker serves it. A local temporary storage gives its files and bytes, unless it holds more than 50,000 files, and the free space of its disk, read at most once a minute. An S3 temporary storage only gives its kind: listing a bucket costs requests, so watch its size at the provider.
+- `GET /admin/v1/stats` reads the tasks that ended in the period, by UTC hour (up to 31 days) or day (up to 366 days). The p50 and p95 of an operation are the durations of its completed tasks, from their start to their end. Webhooks and jobs are those created in the period. Jobs older than `ECLAIR_JOB_RETENTION` are gone, with their tasks and webhooks: the stats don't go further back. [Usage](#usage) is kept longer.
+- `POST /admin/v1/projects/{project}/storages/{storage}/check` writes a small file under `.eclair/` in an `s3` storage, reads it back and deletes it, with the storage's configuration. An `http` storage is only read: a `GET` of a file that doesn't exist must answer `404`. The message says which step failed and why, never the credentials.
+
 ### Metrics
 
 Scrape `/metrics` of every API and worker process with Prometheus, from inside your network only. The alerts to start with:

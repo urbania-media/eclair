@@ -98,7 +98,7 @@ describe('runCli', () => {
         });
         expect(await runCli(['api'], io)).toBe(EXIT.unavailable);
         expect(output.stderr).toContain(
-            'run eclair migrate (pending: 0001-initial, 0002-upload-parts, 0003-previous-webhook-secret)',
+            'run eclair migrate (pending: 0001-initial, 0002-upload-parts, 0003-previous-webhook-secret, 0004-admin-dashboard)',
         );
     });
 
@@ -116,13 +116,13 @@ describe('runCli', () => {
             const status = createIo(env);
             expect(await runCli(['migrate', '--status'], status.io)).toBe(EXIT.ok);
             expect(status.output.stdout).toBe(
-                'pending 0001-initial\npending 0002-upload-parts\npending 0003-previous-webhook-secret\n',
+                'pending 0001-initial\npending 0002-upload-parts\npending 0003-previous-webhook-secret\npending 0004-admin-dashboard\n',
             );
 
             const migrate = createIo(env);
             expect(await runCli(['migrate'], migrate.io)).toBe(EXIT.ok);
             expect(migrate.output.stdout).toBe(
-                'ran 0001-initial\nran 0002-upload-parts\nran 0003-previous-webhook-secret\nDone.\n',
+                'ran 0001-initial\nran 0002-upload-parts\nran 0003-previous-webhook-secret\nran 0004-admin-dashboard\nDone.\n',
             );
 
             const again = createIo(env);
