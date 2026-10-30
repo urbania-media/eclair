@@ -991,6 +991,12 @@
                     "description": "A summary of the EXIF data. GPS data is never included.",
                     "type": "object",
                     "additionalProperties": true
+                },
+                "thumbhash": {
+                    "description": "A ThumbHash placeholder (https://evanw.github.io/thumbhash/) of an image other than SVG, in base64, when asked for: its first frame, upright, in sRGB, fitted in 100×100. Missing when the image can't be decoded.",
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9+/]+={0,2}$",
+                    "maxLength": 64
                 }
             }
         },
@@ -1013,6 +1019,11 @@
                 },
                 "checksum": {
                     "description": "Add a SHA-256 of the whole file. It reads all of it, so it can take longer.",
+                    "type": "boolean",
+                    "default": false
+                },
+                "thumbhash": {
+                    "description": "Add a ThumbHash placeholder of an image other than SVG. It decodes the image, so it can take longer.",
                     "type": "boolean",
                     "default": false
                 }

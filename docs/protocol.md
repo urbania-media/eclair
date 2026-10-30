@@ -132,7 +132,8 @@ Returns the metadata of a file in the response ([decision 0012](decisions/0012-s
 {
     "input": { "storage": "media", "path": "uploads/interview.mov" },
     "timeout": 10,
-    "checksum": false
+    "checksum": false,
+    "thumbhash": false
 }
 ```
 
@@ -143,6 +144,10 @@ The input takes the same forms as a job input. The file can also be sent as the 
 - `422` when the file can't be read or its type isn't supported.
 
 `checksum: true` adds a SHA-256 of the whole file, which reads all of it and can take longer.
+
+`thumbhash: true` adds a [ThumbHash](https://evanw.github.io/thumbhash/) placeholder of an image other than SVG, in base64: its first frame, upright, in sRGB, fitted in 100×100. It decodes the image, so it can take longer. An image that can't be decoded has no `thumbhash`, and the probe doesn't fail.
+
+With a file body, `timeout`, `checksum` and `thumbhash` are query parameters.
 
 ## Uploads
 
