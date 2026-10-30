@@ -89,6 +89,14 @@ describe('OpenAPI document', () => {
             '/admin/v1/presets',
             '/admin/v1/presets/{name}',
             '/admin/v1/usage',
+            '/admin/v1/jobs',
+            '/admin/v1/jobs/{id}',
+            '/admin/v1/jobs/{id}/cancel',
+            '/admin/v1/jobs/{id}/retry',
+            '/admin/v1/jobs/{id}/deliveries',
+            '/admin/v1/status',
+            '/admin/v1/stats',
+            '/admin/v1/projects/{project}/storages/{storage}/check',
         ]);
         for (const [, item] of admin) {
             for (const [method, operation] of Object.entries(item ?? {})) {

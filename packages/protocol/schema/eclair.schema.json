@@ -1565,6 +1565,454 @@
                     }
                 }
             }
+        },
+        "AdminJob": {
+            "description": "A job, as `GET /v1/jobs/{id}` returns it, with its project.",
+            "allOf": [
+                {
+                    "$ref": "#/$defs/Job"
+                },
+                {
+                    "type": "object",
+                    "required": [
+                        "project"
+                    ],
+                    "properties": {
+                        "project": {
+                            "description": "The slug of the job's project.",
+                            "type": "string"
+                        }
+                    }
+                }
+            ]
+        },
+        "AdminJobList": {
+            "type": "object",
+            "required": [
+                "data",
+                "nextCursor"
+            ],
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/$defs/AdminJob"
+                    }
+                },
+                "nextCursor": {
+                    "$ref": "#/$defs/NextCursor"
+                }
+            }
+        },
+        "WebhookDelivery": {
+            "description": "One webhook of a job, with its delivery attempts.",
+            "type": "object",
+            "required": [
+                "id",
+                "event",
+                "url",
+                "status",
+                "attempts",
+                "responseStatus",
+                "nextAttemptAt",
+                "deliveredAt",
+                "createdAt"
+            ],
+            "properties": {
+                "id": {
+                    "description": "The `Eclair-Delivery` header of every attempt.",
+                    "type": "string"
+                },
+                "event": {
+                    "$ref": "#/$defs/WebhookEvent"
+                },
+                "task": {
+                    "description": "The task of a `task.*` event.",
+                    "type": [
+                        "string",
+                        "null"
+                    ]
+                },
+                "url": {
+                    "type": "string",
+                    "format": "uri"
+                },
+                "status": {
+                    "description": "`pending` until the application answers `2xx`, `failed` once Eclair gave up.",
+                    "type": "string",
+                    "enum": [
+                        "pending",
+                        "delivered",
+                        "failed"
+                    ]
+                },
+                "attempts": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "responseStatus": {
+                    "description": "The HTTP status of the last attempt, `null` when it got no response.",
+                    "type": [
+                        "integer",
+                        "null"
+                    ]
+                },
+                "nextAttemptAt": {
+                    "type": [
+                        "string",
+                        "null"
+                    ],
+                    "format": "date-time"
+                },
+                "deliveredAt": {
+                    "type": [
+                        "string",
+                        "null"
+                    ],
+                    "format": "date-time"
+                },
+                "createdAt": {
+                    "type": "string",
+                    "format": "date-time"
+                }
+            }
+        },
+        "WebhookDeliveryList": {
+            "type": "object",
+            "required": [
+                "data"
+            ],
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/$defs/WebhookDelivery"
+                    }
+                }
+            }
+        },
+        "ServerStatus": {
+            "description": "The state of an install, for its operators.",
+            "type": "object",
+            "required": [
+                "version",
+                "ready",
+                "checks",
+                "hosts",
+                "queues"
+            ],
+            "properties": {
+                "version": {
+                    "type": "string"
+                },
+                "ready": {
+                    "description": "What `/ready` answers.",
+                    "type": "boolean"
+                },
+                "checks": {
+                    "description": "Each check of `/ready`, by name.",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string",
+                        "enum": [
+                            "ok",
+                            "failed"
+                        ]
+                    }
+                },
+                "hosts": {
+                    "description": "The machines that run Eclair, and the queues their workers serve.",
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "required": [
+                            "name",
+                            "queues",
+                            "seenAt"
+                        ],
+                        "properties": {
+                            "name": {
+                                "type": "string"
+                            },
+                            "version": {
+                                "type": "string"
+                            },
+                            "queues": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "required": [
+                                        "name",
+                                        "concurrency"
+                                    ],
+                                    "properties": {
+                                        "name": {
+                                            "type": "string"
+                                        },
+                                        "concurrency": {
+                                            "type": "integer",
+                                            "minimum": 0
+                                        }
+                                    }
+                                }
+                            },
+                            "seenAt": {
+                                "type": "string",
+                                "format": "date-time"
+                            }
+                        }
+                    }
+                },
+                "queues": {
+                    "description": "Every queue of the server, served or not.",
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "required": [
+                            "name",
+                            "waiting",
+                            "active",
+                            "slots",
+                            "oldestWaitingAt"
+                        ],
+                        "properties": {
+                            "name": {
+                                "type": "string"
+                            },
+                            "waiting": {
+                                "description": "Tasks queued and not started.",
+                                "type": "integer",
+                                "minimum": 0
+                            },
+                            "active": {
+                                "type": "integer",
+                                "minimum": 0
+                            },
+                            "slots": {
+                                "description": "Tasks the live workers can run at once. `0`: no worker serves the queue.",
+                                "type": "integer",
+                                "minimum": 0
+                            },
+                            "oldestWaitingAt": {
+                                "description": "When the task that has waited longest was queued.",
+                                "type": [
+                                    "string",
+                                    "null"
+                                ],
+                                "format": "date-time"
+                            }
+                        }
+                    }
+                },
+                "tempStorage": {
+                    "description": "The temporary storage, when its size can be read.",
+                    "type": "object",
+                    "required": [
+                        "kind"
+                    ],
+                    "properties": {
+                        "kind": {
+                            "type": "string",
+                            "enum": [
+                                "local",
+                                "s3"
+                            ]
+                        },
+                        "files": {
+                            "type": "integer",
+                            "minimum": 0
+                        },
+                        "bytes": {
+                            "type": "integer",
+                            "minimum": 0
+                        },
+                        "freeBytes": {
+                            "description": "Free space on a local disk.",
+                            "type": "integer",
+                            "minimum": 0
+                        }
+                    }
+                }
+            }
+        },
+        "Stats": {
+            "description": "What the install did over a period, from its jobs and tasks.",
+            "type": "object",
+            "required": [
+                "since",
+                "until",
+                "interval",
+                "tasks",
+                "operations",
+                "webhooks",
+                "jobs"
+            ],
+            "properties": {
+                "since": {
+                    "type": "string",
+                    "format": "date-time"
+                },
+                "until": {
+                    "type": "string",
+                    "format": "date-time"
+                },
+                "interval": {
+                    "type": "string",
+                    "enum": [
+                        "hour",
+                        "day"
+                    ]
+                },
+                "tasks": {
+                    "description": "Tasks that ended in each interval, by outcome.",
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "required": [
+                            "start",
+                            "completed",
+                            "failed",
+                            "canceled",
+                            "skipped"
+                        ],
+                        "properties": {
+                            "start": {
+                                "type": "string",
+                                "format": "date-time"
+                            },
+                            "completed": {
+                                "type": "integer",
+                                "minimum": 0
+                            },
+                            "failed": {
+                                "type": "integer",
+                                "minimum": 0
+                            },
+                            "canceled": {
+                                "type": "integer",
+                                "minimum": 0
+                            },
+                            "skipped": {
+                                "type": "integer",
+                                "minimum": 0
+                            }
+                        }
+                    }
+                },
+                "operations": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "required": [
+                            "name",
+                            "completed",
+                            "failed",
+                            "p50",
+                            "p95"
+                        ],
+                        "properties": {
+                            "name": {
+                                "type": "string"
+                            },
+                            "completed": {
+                                "type": "integer",
+                                "minimum": 0
+                            },
+                            "failed": {
+                                "type": "integer",
+                                "minimum": 0
+                            },
+                            "p50": {
+                                "description": "Median duration of its tasks, in seconds.",
+                                "type": [
+                                    "number",
+                                    "null"
+                                ]
+                            },
+                            "p95": {
+                                "type": [
+                                    "number",
+                                    "null"
+                                ]
+                            }
+                        }
+                    }
+                },
+                "webhooks": {
+                    "type": "object",
+                    "required": [
+                        "delivered",
+                        "pending",
+                        "failed"
+                    ],
+                    "properties": {
+                        "delivered": {
+                            "type": "integer",
+                            "minimum": 0
+                        },
+                        "pending": {
+                            "type": "integer",
+                            "minimum": 0
+                        },
+                        "failed": {
+                            "type": "integer",
+                            "minimum": 0
+                        }
+                    }
+                },
+                "jobs": {
+                    "type": "object",
+                    "required": [
+                        "created"
+                    ],
+                    "properties": {
+                        "created": {
+                            "type": "integer",
+                            "minimum": 0
+                        }
+                    }
+                }
+            }
+        },
+        "StorageCheck": {
+            "description": "Whether Eclair reaches a storage with its configuration.",
+            "type": "object",
+            "required": [
+                "ok",
+                "read",
+                "write",
+                "durationMs"
+            ],
+            "properties": {
+                "ok": {
+                    "type": "boolean"
+                },
+                "read": {
+                    "type": "string",
+                    "enum": [
+                        "ok",
+                        "failed",
+                        "skipped"
+                    ]
+                },
+                "write": {
+                    "description": "`skipped` for storages Eclair only reads.",
+                    "type": "string",
+                    "enum": [
+                        "ok",
+                        "failed",
+                        "skipped"
+                    ]
+                },
+                "durationMs": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "message": {
+                    "description": "Why a step failed, without credentials.",
+                    "type": "string"
+                }
+            }
         }
     }
 }
