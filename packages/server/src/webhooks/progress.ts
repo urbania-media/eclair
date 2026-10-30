@@ -1,5 +1,5 @@
 /**
- * When a running task sends a `task.progress` webhook (decision 0019): at most once per
+ * When a running task sends a `task.progress` webhook (decision 0020): at most once per
  * interval, counted from the start of the task, and only when its progress changed. A task that
  * ends within the interval sends none.
  */

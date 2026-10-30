@@ -38,7 +38,7 @@ export const ProjectSettingsSchema = Type.Object(
         probesPerMinute: Type.Integer({ minimum: 1, default: 600 }),
         /** Sends a `task.completed` webhook for each task, besides the job's. */
         taskWebhooks: Type.Boolean({ default: false }),
-        /** Sends a `task.progress` webhook while each task runs, besides the job's (decision 0019). */
+        /** Sends a `task.progress` webhook while each task runs, besides the job's (decision 0020). */
         progressWebhooks: Type.Boolean({ default: false }),
         /** The shortest time between two `task.progress` webhooks of a task, in milliseconds. */
         progressWebhookInterval: Type.Integer({ minimum: 1000, default: 5000 }),

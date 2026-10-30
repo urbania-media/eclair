@@ -538,7 +538,7 @@ export class TaskRunner {
 
     /**
      * Sends the task's `task.progress` webhooks, for projects with `progressWebhooks`, throttled
-     * by `progressWebhookInterval` (decision 0019).
+     * by `progressWebhookInterval` (decision 0020).
      */
     #progressWebhooks(
         project: Project,

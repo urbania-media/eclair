@@ -32,7 +32,7 @@ interface DeliveryMessage {
     deliveryId: string;
 }
 
-/** A `task.progress` webhook: not recorded, attempted once (decision 0019). */
+/** A `task.progress` webhook: not recorded, attempted once (decision 0020). */
 interface ProgressMessage {
     deliveryId: string;
     projectId: string;
@@ -57,7 +57,7 @@ export interface WebhooksOptions {
  * Webhooks: a signed `POST` of the job to its webhook URL when it ends, or when a task completes
  * for projects that ask (see the protocol). Deliveries go through the SSRF guard, are recorded in
  * `webhook_deliveries`, and are retried with backoff for 24 hours. The `task.progress` webhooks
- * of the projects that ask are neither recorded nor retried (decision 0019).
+ * of the projects that ask are neither recorded nor retried (decision 0020).
  */
 export class Webhooks {
     readonly #options: WebhooksOptions;
