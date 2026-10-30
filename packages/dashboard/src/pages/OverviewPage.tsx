@@ -161,7 +161,7 @@ export function OverviewPage() {
                 />
             </div>
 
-            <Grid as="dl" minItemWidth="14rem" gap={4} className={styles.kpis}>
+            <Grid as="dl" minItemWidth="9rem" gap={4} className={styles.kpis}>
                 {kpis.map((kpi) => (
                     <div key={kpi.label} className={styles.kpi}>
                         <dt className={styles.kpiLabel}>{kpi.label}</dt>

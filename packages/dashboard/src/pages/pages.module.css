@@ -152,7 +152,7 @@
 }
 
 .kpiValue {
-    font-size: 1.75rem;
+    font-size: clamp(1.25rem, 5vw, 1.75rem);
     font-weight: var(--panneau-font-weight-bold);
     font-variant-numeric: tabular-nums;
     line-height: var(--panneau-line-height-tight);
