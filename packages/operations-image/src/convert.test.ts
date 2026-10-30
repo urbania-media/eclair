@@ -68,6 +68,21 @@ describe.skipIf(skipWithoutBinaries(convert.binaries))('image.convert', () => {
         }
     });
 
+    it('reads HEIC and HEIF sequences at their primary image', async () => {
+        for (const name of ['sequence.heic', 'sequence.heif']) {
+            const result = await runOn(convert, name, { format: 'jpeg' });
+            try {
+                expect(result.metadata).toEqual({ width: 64, height: 64 });
+                // The primary image is the first frame, red.
+                expect(pixel(result.files[0]?.path ?? '', 32, 32)).toMatch(
+                    /^srgb\((19[0-9]|2[0-1][0-9]),([3-6][0-9]),([3-6][0-9])\)$/,
+                );
+            } finally {
+                await result.cleanup();
+            }
+        }
+    });
+
     it('renders an SVG', async () => {
         const result = await runOn(convert, 'image.svg', { format: 'png' });
         try {

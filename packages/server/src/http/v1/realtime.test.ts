@@ -291,6 +291,24 @@ describe.skipIf(!RUNS_WITH_REDIS)('webhooks, events and probes', () => {
             expect(validate('Job', job).valid).toBe(true);
         });
 
+        it('asks the probe for a placeholder with thumbhash', async () => {
+            const response = await fetch(`${base}/v1/probe?timeout=1&thumbhash=1`, {
+                method: 'POST',
+                headers: { ...auth(), 'content-type': 'application/octet-stream' },
+                body: 'nobody probes this either',
+            });
+            expect(response.status).toBe(202);
+            const job = (await response.json()) as { id: string };
+            const task = await services.database.kysely
+                .selectFrom('tasks')
+                .select('options')
+                .where('job_id', '=', job.id)
+                .executeTakeFirstOrThrow();
+            const options: unknown =
+                typeof task.options === 'string' ? JSON.parse(task.options) : task.options;
+            expect(options).toMatchObject({ checksum: false, thumbhash: true });
+        });
+
         describe('with a worker', () => {
             beforeAll(async () => {
                 if (

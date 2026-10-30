@@ -51,12 +51,17 @@ export class Probes {
     async probe(
         project: Project,
         input: Input,
-        options: { timeout: number; checksum: boolean },
+        options: { timeout: number; checksum: boolean; thumbhash?: boolean },
     ): Promise<ProbeOutcome> {
         await this.#count(project);
         const { job: created } = await this.#jobs.create(project, {
             input,
-            tasks: { probe: { op: 'probe', options: { checksum: options.checksum } } },
+            tasks: {
+                probe: {
+                    op: 'probe',
+                    options: { checksum: options.checksum, thumbhash: options.thumbhash ?? false },
+                },
+            },
         });
 
         let resolveEnded: () => void = () => {};

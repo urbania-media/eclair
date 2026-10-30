@@ -7,12 +7,16 @@ import { OperationError, defineOperation, ffmpegInput } from '@eclair-js/operati
 import type { OperationContext } from '@eclair-js/operation';
 import type { ProbeMetadata } from '@eclair-js/protocol';
 
+import { thumbhash } from './thumbhash.ts';
+
 const ProbeOptions = Type.Object(
     {
         /** Adds the SHA-256 of the whole file, which reads all of it. */
         checksum: Type.Boolean({ default: false }),
         /** Adds a summary of the EXIF data of images. GPS data is never included. */
         exif: Type.Boolean({ default: true }),
+        /** Adds a ThumbHash placeholder of images other than SVG, which decodes the image. */
+        thumbhash: Type.Boolean({ default: false }),
     },
     { additionalProperties: false },
 );
@@ -31,6 +35,8 @@ const IMAGEMAGICK_CODERS: Record<string, string> = {
     'image/avif': 'avif',
     'image/heic': 'heic',
     'image/heif': 'heic',
+    'image/heic-sequence': 'heic',
+    'image/heif-sequence': 'heic',
     'image/tiff': 'tiff',
     'image/bmp': 'bmp',
     'image/x-icon': 'ico',
@@ -339,10 +345,10 @@ export const probe = defineOperation({
     name: 'probe',
     version: 1,
     description:
-        'Type, size and dimensions; duration, frame rate, bitrate, codecs and channels; page count; font names; animation; an EXIF summary without GPS; and an optional checksum.',
+        'Type, size and dimensions; duration, frame rate, bitrate, codecs and channels; page count; font names; animation; an EXIF summary without GPS; an optional ThumbHash placeholder of images; and an optional checksum.',
     accepts: {},
     capability: 'probe',
-    binaries: ['ffprobe', 'magick', 'pdfinfo', 'fonttools'],
+    binaries: ['ffprobe', 'magick', 'pdfinfo', 'fonttools', 'vips'],
     options: ProbeOptions,
     outputs: { files: false, metadata: true },
 
@@ -361,6 +367,12 @@ export const probe = defineOperation({
             await probeSvg(input.path, metadata);
         } else if (input.kind === 'image') {
             await probeImage(context, metadata, options.exif);
+            if (options.thumbhash) {
+                const placeholder = await thumbhash(context);
+                if (placeholder !== undefined) {
+                    metadata.thumbhash = placeholder;
+                }
+            }
         } else if (input.mime === 'application/pdf') {
             await probePdf(context, metadata);
         } else if (input.kind === 'font') {
