@@ -12,6 +12,11 @@ export class LocalDriver implements StorageDriver {
         this.#root = resolve(root);
     }
 
+    /** The directory of the files. */
+    get root(): string {
+        return this.#root;
+    }
+
     /** The local path of a storage path, to stream it. */
     localPath(path: string): string {
         return this.#resolve(path);

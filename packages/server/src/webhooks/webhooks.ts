@@ -78,8 +78,11 @@ export class Webhooks {
         this.#jobs = jobs;
     }
 
-    /** Records a delivery and queues it. Does nothing for a job without a webhook URL. */
-    async send(job: JobRecord, event: WebhookEvent): Promise<void> {
+    /**
+     * Records a delivery and queues it, with its task for a `task.*` event. Does nothing for a job
+     * without a webhook URL.
+     */
+    async send(job: JobRecord, event: WebhookEvent, task?: string): Promise<void> {
         if (job.webhookUrl === undefined) {
             return;
         }
@@ -92,6 +95,7 @@ export class Webhooks {
                 project_id: job.projectId,
                 job_id: job.id,
                 event,
+                task: task ?? null,
                 url: job.webhookUrl,
                 status: 'pending',
                 attempts: 0,
@@ -207,6 +211,7 @@ export class Webhooks {
                     'user-agent': 'Eclair',
                     'eclair-event': delivery.event,
                     'eclair-delivery': delivery.id,
+                    ...(delivery.task === null ? {} : { 'eclair-task': delivery.task }),
                     'eclair-signature': signWebhook(secrets, body),
                 },
                 headersTimeout: 10_000,

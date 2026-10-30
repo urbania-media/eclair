@@ -193,6 +193,8 @@ export interface WebhookDeliveriesTable {
     project_id: string;
     job_id: string;
     event: string;
+    /** The task of a `task.*` event. */
+    task: Nullable<string>;
     url: string;
     status: string;
     attempts: number;
@@ -353,6 +355,7 @@ export const COLUMNS = {
         'project_id',
         'job_id',
         'event',
+        'task',
         'url',
         'status',
         'attempts',

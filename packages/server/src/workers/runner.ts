@@ -402,7 +402,7 @@ export class TaskRunner {
                 return 'canceled';
             }
             if (project.settings.taskWebhooks) {
-                await this.#options.webhooks?.send(job, 'task.completed');
+                await this.#options.webhooks?.send(job, 'task.completed', task.name);
             }
             await this.#recordUsage(
                 task,

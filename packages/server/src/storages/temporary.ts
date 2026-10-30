@@ -1,3 +1,6 @@
+import type { Dirent } from 'node:fs';
+import { opendir, stat, statfs } from 'node:fs/promises';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import type { Config } from '../config/config.ts';
@@ -8,6 +11,59 @@ import type { ReadOptions, StorageDriver, WriteOptions } from './drivers/types.t
 
 /** A backend that can also delete a whole prefix. */
 type Backend = StorageDriver & { deletePrefix(prefix: string): Promise<void> };
+
+/** What `GET /admin/v1/status` says of the temporary storage. */
+export interface TemporaryStorageSize {
+    kind: 'local' | 's3';
+    files?: number;
+    bytes?: number;
+    /** Free space on a local disk. */
+    freeBytes?: number;
+}
+
+/** Past this many files, a local storage isn't counted: its size would take too long to read. */
+const MAX_COUNTED_FILES = 50_000;
+/** Milliseconds a size is reused, so that a dashboard that polls doesn't walk the disk each time. */
+const SIZE_CACHE = 60_000;
+
+/** Files and bytes under a directory, or `undefined` past `limit` files. */
+async function directorySize(
+    root: string,
+    limit: number,
+): Promise<{ files: number; bytes: number } | undefined> {
+    let files = 0;
+    let bytes = 0;
+    const directories = [root];
+    for (
+        let directory = directories.pop();
+        directory !== undefined;
+        directory = directories.pop()
+    ) {
+        let entries: AsyncIterable<Dirent>;
+        try {
+            entries = await opendir(directory);
+        } catch {
+            // Gone since it was listed, or never created: nothing in it.
+            continue;
+        }
+        for await (const entry of entries) {
+            const path = join(directory, entry.name);
+            if (entry.isDirectory()) {
+                directories.push(path);
+            } else if (entry.isFile()) {
+                files += 1;
+                if (files > limit) {
+                    return undefined;
+                }
+                bytes += await stat(path).then(
+                    ({ size }) => size,
+                    () => 0,
+                );
+            }
+        }
+    }
+    return { files, bytes };
+}
 
 /**
  * Eclair's temporary storage (decision 0011): a local directory on a single server, or an
@@ -45,6 +101,37 @@ export class TemporaryStorage {
                 ...config.tempStorageCredentials,
             }),
         );
+    }
+
+    #size: { value: TemporaryStorageSize; at: number } | undefined;
+
+    /**
+     * The size of a local storage: its files and bytes (unless it holds more than 50,000 files)
+     * and the free space of its disk, read at most once a minute. An S3 storage only gives its
+     * kind: listing a bucket costs requests.
+     */
+    async size(): Promise<TemporaryStorageSize> {
+        if (!(this.backend instanceof LocalDriver)) {
+            return { kind: 's3' };
+        }
+        if (this.#size !== undefined && Date.now() - this.#size.at < SIZE_CACHE) {
+            return this.#size.value;
+        }
+        const root = this.backend.root;
+        const [counted, free] = await Promise.all([
+            directorySize(root, MAX_COUNTED_FILES),
+            statfs(root).then(
+                ({ bavail, bsize }) => bavail * bsize,
+                () => undefined,
+            ),
+        ]);
+        const value: TemporaryStorageSize = {
+            kind: 'local',
+            ...counted,
+            ...(free === undefined ? {} : { freeBytes: free }),
+        };
+        this.#size = { value, at: Date.now() };
+        return value;
     }
 
     /** The temporary storage of one project: paths are under its id. */

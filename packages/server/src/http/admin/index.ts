@@ -7,9 +7,15 @@ import { safeEqual } from '../../crypto.ts';
 import type { ApiKey } from '../../projects/api-keys.ts';
 import type { Project, ProjectPatch, WebhookSecrets } from '../../projects/projects.ts';
 import type { Services } from '../../services.ts';
+import { MAX_PERIOD, computeStats } from '../../stats/stats.ts';
+import type { StatsInterval } from '../../stats/stats.ts';
+import { checkStorage } from '../../storages/check.ts';
 import type { StorageSummary } from '../../storages/storages.ts';
 import { usageReport } from '../../usage/usage.ts';
 import { problems } from '../problem.ts';
+import { adminJobRoutes } from './jobs.ts';
+import { statusRoute } from './status.ts';
+import type { StatusOptions } from './status.ts';
 
 const schema = (name: string) => ({ $ref: `${JSON_SCHEMA_ID}#/$defs/${name}` });
 
@@ -68,9 +74,10 @@ function param(request: FastifyRequest, name: string): string {
  */
 export async function admin(
     app: FastifyInstance,
-    options: { services: Services; adminToken: string },
+    options: { services: Services; adminToken: string } & StatusOptions,
 ): Promise<void> {
-    const { projects, apiKeys, storages, presets, database } = options.services;
+    const { services } = options;
+    const { projects, apiKeys, storages, presets, database } = services;
 
     app.addHook('onRequest', async (request) => {
         const header = request.headers.authorization;
@@ -239,5 +246,64 @@ export async function admin(
             projectId: project?.id,
         });
         return { data: lines };
+    });
+    app.post(
+        '/projects/:project/storages/:storage/check',
+        async (request): Promise<protocol.StorageCheck> =>
+            checkStorage(
+                {
+                    projects,
+                    storages,
+                    resolver: services.resolver,
+                    tmpDir: services.limits.tmpDir,
+                },
+                param(request, 'project'),
+                param(request, 'storage'),
+            ),
+    );
+
+    if (services.jobs !== undefined) {
+        adminJobRoutes(app, services, services.jobs);
+    }
+
+    statusRoute(app, services, options);
+
+    app.get('/stats', async (request): Promise<protocol.Stats> => {
+        const query = request.query as Record<string, unknown>;
+        const errors: Record<string, string[]> = {};
+        const date = (name: string, fallback: Date): Date => {
+            if (query[name] === undefined) {
+                return fallback;
+            }
+            const value = new Date(String(query[name]));
+            if (Number.isNaN(value.getTime())) {
+                errors[`?${name}`] = ['must be a date-time'];
+                return fallback;
+            }
+            return value;
+        };
+        const interval = (query['interval'] ?? 'hour') as StatsInterval;
+        if (interval !== 'hour' && interval !== 'day') {
+            errors['?interval'] = ['must be hour or day'];
+        }
+        const until = date('until', new Date());
+        const since = date('since', new Date(until.getTime() - 24 * 3_600_000));
+        if (Object.keys(errors).length === 0) {
+            if (since >= until) {
+                errors['?since'] = ['must be before until'];
+            } else if (until.getTime() - since.getTime() > MAX_PERIOD[interval]) {
+                errors['?since'] = [
+                    interval === 'hour'
+                        ? 'must be at most 31 days before until, by hour'
+                        : 'must be at most 366 days before until',
+                ];
+            }
+        }
+        if (Object.keys(errors).length > 0) {
+            throw problems.invalid(errors, 'The query is invalid.');
+        }
+        const project =
+            typeof query['project'] === 'string' ? await projects.get(query['project']) : undefined;
+        return computeStats(database, { since, until, interval, projectId: project?.id });
     });
 }
