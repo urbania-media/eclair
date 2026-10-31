@@ -6,7 +6,7 @@ import { createAdminClient } from '../adapter/client.ts';
 import { createMessages } from '../messages/index.ts';
 import { type Route, json, mockFetch } from '../testing/fetch.ts';
 import { ADMIN_TOKEN } from '../testing/fixtures.ts';
-import { createJobs, describeJob, jobDuration } from './jobs.ts';
+import { describeJob, jobDuration, jobs } from './jobs.ts';
 
 function job(index: number, overrides: Partial<AdminJob> = {}): AdminJob {
     return {
@@ -30,7 +30,6 @@ function job(index: number, overrides: Partial<AdminJob> = {}): AdminJob {
 function setup(routes: Record<string, Route>) {
     const mock = mockFetch(routes);
     return {
-        jobs: createJobs(),
         context: {
             client: createAdminClient({
                 baseUrl: '/admin/v1',
@@ -66,7 +65,7 @@ describe('jobs', () => {
     });
 
     it('maps the filters and the search onto the admin API, and lists jobs as items', async () => {
-        const { jobs, context, requests } = setup({
+        const { context, requests } = setup({
             'GET /admin/v1/jobs': () =>
                 json({ data: [job(1)], nextCursor: null }, { schema: 'AdminJobList' }),
         });
@@ -104,45 +103,36 @@ describe('jobs', () => {
                     duration: 50,
                 }),
             ],
-            meta: { page: 1, perPage: 50, total: 1, lastPage: 1 },
+            meta: { perPage: 50, nextCursor: null },
         });
     });
 
     it('pages with the cursors of the admin API', async () => {
-        const pages: Record<string, { data: AdminJob[]; nextCursor: string | null }> = {
-            '': { data: [job(1), job(2)], nextCursor: 'c2' },
-            c2: { data: [job(3), job(4)], nextCursor: 'c3' },
-            c3: { data: [job(5)], nextCursor: null },
-        };
-        const { jobs, context, requests } = setup({
+        const { context, requests } = setup({
             'GET /admin/v1/jobs': ({ url }) =>
-                json(pages[url.searchParams.get('cursor') ?? ''], { schema: 'AdminJobList' }),
+                json(
+                    url.searchParams.get('cursor') === 'c2'
+                        ? { data: [job(3)], nextCursor: null }
+                        : { data: [job(1), job(2)], nextCursor: 'c2' },
+                    { schema: 'AdminJobList' },
+                ),
         });
-        // A page further than the known ones reads the pages before it.
-        const third = await jobs.list?.({ page: 3, perPage: 2 }, context);
-        expect(requests.map(({ url }) => url.searchParams.get('cursor'))).toEqual([
-            null,
-            'c2',
-            'c3',
-        ]);
-        expect(third?.data.map(({ id }) => id)).toEqual([job(5).id]);
-        expect(third?.meta).toEqual({ page: 3, perPage: 2, total: 5, lastPage: 3 });
-        // A known page is read with its cursor.
-        const second = await jobs.list?.({ page: 2, perPage: 2 }, context);
-        expect(requests.at(-1)?.url.searchParams.get('cursor')).toBe('c2');
-        expect(second?.meta).toEqual({ page: 2, perPage: 2, total: 5, lastPage: 3 });
-        // Beyond the last page, nothing.
-        const fifth = await jobs.list?.({ page: 5, perPage: 2 }, context);
-        expect(fifth?.data).toEqual([]);
+        const first = await jobs.list?.({ perPage: 2 }, context);
+        expect(first?.meta).toEqual({ perPage: 2, nextCursor: 'c2' });
+        expect(requests[0]?.url.searchParams.has('cursor')).toBe(false);
+        const second = await jobs.list?.({ perPage: 2, cursor: 'c2' }, context);
+        expect(requests[1]?.url.searchParams.get('cursor')).toBe('c2');
+        expect(second?.data.map(({ id }) => id)).toEqual([job(3).id]);
+        expect(second?.meta).toEqual({ perPage: 2, nextCursor: null });
     });
 
     it('finds a job by its id in the search', async () => {
-        const { jobs, context } = setup({
+        const { context } = setup({
             [`GET /admin/v1/jobs/${job(7).id}`]: () => json(job(7), { schema: 'AdminJob' }),
         });
         await expect(jobs.list?.({ q: job(7).id }, context)).resolves.toMatchObject({
             data: [{ id: job(7).id }],
-            meta: { total: 1 },
+            meta: { nextCursor: null },
         });
         await expect(jobs.list?.({ q: 'job_unknown' }, context)).resolves.toMatchObject({
             data: [],
@@ -150,7 +140,7 @@ describe('jobs', () => {
     });
 
     it('cancels and retries jobs', async () => {
-        const { jobs, context, requests } = setup({
+        const { context, requests } = setup({
             [`POST /admin/v1/jobs/${job(1).id}/retry`]: () =>
                 json(job(1, { status: 'running' }), { schema: 'AdminJob' }),
         });

@@ -10,6 +10,7 @@ import type {
 import type { IntlShape } from 'react-intl';
 
 import { type Locale, type MessageId, t } from './messages/index.ts';
+import { TONES } from './tones.ts';
 
 export interface DefinitionOptions {
     intl: IntlShape;
@@ -30,8 +31,13 @@ const PRESET_NAME = '^[a-z0-9][a-z0-9-]*(/[a-z0-9][a-z0-9-]*)*$';
 
 function messages(intl: IntlShape) {
     const m = (id: MessageId, values?: Record<string, string | number>) => t(intl, id, values);
+    // A status gets the tone of its badge.
     const options = (prefix: string, values: readonly string[]) =>
-        values.map((value) => ({ value, label: m(`${prefix}.${value}` as MessageId) }));
+        values.map((value) => ({
+            value,
+            label: m(`${prefix}.${value}` as MessageId),
+            ...(TONES[value] !== undefined ? { tone: TONES[value] } : {}),
+        }));
     const field = (
         resource: string,
         name: string,
@@ -98,7 +104,6 @@ function projectsResource(intl: IntlShape): ResourceInput {
             field('projects', 'status', 'select', {
                 readOnly: true,
                 options: status,
-                display: 'eclair-status',
             }),
             field('projects', 'priority', 'select', {
                 options: options('priority', ['low', 'normal', 'high']),
@@ -155,11 +160,6 @@ function projectsResource(intl: IntlShape): ResourceInput {
         ],
         form: {
             layout: [
-                {
-                    type: 'component',
-                    component: 'eclair-item-actions',
-                    props: { resource: 'projects', idField: 'slug' },
-                },
                 row(['name', 6], ['slug', 4], ['status', 2]),
                 {
                     type: 'section',
@@ -249,7 +249,6 @@ function keysResource(intl: IntlShape): ResourceInput {
             field('keys', 'status', 'select', {
                 readOnly: true,
                 options: options('status', ['active', 'revoked']),
-                display: 'eclair-status',
             }),
             field('keys', 'lastUsedAt', 'datetime', { readOnly: true }),
             field('keys', 'createdAt', 'datetime', { readOnly: true }),
@@ -317,9 +316,10 @@ function storagesResource(intl: IntlShape): ResourceInput {
             }),
             field('storages', 'prefix', 'text', { visibleWhen: s3 }),
             field('storages', 'accessKeyId', 'text', { visibleWhen: s3 }),
-            // Shown as it is typed: text fields have no secret mode yet,
-            // https://github.com/folkloreinc/panneau-js/issues/143
-            field('storages', 'secretAccessKey', 'text', { visibleWhen: s3 }),
+            field('storages', 'secretAccessKey', 'text', {
+                visibleWhen: s3,
+                settings: { secret: true },
+            }),
             field('storages', 'forcePathStyle', 'boolean', { visibleWhen: s3 }),
             field('storages', 'url', 'url', {
                 visibleWhen: { field: 'kind', equals: 'http' },
@@ -389,11 +389,6 @@ function presetsResource(intl: IntlShape): ResourceInput {
         ],
         form: {
             layout: [
-                {
-                    type: 'component',
-                    component: 'eclair-item-actions',
-                    props: { resource: 'presets', idField: 'name' },
-                },
                 { type: 'field', name: 'name' },
                 { type: 'field', name: 'revision' },
                 { type: 'field', name: 'description' },
@@ -468,7 +463,6 @@ function jobsResource(
             field('jobs', 'status', 'select', {
                 readOnly: true,
                 options: options('jobs.statuses', JOB_STATUSES),
-                display: 'eclair-status',
             }),
             field('jobs', 'tasks', 'json', { readOnly: true, display: 'eclair-tasks' }),
             field('jobs', 'what', 'text', { readOnly: true, display: 'eclair-code' }),
@@ -504,7 +498,8 @@ function jobsResource(
                 { id: 'operation', type: 'text', label: m('jobs.filters.operation') },
                 { id: 'created', type: 'date-range', label: m('jobs.fields.createdAt') },
             ],
-            // The newest first, always: the admin API pages jobs with a cursor.
+            // The newest first, always, with the admin API's cursors
+            pagination: 'cursor',
             sorts: [],
             search: true,
             perPage: 50,
@@ -517,7 +512,8 @@ function jobsResource(
                 kind: 'link',
                 scope: ['item'],
                 placement: ['row'],
-                url: `${BASE_PATH}/pages/job?id={id}`,
+                // The page `job`, with the item's id
+                route: 'job',
             },
             {
                 id: 'cancel',
@@ -570,11 +566,11 @@ export function createDefinition({
         pages: {
             // The overview is the home: the sidebar's first link.
             home: { component: 'eclair-overview', label: t(intl, 'overview.title') },
-            job: { component: 'eclair-job', label: t(intl, 'job.title') },
+            job: { component: 'eclair-job', label: t(intl, 'job.title'), params: ['id'] },
             usage: { component: 'eclair-usage', label: t(intl, 'usage.title') },
         },
         menus: {
-            // Keys and storages are on the page of their project, a job on its own page.
+            // Keys and storages are on the page of their project.
             main: [
                 { type: 'resource', resource: 'jobs' },
                 { type: 'resource', resource: 'projects' },

@@ -6,7 +6,6 @@ import { Check, Copy, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { useIntl } from 'react-intl';
 
-import { DialogForm } from './DialogForm.tsx';
 import { ProjectList } from './ProjectList.tsx';
 import styles from './project.module.css';
 import { useProjectSlug } from './useProject.ts';
@@ -55,19 +54,17 @@ function NewKey({ project }: { project: string }) {
                 isKeyboardDismissDisabled={token !== null}
             >
                 {token === null ? (
-                    <DialogForm>
-                        <Form
-                            aria-label={intl.formatMessage({ id: 'keys.new' })}
-                            fields={form.fields.filter((field) => !field.readOnly)}
-                            mode="create"
-                            submitLabel={intl.formatMessage({ id: 'keys.create' })}
-                            onSubmit={async (values) => {
-                                const item = await create.mutateAsync({ ...values, project });
-                                setToken(typeof item.token === 'string' ? item.token : '');
-                                return item;
-                            }}
-                        />
-                    </DialogForm>
+                    <Form
+                        aria-label={intl.formatMessage({ id: 'keys.new' })}
+                        fields={form.fields.filter((field) => !field.readOnly)}
+                        mode="create"
+                        submitLabel={intl.formatMessage({ id: 'keys.create' })}
+                        onSubmit={async (values) => {
+                            const item = await create.mutateAsync({ ...values, project });
+                            setToken(typeof item.token === 'string' ? item.token : '');
+                            return item;
+                        }}
+                    />
                 ) : (
                     <Stack gap={4}>
                         <Alert tone="warning">{intl.formatMessage({ id: 'keys.created' })}</Alert>

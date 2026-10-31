@@ -1,5 +1,6 @@
+import { PageHeader, PageLayout } from '@panneau/app';
 import { queryKeys, useDataAdapter } from '@panneau/data/query';
-import { Alert, Badge, Button, Card, Disclosure, Heading, Skeleton, Text } from '@panneau/ui';
+import { Alert, Badge, Button, Card, Disclosure, Skeleton, Text } from '@panneau/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { CircleOff, RotateCcw } from 'lucide-react';
 import { useState } from 'react';
@@ -9,9 +10,9 @@ import { useIntl } from 'react-intl';
 import type { Input, Task } from '@eclair-js/protocol';
 
 import { BASE_PATH } from '../definition.ts';
-import { TONES } from '../displays.tsx';
 import { formatBytes, formatDuration } from '../format.ts';
 import { CopyButton } from '../project/ProjectKeys.tsx';
+import { TONES } from '../tones.ts';
 import type { JobData } from '../widgets.ts';
 import { failedTask } from './OverviewPage.tsx';
 import styles from './pages.module.css';
@@ -32,22 +33,17 @@ function describeInput(input: Input | undefined): string {
     return `${input.storage}:${input.path}`;
 }
 
-/** The id of the page's job: plugin pages take no parameter, so it is in the query string. */
-function useJobId(): string | null {
-    // https://github.com/folkloreinc/panneau-js/issues/151
-    return new URLSearchParams(window.location.search).get('id');
-}
-
 /**
  * A job: its request, its probed input, its tasks on a timeline and its webhooks, with cancel and
  * retry. A plugin page until Panneau has dashboard widgets (decision 0021). It refreshes itself
  * while the job runs.
  */
-export function JobPage() {
+export function JobPage({ params }: { params: { id?: string } }) {
     const intl = useIntl();
     const adapter = useDataAdapter();
     const queryClient = useQueryClient();
-    const id = useJobId();
+    // The page's param: `{basePath}/pages/job/{id}`
+    const id = params.id ?? null;
     const [pending, setPending] = useState<string | null>(null);
     const [failure, setFailure] = useState<string | null>(null);
     const job = useQuery({
@@ -92,24 +88,31 @@ export function JobPage() {
         }
     };
 
+    const back = { href: jobsHref, label: m('jobs.title') };
     let content;
     if (job.data === undefined) {
-        content = job.isError ? (
-            <Alert tone="danger">
-                <p>{m('job.loadError', { message: job.error.message })}</p>
-                <Button size="sm" onPress={() => void job.refetch()}>
-                    {m('common.retry')}
-                </Button>
-            </Alert>
-        ) : (
+        content = (
             <>
-                <Skeleton height="8rem" />
-                <Skeleton height="16rem" />
+                <PageHeader title={<code>{title}</code>} back={back} />
+                {job.isError ? (
+                    <Alert tone="danger">
+                        <p>{m('job.loadError', { message: job.error.message })}</p>
+                        <Button size="sm" onPress={() => void job.refetch()}>
+                            {m('common.retry')}
+                        </Button>
+                    </Alert>
+                ) : (
+                    <>
+                        <Skeleton height="8rem" />
+                        <Skeleton height="16rem" />
+                    </>
+                )}
             </>
         );
     } else {
         content = (
             <JobDetails
+                back={back}
                 data={job.data}
                 now={job.dataUpdatedAt || Date.now()}
                 pending={pending}
@@ -119,29 +122,18 @@ export function JobPage() {
         );
     }
 
-    return (
-        <div className={styles.page}>
-            <nav aria-label={m('job.breadcrumb')}>
-                <Text size="sm" muted>
-                    <Link href={jobsHref} className={styles.link}>
-                        {m('jobs.title')}
-                    </Link>
-                    {' / '}
-                    <code>{title}</code>
-                </Text>
-            </nav>
-            {content}
-        </div>
-    );
+    return <PageLayout>{content}</PageLayout>;
 }
 
 function JobDetails({
+    back,
     data: { job, deliveries },
     now,
     pending,
     failure,
     onAction,
 }: {
+    back: { href: string; label: string };
     data: JobData;
     now: number;
     pending: string | null;
@@ -169,37 +161,40 @@ function JobDetails({
 
     return (
         <>
-            <header className={styles.header}>
-                <div className={styles.row}>
-                    <Heading level={1}>
+            <PageHeader
+                title={
+                    <span className={styles.row}>
                         <code>{job.id}</code>
-                    </Heading>
-                    <Badge tone={TONES[job.status]}>{m(`jobs.statuses.${job.status}`)}</Badge>
-                </div>
-                <div className={styles.headerActions}>
-                    <CopyButton text={JSON.stringify(job, null, 2)} />
-                    <Button
-                        size="sm"
-                        icon={CircleOff}
-                        tone="danger"
-                        isDisabled={!ACTIVE.has(job.status)}
-                        isPending={pending === 'cancel'}
-                        onPress={() => onAction('cancel')}
-                    >
-                        {m('jobs.actions.cancel')}
-                    </Button>
-                    <Button
-                        size="sm"
-                        variant="primary"
-                        icon={RotateCcw}
-                        isDisabled={!STOPPED.has(job.status)}
-                        isPending={pending === 'retry'}
-                        onPress={() => onAction('retry')}
-                    >
-                        {m('job.retry')}
-                    </Button>
-                </div>
-            </header>
+                        <Badge tone={TONES[job.status]}>{m(`jobs.statuses.${job.status}`)}</Badge>
+                    </span>
+                }
+                back={back}
+                actions={
+                    <>
+                        <CopyButton text={JSON.stringify(job, null, 2)} />
+                        <Button
+                            size="sm"
+                            icon={CircleOff}
+                            tone="danger"
+                            isDisabled={!ACTIVE.has(job.status)}
+                            isPending={pending === 'cancel'}
+                            onPress={() => onAction('cancel')}
+                        >
+                            {m('jobs.actions.cancel')}
+                        </Button>
+                        <Button
+                            size="sm"
+                            variant="primary"
+                            icon={RotateCcw}
+                            isDisabled={!STOPPED.has(job.status)}
+                            isPending={pending === 'retry'}
+                            onPress={() => onAction('retry')}
+                        >
+                            {m('job.retry')}
+                        </Button>
+                    </>
+                }
+            />
 
             {failure !== null ? <Alert tone="danger">{failure}</Alert> : null}
             {failed !== null ? (

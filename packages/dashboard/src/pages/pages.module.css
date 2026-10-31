@@ -1,32 +1,3 @@
-.page {
-    display: flex;
-    flex-direction: column;
-    gap: var(--panneau-space-5);
-    max-width: 80rem;
-    margin-inline: auto;
-}
-
-.header {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: flex-end;
-    justify-content: space-between;
-    gap: var(--panneau-space-3);
-}
-
-.headerTitle {
-    display: flex;
-    flex-direction: column;
-    gap: var(--panneau-space-1);
-    min-width: 0;
-}
-
-.headerActions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--panneau-space-2);
-}
-
 .toolbar {
     display: flex;
     flex-wrap: wrap;

@@ -6,7 +6,6 @@ import { Plus } from 'lucide-react';
 import { useState } from 'react';
 import { useIntl } from 'react-intl';
 
-import { DialogForm } from './DialogForm.tsx';
 import { ProjectList } from './ProjectList.tsx';
 import { useProjectSlug } from './useProject.ts';
 
@@ -29,16 +28,14 @@ function AddStorage({ project }: { project: string }) {
                 <Text as="p" muted>
                     {intl.formatMessage({ id: 'storages.credentials' })}
                 </Text>
-                <DialogForm>
-                    <Form
-                        aria-label={intl.formatMessage({ id: 'storages.add' })}
-                        fields={form.fields.filter((field) => !field.readOnly)}
-                        mode="create"
-                        submitLabel={intl.formatMessage({ id: 'storages.save' })}
-                        onSubmit={(values) => create.mutateAsync({ ...values, project })}
-                        onSubmitted={() => setOpen(false)}
-                    />
-                </DialogForm>
+                <Form
+                    aria-label={intl.formatMessage({ id: 'storages.add' })}
+                    fields={form.fields.filter((field) => !field.readOnly)}
+                    mode="create"
+                    submitLabel={intl.formatMessage({ id: 'storages.save' })}
+                    onSubmit={(values) => create.mutateAsync({ ...values, project })}
+                    onSubmitted={() => setOpen(false)}
+                />
             </Dialog>
         </>
     );
