@@ -204,7 +204,6 @@ export const en = {
     'jobs.actions.cancelConfirm': 'Cancel the job',
     'jobs.actions.retry': 'Retry',
     'job.title': 'Job',
-    'job.breadcrumb': 'Breadcrumb',
     'job.loadError': 'The job couldn’t be loaded: {message}',
     'job.retry': 'Retry the stopped tasks',
     'job.request': 'Request',

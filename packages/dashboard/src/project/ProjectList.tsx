@@ -1,7 +1,7 @@
 import { useActionRunner } from '@panneau/actions';
 import { useList, useResource } from '@panneau/core';
 import { useResourceList } from '@panneau/data/query';
-import { ListView } from '@panneau/lists';
+import { ListView, getPagingProps } from '@panneau/lists';
 import { Card } from '@panneau/ui';
 import type { ReactNode } from 'react';
 import { useIntl } from 'react-intl';
@@ -40,7 +40,7 @@ export function ProjectList({ resource: id, project, actions, children }: Projec
                 aria-label={title}
                 list={list}
                 items={data?.data}
-                total={data?.meta.total}
+                {...(data !== undefined ? getPagingProps(data.meta) : {})}
                 isLoading={isFetching}
                 error={error}
                 onRetry={() => void refetch()}

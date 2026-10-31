@@ -206,7 +206,6 @@ export const fr: Messages = {
     'jobs.actions.cancelConfirm': 'Annuler le job',
     'jobs.actions.retry': 'Relancer',
     'job.title': 'Job',
-    'job.breadcrumb': 'Fil d’Ariane',
     'job.loadError': 'Le job n’a pas pu être chargé : {message}',
     'job.retry': 'Relancer les tâches arrêtées',
     'job.request': 'Requête',

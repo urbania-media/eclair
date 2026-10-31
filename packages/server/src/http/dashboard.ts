@@ -9,8 +9,8 @@ import { problems } from './problem.ts';
 /**
  * The one inline style of the dashboard: React Aria adds a `<style>` for `touch-action` on
  * pressable elements. Its hash allows it, rather than `'unsafe-inline'`. A test checks it against
- * the installed React Aria. Panneau has no nonce option for its own `<style>` elements (themes):
- * https://github.com/folkloreinc/panneau-js/issues/152
+ * the installed React Aria. The dashboard sets no theme: a theme's `<style>` elements would need a
+ * nonce, which Panneau takes since 5.0.0-alpha.9 (`nonce` of `<Panneau>`).
  */
 export const REACT_ARIA_STYLE_HASH = 'sha256-38RhXrc7EdReTKsOm23ZPOCUgniTUUcjky8QOOrQx6o=';
 

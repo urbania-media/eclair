@@ -6,8 +6,8 @@ import { Link } from 'react-aria-components';
 import { useIntl } from 'react-intl';
 
 import { BASE_PATH } from '../definition.ts';
-import { TONES } from '../displays.tsx';
 import { formatAgo, formatBytes, formatDuration } from '../format.ts';
+import { TONES } from '../tones.ts';
 import type { OverviewData } from '../widgets.ts';
 import { PageLayout } from './PageLayout.tsx';
 import styles from './pages.module.css';
@@ -423,7 +423,7 @@ export function OverviewPage() {
                                     <li key={job.id} className={styles.failure}>
                                         <span className={styles.row}>
                                             <Link
-                                                href={`${BASE_PATH}/pages/job?id=${encodeURIComponent(job.id)}`}
+                                                href={`${BASE_PATH}/pages/job/${encodeURIComponent(job.id)}`}
                                                 className={styles.link}
                                             >
                                                 <code>{job.id}</code>
