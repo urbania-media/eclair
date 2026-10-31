@@ -4,6 +4,7 @@ import { Badge } from '@panneau/ui';
 import { useIntl } from 'react-intl';
 
 import styles from './displays.module.css';
+import { flattenMetadata, shorten } from './metadata.ts';
 import { TONES } from './tones.ts';
 
 /** A value as code: a key's prefix, a storage's location, the operations of a preset. */
@@ -63,5 +64,30 @@ export function WebhooksDisplay({ value }: DisplayProps) {
         <Badge tone={TONES[value] ?? 'neutral'}>
             {intl.formatMessage({ id: `webhooks.${value}` })}
         </Badge>
+    );
+}
+
+/** At most this many entries of metadata in a list: the rest is counted. */
+const METADATA_SHOWN = 3;
+
+/**
+ * A job's metadata in a list: one line per entry, nested objects as dot paths, long values
+ * shortened in their middle, at most three lines. The whole value is in each line's title.
+ */
+export function MetadataDisplay({ value }: DisplayProps) {
+    const entries = flattenMetadata(value);
+    if (entries.length === 0) {
+        return <EmptyValue />;
+    }
+    const rest = entries.length - METADATA_SHOWN;
+    return (
+        <span className={styles.metadata}>
+            {entries.slice(0, METADATA_SHOWN).map(([key, text]) => (
+                <span key={key} className={styles.entry} title={`${key}: ${text}`}>
+                    <span className={styles.key}>{key}</span> <code>{shorten(text)}</code>
+                </span>
+            ))}
+            {rest > 0 ? <span className={styles.key}>+{rest}</span> : null}
+        </span>
     );
 }

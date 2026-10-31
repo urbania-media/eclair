@@ -29,3 +29,21 @@
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
 }
+
+.metadata {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    max-width: 18rem;
+    font-size: var(--panneau-font-size-xs);
+}
+
+.entry {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.key {
+    color: var(--panneau-color-text-muted);
+}
