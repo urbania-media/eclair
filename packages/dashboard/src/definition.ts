@@ -466,7 +466,7 @@ function jobsResource(
             }),
             field('jobs', 'tasks', 'json', { readOnly: true, display: 'eclair-tasks' }),
             field('jobs', 'what', 'text', { readOnly: true, display: 'eclair-code' }),
-            field('jobs', 'metadata', 'text', { readOnly: true, display: 'eclair-code' }),
+            field('jobs', 'metadata', 'json', { readOnly: true, display: 'eclair-metadata' }),
             field('jobs', 'duration', 'duration', { readOnly: true }),
             field('jobs', 'createdAt', 'datetime', { readOnly: true }),
         ],

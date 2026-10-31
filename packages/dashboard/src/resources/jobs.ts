@@ -47,15 +47,7 @@ export function jobItem(job: AdminJob): Item {
             failed: tasks.some((task) => task.status === 'failed'),
         },
         what: describeJob(job),
-        metadata:
-            job.metadata !== undefined
-                ? Object.entries(job.metadata)
-                      .map(
-                          ([key, value]) =>
-                              `${key}=${typeof value === 'string' ? value : JSON.stringify(value)}`,
-                      )
-                      .join(', ')
-                : null,
+        metadata: job.metadata ?? null,
         duration: jobDuration(job),
         createdAt: job.createdAt,
     };

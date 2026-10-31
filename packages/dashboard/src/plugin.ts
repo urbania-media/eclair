@@ -1,6 +1,12 @@
 import type { PanneauPlugin } from '@panneau/core';
 
-import { CodeDisplay, HoursDisplay, TasksDisplay, WebhooksDisplay } from './displays.tsx';
+import {
+    CodeDisplay,
+    HoursDisplay,
+    MetadataDisplay,
+    TasksDisplay,
+    WebhooksDisplay,
+} from './displays.tsx';
 import { catalogs } from './messages/index.ts';
 import { JobPage } from './pages/JobPage.tsx';
 import { OverviewPage } from './pages/OverviewPage.tsx';
@@ -26,6 +32,7 @@ export const dashboardPlugin: PanneauPlugin = {
     displays: {
         'eclair-code': CodeDisplay,
         'eclair-hours': HoursDisplay,
+        'eclair-metadata': MetadataDisplay,
         'eclair-tasks': TasksDisplay,
         'eclair-webhooks': WebhooksDisplay,
     },

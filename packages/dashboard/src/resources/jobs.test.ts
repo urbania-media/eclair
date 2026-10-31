@@ -99,7 +99,7 @@ describe('jobs', () => {
                     status: 'failed',
                     tasks: { done: 2, total: 3, failed: true },
                     what: 'web-image v1',
-                    metadata: 'mediaId=42',
+                    metadata: { mediaId: '42' },
                     duration: 50,
                 }),
             ],

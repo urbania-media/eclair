@@ -11,6 +11,7 @@ import type { Input, Task } from '@eclair-js/protocol';
 
 import { BASE_PATH } from '../definition.ts';
 import { formatBytes, formatDuration } from '../format.ts';
+import { flattenMetadata } from '../metadata.ts';
 import { CopyButton } from '../project/ProjectKeys.tsx';
 import { TONES } from '../tones.ts';
 import type { JobData } from '../widgets.ts';
@@ -146,6 +147,7 @@ function JobDetails({
     const time = (date: string | undefined) =>
         date !== undefined ? intl.formatTime(date, { timeStyle: 'medium' }) : '—';
     const failed = failedTask(job);
+    const metadata = flattenMetadata(job.metadata);
     const start = Date.parse(job.createdAt);
     const end = job.endedAt !== undefined ? Date.parse(job.endedAt) : now;
     const span = Math.max(1, end - start);
@@ -246,8 +248,15 @@ function JobDetails({
                         <dd>{job.priority !== undefined ? m(`priority.${job.priority}`) : '—'}</dd>
                         <dt>{m('jobs.fields.metadata')}</dt>
                         <dd>
-                            {job.metadata !== undefined ? (
-                                <code>{JSON.stringify(job.metadata)}</code>
+                            {metadata.length > 0 ? (
+                                <ul className={styles.metadata}>
+                                    {metadata.map(([key, text]) => (
+                                        <li key={key}>
+                                            <span className={styles.metadataKey}>{key}</span>
+                                            <code>{text}</code>
+                                        </li>
+                                    ))}
+                                </ul>
                             ) : (
                                 '—'
                             )}
