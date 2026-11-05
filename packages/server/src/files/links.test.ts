@@ -37,7 +37,9 @@ describe('FileLinks', () => {
             JSON.stringify({ p: 'prj_b', f: 'jobs/out.txt', m: 'text/plain', e: 9_999_999_999 }),
         ).toString('base64url');
         expect(links.verify(`${other}.${signature}`)).toBeUndefined();
-        expect(links.verify(`${payload}.x${signature.slice(1)}`)).toBeUndefined();
+        // Another first character, never the same one: the token would be unchanged
+        const tampered = `${signature.startsWith('x') ? 'y' : 'x'}${signature.slice(1)}`;
+        expect(links.verify(`${payload}.${tampered}`)).toBeUndefined();
         expect(links.verify('garbage')).toBeUndefined();
         const otherServer = new FileLinks(
             new TemporaryStorage(new LocalDriver(root)),
