@@ -37,7 +37,8 @@ export const poster = defineOperation({
     version: 1,
     description: 'One representative frame, or the frame at a given time, as JPEG, PNG or WebP.',
     accepts: { kinds: ['video'] },
-    capability: 'video',
+    // Seeks to a few times and decodes a frame at each: short, so it doesn't wait behind transcodes
+    capability: 'cpu',
     binaries: ['ffprobe', 'ffmpeg', 'vips'],
     options: PosterOptions,
     outputs: { files: true, metadata: true },

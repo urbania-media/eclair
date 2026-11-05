@@ -124,7 +124,8 @@ export const thumbnails = defineOperation({
     description:
         'Frames at even intervals, at given times, every few seconds, or at scene changes, as JPEG, PNG or WebP.',
     accepts: { kinds: ['video'] },
-    capability: 'video',
+    // Seeks to a few times and decodes a frame at each: short, so it doesn't wait behind transcodes
+    capability: 'cpu',
     binaries: ['ffprobe', 'ffmpeg', 'vips'],
     options: ThumbnailsOptions,
     outputs: { files: true, metadata: true },

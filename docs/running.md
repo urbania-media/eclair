@@ -8,14 +8,14 @@ A guide for the operators of a shared Eclair: sizing, monitoring, upgrades, and 
 
 Start with one server in `all` mode, then size from what Eclair reports: queue wait times, task durations by operation, and the memory and disk used during the heaviest tasks. The numbers below are starting points, not measurements.
 
-| Resource          | What uses it                                                                                                           | Starting point                                                                                           |
-| ----------------- | ---------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| CPU               | `cpu` tasks (images, audio, documents, fonts) run one per core by default. ffmpeg uses several cores per `video` task. | 4 cores for a first server. One `video` task per server until you have measured it.                      |
-| Memory            | ffmpeg and ImageMagick hold decoded frames and images. 4K video and very large images need the most.                   | 2 GB per concurrent `video` task, plus 1 GB for the API, Redis and the database on the same server.      |
-| Temporary disk    | Every task downloads its input to `ECLAIR_TMP_DIR` and writes its outputs there before uploading them.                 | The largest input plus its outputs, times the number of tasks that run at once. A fast local disk.       |
-| Temporary storage | Uploads and outputs written to `eclair`, until they expire (`ECLAIR_TEMP_RETENTION`, 24 hours by default).             | What projects upload and leave there in one retention period.                                            |
-| Database          | Projects, jobs and their tasks, usage. Ended jobs are deleted after `ECLAIR_JOB_RETENTION` (30 days).                  | Small: a few rows per job. The smallest managed instance is enough to start.                             |
-| Redis             | Queue entries, progress events, locks. No media.                                                                       | Small. It must use `maxmemory-policy noeviction`, as the compose files set: BullMQ loses jobs otherwise. |
+| Resource          | What uses it                                                                                                                             | Starting point                                                                                           |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| CPU               | `cpu` tasks (images, audio, documents, fonts, frames of videos) run one per core by default. ffmpeg uses several cores per `video` task. | 4 cores for a first server. One `video` task per server until you have measured it.                      |
+| Memory            | ffmpeg and ImageMagick hold decoded frames and images. 4K video and very large images need the most.                                     | 2 GB per concurrent `video` task, plus 1 GB for the API, Redis and the database on the same server.      |
+| Temporary disk    | Every task downloads its input to `ECLAIR_TMP_DIR` and writes its outputs there before uploading them.                                   | The largest input plus its outputs, times the number of tasks that run at once. A fast local disk.       |
+| Temporary storage | Uploads and outputs written to `eclair`, until they expire (`ECLAIR_TEMP_RETENTION`, 24 hours by default).                               | What projects upload and leave there in one retention period.                                            |
+| Database          | Projects, jobs and their tasks, usage. Ended jobs are deleted after `ECLAIR_JOB_RETENTION` (30 days).                                    | Small: a few rows per job. The smallest managed instance is enough to start.                             |
+| Redis             | Queue entries, progress events, locks. No media.                                                                                         | Small. It must use `maxmemory-policy noeviction`, as the compose files set: BullMQ loses jobs otherwise. |
 
 ### Queues and concurrency
 
