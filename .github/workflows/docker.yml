@@ -57,6 +57,8 @@ jobs:
                   labels: ${{ steps.meta.outputs.labels }}
                   cache-from: type=gha
                   cache-to: type=gha,mode=max
+                  # The runtime stage upgrades Debian's packages: from the cache, it would keep old ones
+                  no-cache-filters: runtime
 
             - name: Smoke test
               run: |
