@@ -193,6 +193,19 @@ const TranscodeOptions = Type.Object(
             description:
                 'Copies the video stream instead of encoding it when it already fits: H.264 in MP4 only, 8-bit 4:2:0, Constrained Baseline, Main or High profile up to level 4.2, upright, progressive, with square pixels, within maxWidth and maxHeight and at most maxBitrate. The audio is copied too when it is AAC, mono or stereo, at most twice audioBitrate. The `video` and `audio` metadata say what was copied.',
         }),
+        start: Type.Number({
+            minimum: 0,
+            default: 0,
+            description:
+                'Where the output starts, in seconds. With passthrough, a copied video starts at the keyframe at or before this time: a cut from 0 starts on a keyframe.',
+        }),
+        duration: Type.Optional(
+            Type.Number({
+                exclusiveMinimum: 0,
+                description:
+                    'How long the output lasts, in seconds. By default, until the end of the video.',
+            }),
+        ),
         audio: Type.Boolean({ default: true, description: 'Keeps the audio, when there is.' }),
         audioBitrate: Type.Integer({
             minimum: 32,
@@ -204,12 +217,35 @@ const TranscodeOptions = Type.Object(
     { additionalProperties: false },
 );
 
+/**
+ * The span of the input that the output covers, in seconds: from `start`, for `duration` or until
+ * the end. Its length is undefined when neither `duration` nor the input's duration is known.
+ */
+export function outputSpan(
+    inputDuration: number | undefined,
+    options: { start: number; duration?: number | undefined },
+): { start: number; duration: number | undefined } {
+    const { start } = options;
+    if (inputDuration !== undefined && start >= inputDuration) {
+        throw new OperationError(
+            'unsupported_input',
+            `The video lasts ${String(Math.round(inputDuration * 1000) / 1000)} seconds: it ends before the start, at ${String(start)}.`,
+        );
+    }
+    const remaining = inputDuration === undefined ? undefined : inputDuration - start;
+    const duration =
+        options.duration === undefined
+            ? remaining
+            : Math.min(options.duration, remaining ?? Infinity);
+    return { start, duration };
+}
+
 /** Transcodes a video to MP4 or WebM, like laravel-mediatheque's `H264`, `HEVC` and `WebM` jobs. */
 export const transcode = defineOperation({
     name: 'video.transcode',
     version: 1,
     description:
-        'MP4 (H.264, H.265) or WebM (VP9, AV1), with a maximum size, quality and bitrate. 8-bit 4:2:0, with the audio in AAC or Opus. An H.264 video that already fits can be copied instead of encoded.',
+        'MP4 (H.264, H.265) or WebM (VP9, AV1), with a maximum size, quality and bitrate, of the whole video or of a span. 8-bit 4:2:0, with the audio in AAC or Opus. An H.264 video that already fits can be copied instead of encoded.',
     accepts: { mimes: ['video/*', 'image/gif'] },
     capability: 'video',
     binaries: ['ffprobe', 'ffmpeg'],
@@ -233,6 +269,7 @@ export const transcode = defineOperation({
         }
 
         const video = await readVideo(context);
+        const span = outputSpan(video.duration, options);
         const size = fitSize(video.width, video.height, options.maxWidth, options.maxHeight);
         const quality = options.quality ?? codec.quality;
         const maxBitrate =
@@ -292,7 +329,10 @@ export const transcode = defineOperation({
                 '-v',
                 'error',
                 '-y',
+                // Before the input, so that ffmpeg seeks instead of decoding up to the start.
+                ...(span.start > 0 ? ['-ss', String(span.start)] : []),
                 ...ffmpegInput(context.input.path),
+                ...(options.duration === undefined ? [] : ['-t', String(options.duration)]),
                 '-map',
                 '0:v:0',
                 ...audio,
@@ -307,7 +347,7 @@ export const transcode = defineOperation({
                 '-nostats',
                 output,
             ],
-            { onStdout: ffmpegProgress(video.duration, (ratio) => context.progress(ratio)) },
+            { onStdout: ffmpegProgress(span.duration, (ratio) => context.progress(ratio)) },
         );
 
         context.output(`video.${format}`, output, { mime: CONTAINERS[format].mime, role: 'main' });
@@ -315,9 +355,9 @@ export const transcode = defineOperation({
             metadata: {
                 width: size.width,
                 height: size.height,
-                ...(video.duration === undefined
+                ...(span.duration === undefined
                     ? {}
-                    : { duration: Math.round(video.duration * 1000) / 1000 }),
+                    : { duration: Math.round(span.duration * 1000) / 1000 }),
                 codec: options.codec,
                 format,
                 video: copiesVideo ? 'copied' : 'encoded',

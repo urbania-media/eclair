@@ -5,7 +5,7 @@ import { missingBinaries, skipWithoutBinaries } from '@eclair-js/operation/testi
 
 import type { VideoInfo } from './media.ts';
 import { fixture, probeFile, runOn } from './test-helpers.ts';
-import { copiesAudio, passthroughRefusal, transcode, webBitrate } from './transcode.ts';
+import { copiesAudio, outputSpan, passthroughRefusal, transcode, webBitrate } from './transcode.ts';
 
 /** The settings x264 wrote in the stream: `keyint=100`, `crf=23.0`… */
 function x264Settings(path: string): Record<string, string> {
@@ -90,6 +90,27 @@ describe('copiesAudio', () => {
         expect(copiesAudio({ codec: 'aac', channels: 6, bitRate: 128_000 }, 128)).toBe(false);
         expect(copiesAudio({ codec: 'mp3', channels: 2, bitRate: 128_000 }, 128)).toBe(false);
         expect(copiesAudio(undefined, 128)).toBe(false);
+    });
+});
+
+describe('outputSpan', () => {
+    it('runs from the start to the end of the video by default', () => {
+        expect(outputSpan(60, { start: 0 })).toEqual({ start: 0, duration: 60 });
+        expect(outputSpan(60, { start: 20 })).toEqual({ start: 20, duration: 40 });
+        expect(outputSpan(undefined, { start: 0 })).toEqual({ start: 0, duration: undefined });
+    });
+
+    it('lasts the duration asked, at most until the end', () => {
+        expect(outputSpan(60, { start: 0, duration: 15 })).toEqual({ start: 0, duration: 15 });
+        expect(outputSpan(60, { start: 50, duration: 15 })).toEqual({ start: 50, duration: 10 });
+        expect(outputSpan(undefined, { start: 0, duration: 15 })).toEqual({
+            start: 0,
+            duration: 15,
+        });
+    });
+
+    it('refuses a start after the end of the video', () => {
+        expect(() => outputSpan(4, { start: 4 })).toThrow(/ends before the start/);
     });
 });
 
@@ -280,6 +301,53 @@ describe.skipIf(skipWithoutBinaries(transcode.binaries))('video.transcode', () =
         } finally {
             await result.cleanup();
         }
+    });
+
+    it('encodes the span between start and duration, and reports progress on it', async () => {
+        const result = await runOn(transcode, 'video.mp4', { start: 1, duration: 2 });
+        try {
+            expect(result.metadata).toMatchObject({ duration: 2, video: 'encoded' });
+            const { format, streams } = probeFile(result.files[0]?.path ?? '');
+            expect(Number(format.duration)).toBeCloseTo(2, 1);
+            expect(streams.map((stream) => stream.codec_type)).toEqual(['video', 'audio']);
+            // On the span's 2 seconds, not the input's 4: the progress goes beyond one half.
+            expect(Math.max(...result.progress)).toBeGreaterThan(0.75);
+        } finally {
+            await result.cleanup();
+        }
+    });
+
+    it('copies the first seconds of a video that already fits', async () => {
+        const result = await runOn(transcode, 'video.mp4', { passthrough: true, duration: 2 });
+        try {
+            expect(result.metadata).toMatchObject({
+                duration: 2,
+                video: 'copied',
+                audio: 'copied',
+            });
+            const path = result.files[0]?.path ?? '';
+            // Copied packets end on their own boundaries: the last audio frame can run over.
+            expect(Number(probeFile(path).format.duration)).toBeGreaterThan(1.9);
+            expect(Number(probeFile(path).format.duration)).toBeLessThan(2.15);
+            expect(startsFast(path)).toBe(true);
+        } finally {
+            await result.cleanup();
+        }
+    });
+
+    it('stops at the end of a video shorter than the duration', async () => {
+        const result = await runOn(transcode, 'video.mp4', { duration: 60 });
+        try {
+            expect(result.metadata).toMatchObject({ duration: expect.closeTo(4, 1) });
+        } finally {
+            await result.cleanup();
+        }
+    });
+
+    it('fails when the video ends before the start', async () => {
+        await expect(runOn(transcode, 'video.mp4', { start: 30 })).rejects.toMatchObject({
+            code: 'unsupported_input',
+        });
     });
 
     it('refuses H.264 in WebM', async () => {
