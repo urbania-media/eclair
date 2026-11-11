@@ -85,7 +85,7 @@ jobs:
                   cache: npm
 
             - name: Install dependencies
-              run: npm ci
+              run: npm ci --ignore-scripts
 
             # Operations run their real binaries: the image's, with the tests of the repository.
             # ECLAIR_TEST_BINARIES makes a missing binary fail instead of skipping its tests.
