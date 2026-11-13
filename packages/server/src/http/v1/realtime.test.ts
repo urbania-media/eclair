@@ -412,6 +412,38 @@ describe.skipIf(!RUNS_WITH_REDIS)('webhooks, events and probes', () => {
             expect(options).toMatchObject({ checksum: false, thumbhash: true });
         });
 
+        it('probes an embed with embed.probe, for a project that allows its provider', async () => {
+            const probe = (timeout: number) =>
+                fetch(`${base}/v1/probe`, {
+                    method: 'POST',
+                    headers: { ...auth(), 'content-type': 'application/json' },
+                    body: JSON.stringify({
+                        input: { embed: 'https://vimeo.com/76979871' },
+                        timeout,
+                        checksum: true,
+                    }),
+                });
+            expect((await probe(1)).status).toBe(422);
+
+            await services.projects.update('niche', { settings: { embedProviders: ['vimeo'] } });
+            try {
+                const response = await probe(1);
+                expect(response.status).toBe(202);
+                const job = (await response.json()) as { id: string };
+                const task = await services.database.kysely
+                    .selectFrom('tasks')
+                    .select(['operation', 'options'])
+                    .where('job_id', '=', job.id)
+                    .executeTakeFirstOrThrow();
+                const options: unknown =
+                    typeof task.options === 'string' ? JSON.parse(task.options) : task.options;
+                expect(task.operation).toBe('embed.probe');
+                expect(options).toEqual({ refresh: false });
+            } finally {
+                await services.projects.update('niche', { settings: { embedProviders: null } });
+            }
+        });
+
         describe('with a worker', () => {
             beforeAll(async () => {
                 if (

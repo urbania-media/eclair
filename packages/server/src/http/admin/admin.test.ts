@@ -190,6 +190,39 @@ describe('/admin/v1', () => {
         expect((await admin('DELETE', '/projects/storages/storages/media')).statusCode).toBe(404);
     });
 
+    it("sets, lists and removes a project's provider credentials, never showing them", async () => {
+        await services.projects.create({ slug: 'credentials' });
+        const saved = await admin('PUT', '/projects/credentials/credentials/youtube', {
+            config: { apiKey: 'very-secret' },
+        });
+        expect(saved.statusCode).toBe(200);
+        expect(validate('Credentials', saved.json()).valid).toBe(true);
+        expect(saved.json()).toMatchObject({ provider: 'youtube' });
+        const list = await admin('GET', '/projects/credentials/credentials');
+        expect(validate('CredentialsList', list.json()).valid).toBe(true);
+        expect(JSON.stringify(list.json())).not.toContain('very-secret');
+        expect(list.json()).toMatchObject({ data: [{ provider: 'youtube' }] });
+
+        expect(
+            (await admin('PUT', '/projects/credentials/credentials/youtube', { apiKey: 'a' }))
+                .statusCode,
+        ).toBe(422);
+        expect(
+            (
+                await admin('PUT', '/projects/credentials/credentials/YouTube', {
+                    config: { a: 'b' },
+                })
+            ).statusCode,
+        ).toBe(422);
+        expect(
+            (await admin('DELETE', '/projects/credentials/credentials/youtube')).statusCode,
+        ).toBe(204);
+        expect(
+            (await admin('DELETE', '/projects/credentials/credentials/youtube')).statusCode,
+        ).toBe(404);
+        expect((await admin('GET', '/projects/nobody/credentials')).statusCode).toBe(404);
+    });
+
     it('manages global presets', async () => {
         const created = await admin('PUT', '/presets/mediatheque%2Fvideo', {
             tasks: { probe: { op: 'probe' } },

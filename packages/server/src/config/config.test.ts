@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { availableParallelism } from 'node:os';
 import { describe, expect, it } from 'vitest';
 
-import { ConfigError, loadConfig, requireSettings } from './config.ts';
+import { ConfigError, loadConfig, providerCredentialsOf, requireSettings } from './config.ts';
 
 function problemsOf(env: NodeJS.ProcessEnv): string[] {
     try {
@@ -127,6 +127,28 @@ describe('the temporary storage', () => {
                 ECLAIR_TEMP_S3_SECRET_ACCESS_KEY: 'secret',
             }).tempStorageCredentials,
         ).toEqual({ accessKeyId: 'id', secretAccessKey: 'secret' });
+    });
+});
+
+describe('providerCredentialsOf', () => {
+    it('reads the operator credentials of embed providers', () => {
+        expect(
+            providerCredentialsOf({
+                ECLAIR_PROVIDER_YOUTUBE_API_KEY: ' a-key ',
+                ECLAIR_PROVIDER_SPOTIFY_CLIENT_ID: 'id',
+                ECLAIR_PROVIDER_SPOTIFY_CLIENT_SECRET: 'secret',
+                ECLAIR_PROVIDER_VIMEO_TOKEN: '',
+                ECLAIR_PROVIDER_: 'nothing',
+                ECLAIR_PROVIDERS: 'nothing',
+                ECLAIR_TEMP_RETENTION: '24h',
+            }),
+        ).toEqual({
+            youtube: { apiKey: 'a-key' },
+            spotify: { clientId: 'id', clientSecret: 'secret' },
+        });
+        expect(loadConfig({ ECLAIR_PROVIDER_VIMEO_TOKEN: 't' }).providerCredentials).toEqual({
+            vimeo: { token: 't' },
+        });
     });
 });
 

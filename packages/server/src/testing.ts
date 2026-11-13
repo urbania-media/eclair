@@ -109,6 +109,7 @@ export async function startTestServer(): Promise<{
     const { TaskRunner } = await import('./workers/runner.ts');
     const { ProjectSlots } = await import('./workers/slots.ts');
     const { TaskWorkers } = await import('./workers/workers.ts');
+    const { redisOperationCache } = await import('./operations/embeds.ts');
 
     const services = await createTestServices({
         operations: await OperationRegistry.load(BUILT_IN_PLUGINS),
@@ -148,6 +149,8 @@ export async function startTestServer(): Promise<{
             worker: 'test-server',
             logger: silent,
             webhooks: services.webhooks,
+            credentials: services.credentials,
+            cache: redisOperationCache(redis),
         }),
         slots: new ProjectSlots(redis),
         cancel,

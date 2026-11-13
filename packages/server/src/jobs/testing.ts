@@ -1,6 +1,6 @@
 import { Type } from 'typebox';
 
-import { defineOperation } from '@eclair-js/operation';
+import { defineEmbedOperation, defineEmbedProvider, defineOperation } from '@eclair-js/operation';
 
 import { OperationRegistry } from '../operations/registry.ts';
 
@@ -47,6 +47,34 @@ export const testOperations = [
     }),
 ];
 
+/** An embed provider for the tests: `https://video.example.com/<id>`. */
+export const testEmbedProvider = defineEmbedProvider({
+    name: 'example',
+    title: 'Example',
+    match(url) {
+        const id = /^\/([a-z0-9]+)$/.exec(url.pathname)?.[1];
+        return url.hostname === 'video.example.com' && id !== undefined
+            ? { id, url: `https://video.example.com/${id}` }
+            : undefined;
+    },
+    credentials: Type.Object(
+        { token: Type.String({ minLength: 1 }) },
+        { additionalProperties: false },
+    ),
+});
+
+/** An embed operation for the tests of jobs. */
+export const testEmbedProbe = defineEmbedOperation({
+    name: 'embed.probe',
+    version: 1,
+    description: 'Reads an embed',
+    capability: 'probe',
+    binaries: [],
+    options: Type.Object({}, { additionalProperties: false }),
+    outputs: { files: false, metadata: true },
+    run: async () => ({ metadata: {} }),
+});
+
 export function testRegistry(): OperationRegistry {
-    return new OperationRegistry(testOperations);
+    return new OperationRegistry([...testOperations, testEmbedProbe], [testEmbedProvider]);
 }

@@ -3,6 +3,7 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { JSON_SCHEMA_ID } from '@eclair-js/protocol';
 import type * as protocol from '@eclair-js/protocol';
 
+import type { CredentialsSummary } from '../../credentials/credentials.ts';
 import { safeEqual } from '../../crypto.ts';
 import type { ApiKey } from '../../projects/api-keys.ts';
 import type { Project, ProjectPatch, WebhookSecrets } from '../../projects/projects.ts';
@@ -64,6 +65,14 @@ function toStorage(storage: StorageSummary): protocol.Storage {
     };
 }
 
+function toCredentials(credentials: CredentialsSummary): protocol.Credentials {
+    return {
+        provider: credentials.provider,
+        createdAt: credentials.createdAt.toISOString(),
+        updatedAt: credentials.updatedAt.toISOString(),
+    };
+}
+
 function param(request: FastifyRequest, name: string): string {
     return (request.params as Record<string, string>)[name] ?? '';
 }
@@ -77,7 +86,7 @@ export async function admin(
     options: { services: Services; adminToken: string } & StatusOptions,
 ): Promise<void> {
     const { services } = options;
-    const { projects, apiKeys, storages, presets, database } = services;
+    const { projects, apiKeys, storages, credentials, presets, database } = services;
 
     app.addHook('onRequest', async (request) => {
         const header = request.headers.authorization;
@@ -197,6 +206,33 @@ export async function admin(
 
     app.delete('/projects/:project/storages/:storage', async (request, reply) => {
         await storages.remove(param(request, 'project'), param(request, 'storage'));
+        return reply.code(204).send();
+    });
+
+    app.get(
+        '/projects/:project/credentials',
+        async (request): Promise<protocol.CredentialsList> => ({
+            data: (await credentials.list(param(request, 'project'))).map(toCredentials),
+        }),
+    );
+
+    app.put(
+        '/projects/:project/credentials/:provider',
+        { schema: { body: schema('CredentialsRequest') } },
+        async (request): Promise<protocol.Credentials> => {
+            const { config } = request.body as protocol.CredentialsRequest;
+            return toCredentials(
+                await credentials.set(
+                    param(request, 'project'),
+                    param(request, 'provider'),
+                    config,
+                ),
+            );
+        },
+    );
+
+    app.delete('/projects/:project/credentials/:provider', async (request, reply) => {
+        await credentials.remove(param(request, 'project'), param(request, 'provider'));
         return reply.code(204).send();
     });
 

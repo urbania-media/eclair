@@ -8,8 +8,21 @@ import { join } from 'node:path';
 import type { ProbeMetadata } from '@eclair-js/protocol';
 
 import { detectType } from './detect.ts';
+import type {
+    EmbedMatch,
+    EmbedProvider,
+    HttpRequestOptions,
+    HttpResponse,
+    OperationCache,
+} from './embeds.ts';
 import { execBinary } from './exec.ts';
-import type { Operation, OperationContext, OutputOptions } from './operation.ts';
+import type {
+    EmbedOperation,
+    FileOperation,
+    Operation,
+    OperationContext,
+    OutputOptions,
+} from './operation.ts';
 
 // ajv-formats is CommonJS: its default export is under `default`.
 const addFormats = addFormatsModule as unknown as typeof addFormatsModule.default;
@@ -34,6 +47,18 @@ export interface RunOperationResult {
     cleanup(): Promise<void>;
 }
 
+/** Validates options with their defaults, as the server does. */
+function validateOptions(operation: FileOperation | EmbedOperation, value: unknown): unknown {
+    const ajv = new Ajv2020({ allErrors: true, useDefaults: true, strict: false });
+    addFormats(ajv);
+    const validate = ajv.compile(operation.options);
+    const options: unknown = structuredClone(value ?? {});
+    if (!validate(options)) {
+        throw new Error(`Invalid options for ${operation.key}: ${ajv.errorsText(validate.errors)}`);
+    }
+    return options;
+}
+
 /**
  * Runs an operation on a file, as a worker would but without a queue or storage: options are
  * validated with their defaults, binaries run for real, and outputs stay in the work directory.
@@ -43,14 +68,10 @@ export async function runOperation(
     operation: Operation,
     run: RunOperationOptions,
 ): Promise<RunOperationResult> {
-    const ajv = new Ajv2020({ allErrors: true, useDefaults: true, strict: false });
-    addFormats(ajv);
-    const validate = ajv.compile(operation.options);
-    const options: unknown = structuredClone(run.options ?? {});
-    if (!validate(options)) {
-        throw new Error(`Invalid options for ${operation.key}: ${ajv.errorsText(validate.errors)}`);
+    if (operation.accepts.embeds === true) {
+        throw new TypeError(`${operation.key} reads embeds: run it with runEmbedOperation().`);
     }
-
+    const options = validateOptions(operation, run.options);
     const type = await detectType(run.input);
     const { size } = await stat(run.input);
     const workdir = await mkdtemp(join(tmpdir(), `eclair-${operation.name}-`));
@@ -82,7 +103,7 @@ export async function runOperation(
     };
 
     try {
-        const result = await operation.run(context, options as never);
+        const result = await (operation as FileOperation).run(context, options as never);
         return {
             metadata: result.metadata,
             files,
@@ -112,4 +133,118 @@ export function missingBinaries(binaries: readonly string[]): string[] {
  */
 export function skipWithoutBinaries(binaries: readonly string[]): boolean {
     return missingBinaries(binaries).length > 0 && process.env['ECLAIR_TEST_BINARIES'] !== '1';
+}
+
+/** A provider's answer, for `runEmbedOperation()`: a JSON body, or text with a status. */
+export interface FakeResponse {
+    status?: number;
+    headers?: Record<string, string>;
+    /** A string is sent as it is; anything else as JSON. */
+    body?: unknown;
+}
+
+/** The requests an embed operation sent, in order. */
+export interface RecordedRequest extends HttpRequestOptions {
+    url: string;
+}
+
+export interface RunEmbedOperationOptions {
+    /** The page URL, as a job gives it. */
+    url: string;
+    /** The providers of the plugin: the one that matches the URL gives the input. */
+    providers: readonly EmbedProvider[];
+    options?: unknown;
+    credentials?: Record<string, string>;
+    /**
+     * Answers each request of the operation: by full URL, by URL without its query string, or with
+     * a function. A request without an answer fails the test.
+     */
+    responses?:
+        | Record<string, FakeResponse>
+        | ((url: string, options: HttpRequestOptions) => FakeResponse | undefined);
+    /** The cache, shared between runs to test it. An empty one by default. */
+    cache?: OperationCache;
+}
+
+export interface RunEmbedOperationResult {
+    metadata: Record<string, unknown> | undefined;
+    requests: RecordedRequest[];
+}
+
+function toHttpResponse(response: FakeResponse): HttpResponse {
+    const body =
+        typeof response.body === 'string' ? response.body : JSON.stringify(response.body ?? null);
+    return {
+        status: response.status ?? 200,
+        headers: response.headers ?? {},
+        text: () => Promise.resolve(body),
+        json: () => Promise.resolve(JSON.parse(body) as unknown),
+    };
+}
+
+/** An in-memory cache, for tests. Expiry is ignored. */
+export function memoryCache(): OperationCache & { values: Map<string, unknown> } {
+    const values = new Map<string, unknown>();
+    return {
+        values,
+        get: (key) => Promise.resolve(structuredClone(values.get(key))),
+        set: (key, value) => {
+            values.set(key, structuredClone(value));
+            return Promise.resolve();
+        },
+    };
+}
+
+/**
+ * Runs an embed operation on a page URL, as a worker would but without a network: the provider of
+ * the plugin that matches the URL gives the input, and `responses` answers its requests.
+ */
+export async function runEmbedOperation(
+    operation: EmbedOperation,
+    run: RunEmbedOperationOptions,
+): Promise<RunEmbedOperationResult> {
+    const options = validateOptions(operation, run.options);
+    const url = new URL(run.url);
+    let match: (EmbedMatch & { provider: string }) | undefined;
+    for (const provider of run.providers) {
+        const found = provider.match(url);
+        if (found !== undefined) {
+            match = { ...found, provider: provider.name };
+            break;
+        }
+    }
+    if (match === undefined) {
+        throw new Error(`No provider recognizes ${run.url}.`);
+    }
+    const requests: RecordedRequest[] = [];
+    const answer = (
+        target: string,
+        requestOptions: HttpRequestOptions,
+    ): FakeResponse | undefined => {
+        const { responses } = run;
+        if (typeof responses === 'function') {
+            return responses(target, requestOptions);
+        }
+        return responses?.[target] ?? responses?.[target.split('?')[0] ?? target];
+    };
+    const result = await operation.run(
+        {
+            input: { ...match, input: run.url },
+            credentials: run.credentials,
+            http: (target, requestOptions = {}) => {
+                requests.push({ url: target, ...requestOptions });
+                const response = answer(target, requestOptions);
+                if (response === undefined) {
+                    return Promise.reject(new Error(`No response for ${target}.`));
+                }
+                return Promise.resolve(toHttpResponse(response));
+            },
+            cache: run.cache ?? memoryCache(),
+            progress: () => {},
+            log: { debug: () => {}, info: () => {}, warn: () => {} },
+            signal: new AbortController().signal,
+        },
+        options as never,
+    );
+    return { metadata: result.metadata, requests };
 }

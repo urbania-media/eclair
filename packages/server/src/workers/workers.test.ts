@@ -1,13 +1,18 @@
 import { copyFile, readFile, writeFile } from 'node:fs/promises';
+import { createServer } from 'node:http';
+import type { Server } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Type } from 'typebox';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { OperationError, defineOperation } from '@eclair-js/operation';
+import { OperationError, defineEmbedOperation, defineOperation } from '@eclair-js/operation';
 import type { Job } from '@eclair-js/protocol';
 
 import type { JobRecord } from '../jobs/records.ts';
+import { testEmbedProvider } from '../jobs/testing.ts';
+import { redisOperationCache } from '../operations/embeds.ts';
 import { OperationRegistry } from '../operations/registry.ts';
 import type { Project } from '../projects/projects.ts';
 import { createRedis } from '../redis.ts';
@@ -26,8 +31,41 @@ let flakyRuns = 0;
 let running = 0;
 let mostRunning = 0;
 const progressSent: { job: string; task: string }[] = [];
+/** The provider of the embed tests: a local server that answers the id it is asked for. */
+let provider: Server;
+let providerUrl = '';
+const providerRequests: string[] = [];
 
 const operations = [
+    defineEmbedOperation({
+        name: 'test.embed',
+        version: 1,
+        description: 'Reads an embed from the local provider',
+        capability: 'cpu',
+        binaries: [],
+        options: empty,
+        outputs: { files: false, metadata: true },
+        async run(context) {
+            const response = await context.http(`${providerUrl}/videos/${context.input.id}`);
+            const cached = await context.cache.get(context.input.id);
+            await context.cache.set(context.input.id, 'seen', 60);
+            return {
+                metadata: {
+                    kind: 'video',
+                    mime: 'text/html',
+                    duration: 12,
+                    embed: {
+                        provider: context.input.provider,
+                        id: context.input.id,
+                        url: context.input.url,
+                    },
+                    answer: await response.json(),
+                    token: context.credentials?.['token'],
+                    cached,
+                },
+            };
+        },
+    }),
     defineOperation({
         name: 'test.copy',
         version: 1,
@@ -221,7 +259,7 @@ describe.skipIf(!RUNS_WITH_REDIS)('workers', () => {
     beforeAll(async () => {
         // Fast retries for the tests.
         services = await createTestServices({
-            operations: new OperationRegistry(operations),
+            operations: new OperationRegistry(operations, [testEmbedProvider]),
             queues: { attempts: 2, backoff: 50 },
         });
         redis = services.redis as NonNullable<typeof services.redis>;
@@ -248,9 +286,14 @@ describe.skipIf(!RUNS_WITH_REDIS)('workers', () => {
                     maxInputSize: 1024 ** 2,
                     tempRetention: 3_600_000,
                     tempMaxRetention: 7_200_000,
+                    providerCredentials: { example: { token: 'operator' } },
                 },
                 worker: 'test-worker',
                 logger,
+                credentials: services.credentials,
+                cache: redisOperationCache(redis),
+                // The provider of the embed tests is a local server.
+                guard: { allowHttp: true, allowPrivateAddresses: true },
                 // Records the progress webhooks the runner asks for.
                 webhooks: {
                     sendProgress: (job: JobRecord, task: string) => {
@@ -267,11 +310,89 @@ describe.skipIf(!RUNS_WITH_REDIS)('workers', () => {
         });
         await workers.start();
         project = (await services.projects.create({ slug: 'niche' })).project;
+        provider = createServer((request, response) => {
+            providerRequests.push(request.url ?? '');
+            response.setHeader('content-type', 'application/json');
+            response.end(JSON.stringify({ path: request.url }));
+        });
+        await new Promise<void>((resolve) => provider.listen(0, '127.0.0.1', resolve));
+        providerUrl = `http://127.0.0.1:${(provider.address() as AddressInfo).port}`;
     });
 
     afterAll(async () => {
         await workers?.close();
         await services?.close();
+        await new Promise<void>((resolve) => provider?.close(() => resolve()));
+    });
+
+    it("runs an embed task without fetching the embed, with the project's credentials and cache", async () => {
+        const jobs = services.jobs as NonNullable<Services['jobs']>;
+        const owner = (
+            await services.projects.create({
+                slug: `embeds-${Date.now()}`,
+                settings: { embedProviders: ['example'] },
+            })
+        ).project;
+        const request = {
+            input: { embed: 'https://video.example.com/abc' },
+            tasks: { probe: { op: 'test.embed' } },
+        };
+
+        const first = await waitForJob(owner.id, (await jobs.create(owner, request)).job.id);
+        expect(first).toMatchObject({
+            status: 'completed',
+            tasks: {
+                probe: {
+                    status: 'completed',
+                    outputs: {
+                        metadata: {
+                            kind: 'video',
+                            embed: {
+                                provider: 'example',
+                                id: 'abc',
+                                url: 'https://video.example.com/abc',
+                            },
+                            answer: { path: '/videos/abc' },
+                            // No credentials of its own: the operator's.
+                            token: 'operator',
+                        },
+                    },
+                },
+            },
+        });
+        expect(first.tasks['probe']?.outputs?.metadata).not.toHaveProperty('cached');
+        // The page itself was never requested: only the provider, once.
+        expect(providerRequests).toEqual(['/videos/abc']);
+
+        await services.credentials.set(owner.id, 'example', { token: 'project' });
+        const second = await waitForJob(owner.id, (await jobs.create(owner, request)).job.id);
+        expect(second.tasks['probe']?.outputs?.metadata).toMatchObject({
+            token: 'project',
+            cached: 'seen',
+        });
+
+        // Another project has its own cache.
+        const other = (
+            await services.projects.create({
+                slug: `embeds-other-${Date.now()}`,
+                settings: { embedProviders: ['example'] },
+            })
+        ).project;
+        const third = await waitForJob(other.id, (await jobs.create(other, request)).job.id);
+        expect(third.tasks['probe']?.outputs?.metadata).not.toHaveProperty('cached');
+
+        const usage = await services.database.kysely
+            .selectFrom('usage')
+            .selectAll()
+            .where('project_id', '=', owner.id)
+            .execute();
+        // PostgreSQL gives 64-bit integers as strings.
+        expect(usage.map(({ media_ms, bytes_in }) => [Number(media_ms), Number(bytes_in)])).toEqual(
+            [
+                [12_000, 0],
+                [12_000, 0],
+            ],
+        );
     });
 
     it('runs a pipeline, with an intermediate output, and records it all', async () => {

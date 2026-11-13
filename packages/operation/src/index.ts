@@ -7,11 +7,31 @@ export type { ErrorCode } from './errors.ts';
 export { execBinary } from './exec.ts';
 export { FFMPEG_DEMUXERS, ffmpegInput, ffmpegProgress } from './ffmpeg.ts';
 export type { ExecOptions, ExecResult } from './exec.ts';
-export { acceptsInput, defineOperation } from './operation.ts';
+export {
+    acceptsInput,
+    defineEmbedOperation,
+    defineOperation,
+    isEmbedOperation,
+} from './operation.ts';
+export { defineEmbedProvider } from './embeds.ts';
+export type {
+    EmbedMatch,
+    EmbedOperationContext,
+    EmbedProvider,
+    EmbedProviderDefinition,
+    HttpRequestOptions,
+    HttpResponse,
+    OperationCache,
+    OperationEmbed,
+} from './embeds.ts';
 export { thumbhash, thumbhashOption } from './thumbhash.ts';
 export type {
+    EmbedOperation,
+    EmbedOperationDefinition,
+    FileOperation,
     JsonSchemaObject,
     Operation,
+    OperationAccepts,
     OperationContext,
     OperationDefinition,
     OperationInput,

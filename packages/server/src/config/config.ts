@@ -139,6 +139,33 @@ export interface Config {
     jobRetention: number;
     logLevel: LogLevel;
     binaries: Record<BinaryName, string>;
+    /**
+     * The operator's credentials for embed providers, used by projects that have none of their own
+     * (decision 0022): `ECLAIR_PROVIDER_YOUTUBE_API_KEY` is `{ youtube: { apiKey } }`.
+     */
+    providerCredentials: Record<string, Record<string, string>>;
+}
+
+const PROVIDER_VARIABLE = /^ECLAIR_PROVIDER_([A-Z0-9]+)_([A-Z0-9]+(?:_[A-Z0-9]+)*)$/;
+
+/** The operator's credentials of embed providers, from `ECLAIR_PROVIDER_<PROVIDER>_<KEY>`. */
+export function providerCredentialsOf(
+    env: Record<string, string | undefined>,
+): Record<string, Record<string, string>> {
+    const credentials: Record<string, Record<string, string>> = {};
+    for (const [variable, value] of Object.entries(env)) {
+        const match = PROVIDER_VARIABLE.exec(variable);
+        const trimmed = value?.trim() ?? '';
+        if (match === null || trimmed === '') {
+            continue;
+        }
+        const provider = (match[1] ?? '').toLowerCase();
+        const key = (match[2] ?? '')
+            .toLowerCase()
+            .replace(/_([a-z0-9])/g, (_, letter: string) => letter.toUpperCase());
+        (credentials[provider] ??= {})[key] = trimmed;
+    }
+    return credentials;
 }
 
 /** The configuration is invalid. `problems` lists every invalid variable, one sentence each. */
@@ -281,6 +308,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
         jobRetention: parseDuration(environment.ECLAIR_JOB_RETENTION),
         logLevel: environment.ECLAIR_LOG_LEVEL,
         binaries,
+        providerCredentials: providerCredentialsOf(env),
     };
 }
 

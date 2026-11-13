@@ -11,6 +11,7 @@ const TABLES_TO_DROP = [
     'uploads',
     'jobs',
     'presets',
+    'credentials',
     'storages',
     'api_keys',
     'projects',

@@ -84,6 +84,7 @@ Every worker serves the `probe` queue by default, with reserved slots, so transc
 | `projects`           | Name, slug, priority, limits, allowed operations and providers, webhook secret                                                  |
 | `api_keys`           | Hashed key, prefix for display, project, scopes, last use, revocation                                                           |
 | `storages`           | Project, name, kind, encrypted configuration                                                                                    |
+| `credentials`        | Project, embed provider, encrypted credentials ([decision 0022](decisions/0022-embeds.md))                                      |
 | `uploads`            | Project, temporary storage path, size, mime, checksum, expiry                                                                   |
 | `presets`            | Name, optional project (global presets have none), pipeline definition, version                                                 |
 | `jobs`               | Project, status, input, output, resolved pipeline, webhook, client metadata, timestamps                                         |

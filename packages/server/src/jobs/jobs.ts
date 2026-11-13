@@ -201,8 +201,12 @@ export class Jobs {
                 fail('/input/url', error.message);
             }
         } else if ('embed' in input) {
-            // Embed providers and the operations that read them come with decision 0022.
-            fail('/input/embed', 'this server reads no embeds');
+            const match = this.#operations.matchEmbed(input.embed);
+            if (match === undefined) {
+                fail('/input/embed', 'is not a page of an embed provider of this server');
+            } else if (!(project.settings.embedProviders ?? []).includes(match.provider)) {
+                fail('/input/embed', `the project doesn't allow embeds from ${match.provider}`);
+            }
         } else if ('upload' in input) {
             const upload = await this.#uploads.find(project.id, input.upload);
             if (upload === undefined) {
@@ -224,6 +228,22 @@ export class Jobs {
                     throw error;
                 }
                 fail('/input/path', error.message);
+            }
+        }
+
+        // Embed operations read the job's embed, and other operations read files (decision 0022).
+        for (const task of tasks) {
+            const pointer = `/tasks/${task.name.replaceAll('~', '~0').replaceAll('/', '~1')}`;
+            const readsEmbeds = task.operation.accepts.embeds === true;
+            if (readsEmbeds && (task.source !== undefined || !('embed' in input))) {
+                fail(`${pointer}/op`, `${task.operation.name} only reads the job's embed input`);
+            } else if (readsEmbeds && task.condition !== undefined) {
+                fail(`${pointer}/when`, `${task.operation.name} takes no condition`);
+            } else if (!readsEmbeds && task.source === undefined && 'embed' in input) {
+                fail(
+                    `${pointer}/op`,
+                    `${task.operation.name} reads files: read what embed.download wrote, with "from"`,
+                );
             }
         }
 

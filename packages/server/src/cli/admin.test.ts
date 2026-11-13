@@ -187,6 +187,24 @@ describe('admin commands', () => {
         expect((await eclair('storages:remove', 'niche', 'disk')).code).toBe(EXIT.ok);
     });
 
+    it("set, list and remove a project's provider credentials, never showing them", async () => {
+        expect(
+            await eclair(
+                'credentials:set',
+                'niche',
+                'youtube',
+                '--config',
+                '{"apiKey":"very-secret"}',
+            ),
+        ).toMatchObject({ code: EXIT.ok, stdout: 'Saved the credentials for youtube.\n' });
+        const list = await eclair('credentials:list', 'niche');
+        expect(list.stdout).toContain('youtube');
+        expect(list.stdout).not.toContain('very-secret');
+        expect((await eclair('credentials:set', 'niche', 'youtube')).code).toBe(EXIT.usage);
+        expect((await eclair('credentials:remove', 'niche', 'youtube')).code).toBe(EXIT.ok);
+        expect((await eclair('credentials:list', 'niche')).stdout).not.toContain('youtube');
+    });
+
     it('set, list and remove presets', async () => {
         const file = join(directory, 'preset.json');
         writeFileSync(file, JSON.stringify({ tasks: { probe: { op: 'probe' } } }));

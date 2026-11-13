@@ -54,13 +54,20 @@ export class Probes {
         options: { timeout: number; checksum: boolean; thumbhash?: boolean },
     ): Promise<ProbeOutcome> {
         await this.#count(project);
+        // An embed is probed through its provider: `checksum` and `thumbhash` don't apply.
         const { job: created } = await this.#jobs.create(project, {
             input,
             tasks: {
-                probe: {
-                    op: 'probe',
-                    options: { checksum: options.checksum, thumbhash: options.thumbhash ?? false },
-                },
+                probe:
+                    'embed' in input
+                        ? { op: 'embed.probe' }
+                        : {
+                              op: 'probe',
+                              options: {
+                                  checksum: options.checksum,
+                                  thumbhash: options.thumbhash ?? false,
+                              },
+                          },
             },
         });
 

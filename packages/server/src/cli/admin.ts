@@ -401,6 +401,58 @@ export const ADMIN_COMMANDS: Record<string, Command> = {
             }),
     },
 
+    'credentials:set': {
+        usage: "<project> <provider> --config '<json>'|@file|-",
+        description: "Create or replace a project's credentials for an embed provider",
+        positionals: 2,
+        options: { config: { type: 'string' } },
+        run: (context) =>
+            withServices(context.io, async ({ credentials }) => {
+                const config = text(context.values, 'config');
+                if (config === undefined) {
+                    throw new CliExit(EXIT.usage, 'credentials:set needs --config.');
+                }
+                const saved = await credentials.set(
+                    positional(context, 0, 'project'),
+                    positional(context, 1, 'provider'),
+                    readJsonOption(config, '--config'),
+                );
+                context.io.stdout(`Saved the credentials for ${saved.provider}.\n`);
+                return EXIT.ok;
+            }),
+    },
+
+    'credentials:list': {
+        usage: '<project>',
+        description: 'List the providers a project has credentials for, without their values',
+        positionals: 1,
+        run: (context) =>
+            withServices(context.io, async ({ credentials }) => {
+                table(
+                    context.io,
+                    ['PROVIDER', 'UPDATED'],
+                    (await credentials.list(positional(context, 0, 'project'))).map((saved) => [
+                        saved.provider,
+                        saved.updatedAt.toISOString(),
+                    ]),
+                );
+                return EXIT.ok;
+            }),
+    },
+
+    'credentials:remove': {
+        usage: '<project> <provider>',
+        description: "Remove a project's credentials for an embed provider",
+        positionals: 2,
+        run: (context) =>
+            withServices(context.io, async ({ credentials }) => {
+                const provider = positional(context, 1, 'provider');
+                await credentials.remove(positional(context, 0, 'project'), provider);
+                context.io.stdout(`Removed the credentials for ${provider}.\n`);
+                return EXIT.ok;
+            }),
+    },
+
     'presets:set': {
         usage: '<name> --file preset.json|- [--project …]',
         description: 'Create or replace a preset, global or of a project',

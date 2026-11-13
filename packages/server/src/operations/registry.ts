@@ -1,7 +1,7 @@
 import type { ValidateFunction } from 'ajv/dist/2020.js';
 
 import { isCapability } from '@eclair-js/operation';
-import type { Operation, OperationPlugin } from '@eclair-js/operation';
+import type { EmbedMatch, EmbedProvider, Operation, OperationPlugin } from '@eclair-js/operation';
 import type { Operation as OperationResponse, TaskRequest } from '@eclair-js/protocol';
 
 import type { ProjectSettings } from '../projects/settings.ts';
@@ -15,6 +15,7 @@ export const BUILT_IN_PLUGINS = [
     '@eclair-js/operations-document',
     '@eclair-js/operations-font',
     '@eclair-js/operations-image',
+    '@eclair-js/operations-embed',
 ] as const;
 
 /** A plugin can't be loaded, or exports an invalid operation. */
@@ -25,19 +26,43 @@ export class PluginError extends Error {
     }
 }
 
-function operationsOf(plugin: string, module: unknown): readonly unknown[] {
+function contentsOf(
+    plugin: string,
+    module: unknown,
+): { operations: readonly unknown[]; embedProviders: readonly unknown[] } {
     const exported = (module as { default?: unknown }).default ?? module;
     if (Array.isArray(exported)) {
-        return exported;
+        return { operations: exported, embedProviders: [] };
     }
-    const { operations } = exported as Partial<Extract<OperationPlugin, { operations: unknown }>>;
+    const { operations, embedProviders } = exported as Partial<
+        Extract<OperationPlugin, { operations: unknown }>
+    >;
     if (Array.isArray(operations)) {
-        return operations;
+        if (embedProviders !== undefined && !Array.isArray(embedProviders)) {
+            throw new PluginError(plugin, 'embedProviders must be a list.');
+        }
+        return { operations, embedProviders: embedProviders ?? [] };
     }
     throw new PluginError(
         plugin,
-        'its default export must be a list of operations, or { operations }.',
+        'its default export must be a list of operations, or { operations, embedProviders }.',
     );
+}
+
+function isEmbedProvider(value: unknown): value is EmbedProvider {
+    const candidate = value as Partial<EmbedProvider> | null;
+    return (
+        typeof candidate === 'object' &&
+        candidate !== null &&
+        typeof candidate.name === 'string' &&
+        typeof candidate.title === 'string' &&
+        typeof candidate.match === 'function'
+    );
+}
+
+/** An embed that a provider of the server recognized in a page URL. */
+export interface MatchedEmbed extends EmbedMatch {
+    provider: string;
 }
 
 function isOperation(value: unknown): value is Operation {
@@ -65,8 +90,15 @@ export class OperationRegistry {
     readonly #operations = new Map<string, Operation>();
     readonly #latest = new Map<string, Operation>();
     readonly #validators = new Map<string, ValidateFunction>();
+    readonly #providers = new Map<string, EmbedProvider>();
 
-    constructor(operations: readonly Operation[]) {
+    constructor(operations: readonly Operation[], embedProviders: readonly EmbedProvider[] = []) {
+        for (const provider of embedProviders) {
+            if (this.#providers.has(provider.name)) {
+                throw new Error(`Two plugins provide the embed provider ${provider.name}.`);
+            }
+            this.#providers.set(provider.name, provider);
+        }
         const ajv = createAjv();
         for (const operation of operations) {
             if (this.#operations.has(operation.key)) {
@@ -101,6 +133,7 @@ export class OperationRegistry {
         importModule: (name: string) => Promise<unknown> = (name) => import(name),
     ): Promise<OperationRegistry> {
         const operations: Operation[] = [];
+        const embedProviders: EmbedProvider[] = [];
         for (const plugin of new Set(plugins)) {
             let module: unknown;
             try {
@@ -110,7 +143,17 @@ export class OperationRegistry {
                     cause: error,
                 });
             }
-            for (const operation of operationsOf(plugin, module)) {
+            const contents = contentsOf(plugin, module);
+            for (const provider of contents.embedProviders) {
+                if (!isEmbedProvider(provider)) {
+                    throw new PluginError(
+                        plugin,
+                        'exports an embed provider that defineEmbedProvider() did not create.',
+                    );
+                }
+                embedProviders.push(provider);
+            }
+            for (const operation of contents.operations) {
                 if (!isOperation(operation)) {
                     throw new PluginError(
                         plugin,
@@ -121,7 +164,7 @@ export class OperationRegistry {
             }
         }
         try {
-            return new OperationRegistry(operations);
+            return new OperationRegistry(operations, embedProviders);
         } catch (error) {
             throw new PluginError(plugins.join(', '), (error as Error).message, { cause: error });
         }
@@ -133,6 +176,36 @@ export class OperationRegistry {
         return version === undefined
             ? this.#latest.get(name)
             : this.#operations.get(`${name}@${version}`);
+    }
+
+    /** An embed provider of the server, by name. */
+    embedProvider(name: string): EmbedProvider | undefined {
+        return this.#providers.get(name);
+    }
+
+    /** The embed providers of the server, sorted by name. */
+    embedProviders(): EmbedProvider[] {
+        return [...this.#providers.values()].sort((a, b) => a.name.localeCompare(b.name));
+    }
+
+    /**
+     * The provider that recognizes a page URL, and the embed it read from it, without any request.
+     * `undefined` when no provider of the server does.
+     */
+    matchEmbed(value: string): MatchedEmbed | undefined {
+        let url: URL;
+        try {
+            url = new URL(value);
+        } catch {
+            return undefined;
+        }
+        for (const provider of this.#providers.values()) {
+            const match = provider.match(url);
+            if (match !== undefined) {
+                return { ...match, provider: provider.name };
+            }
+        }
+        return undefined;
     }
 
     /** Every operation, every version, sorted by name and version. */
