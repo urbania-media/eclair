@@ -63,6 +63,46 @@ export const fr: Messages = {
     'projects.sections.settings': 'Réglages',
     'projects.sections.settingsHelp': 'Un champ vide prend la valeur du serveur.',
     'projects.sections.webhooks': 'Webhooks',
+    'projects.fields.embedProviders': 'Fournisseurs d’embeds',
+    'projects.fields.embedDownload': 'Téléchargements depuis',
+    'projects.fields.embedMaxDuration': 'Téléchargement le plus long',
+    'projects.help.embedProviders':
+        'Les plateformes dont le projet peut envoyer l’URL d’une page comme entrée embed : youtube, vimeo… Aucune si vide.',
+    'projects.help.embedDownload':
+        'Les plateformes d’où le projet peut télécharger ses propres vidéos, parmi celles du dessus. Aucune si vide.',
+    'projects.help.embedMaxDuration':
+        'L’embed le plus long qu’un téléchargement accepte. Celle du serveur si vide.',
+    'projects.sections.embeds': 'Embeds',
+    'projects.sections.embedsHelp':
+        'Les vidéos et les audios des plateformes, par l’URL de leur page : sondés par l’API de la plateforme, et téléchargés seulement si c’est permis.',
+    'providers.youtube': 'YouTube',
+    'providers.vimeo': 'Vimeo',
+    'providers.dailymotion': 'Dailymotion',
+    'providers.soundcloud': 'SoundCloud',
+    'providers.spotify': 'Spotify',
+    'providers.tiktok': 'TikTok',
+    'providers.instagram': 'Instagram',
+    'credentials.singular': 'identifiants de fournisseur',
+    'credentials.plural': 'identifiants des fournisseurs',
+    'credentials.fields.provider': 'Fournisseur',
+    'credentials.fields.apiKey': 'Clé d’API',
+    'credentials.fields.token': 'Jeton d’accès',
+    'credentials.fields.clientId': 'ID client',
+    'credentials.fields.clientSecret': 'Secret client',
+    'credentials.fields.accessToken': 'Jeton d’accès',
+    'credentials.fields.updatedAt': 'Modifiés',
+    'credentials.help.provider':
+        'YouTube : une clé de la Data API. Vimeo : un jeton d’accès. Spotify : l’ID client et le secret d’une app. Instagram : un jeton d’une app Meta avec oEmbed Read.',
+    'credentials.add': 'Ajouter des identifiants',
+    'credentials.save': 'Enregistrer les identifiants',
+    'credentials.encrypted':
+        'Ils sont chiffrés, et jamais réaffichés. Enregistrer ceux d’un fournisseur les remplace.',
+    'credentials.fallback':
+        'Sans identifiants à lui, un fournisseur prend ceux du serveur (ECLAIR_PROVIDER_…), ou ce qu’il peut lire sans.',
+    'credentials.actions.remove': 'Retirer',
+    'credentials.actions.removeTitle': 'Retirer ces identifiants ?',
+    'credentials.actions.removeMessage':
+        'Le fournisseur prendra alors les identifiants du serveur, ou aucun.',
     'projects.columns.storages': 'Stockages',
     'projects.columns.keys': 'Clés',
     'projects.columns.concurrency': 'Limite',

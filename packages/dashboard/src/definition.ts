@@ -10,6 +10,7 @@ import type {
 import type { IntlShape } from 'react-intl';
 
 import { type Locale, type MessageId, t } from './messages/index.ts';
+import { CREDENTIAL_FIELDS, EMBED_PROVIDERS } from './resources/credentials.ts';
 import { TONES } from './tones.ts';
 
 export interface DefinitionOptions {
@@ -55,6 +56,7 @@ function projectsResource(intl: IntlShape): ResourceInput {
     const { m, options, field, row } = messages(intl);
     const server = m('projects.serverDefault');
     const status = options('status', ['active', 'disabled']);
+    const providers = options('providers', EMBED_PROVIDERS);
     const actions: ActionInput[] = [
         {
             id: 'disable',
@@ -157,6 +159,19 @@ function projectsResource(intl: IntlShape): ResourceInput {
                 help: m('projects.help.progressWebhookInterval'),
                 visibleWhen: { field: 'progressWebhooks', equals: true },
             }),
+            // Embeds (decision 0022): any provider of the server, the built-in ones as suggestions.
+            field('projects', 'embedProviders', 'tags', {
+                help: m('projects.help.embedProviders'),
+                options: providers,
+            }),
+            field('projects', 'embedDownload', 'tags', {
+                help: m('projects.help.embedDownload'),
+                options: providers,
+            }),
+            field('projects', 'embedMaxDuration', 'duration', {
+                help: m('projects.help.embedMaxDuration'),
+                settings: { precision: 'minutes' },
+            }),
         ],
         form: {
             layout: [
@@ -181,6 +196,16 @@ function projectsResource(intl: IntlShape): ResourceInput {
                         { type: 'field', name: 'taskWebhooks' },
                         { type: 'field', name: 'progressWebhooks' },
                         { type: 'field', name: 'progressWebhookInterval' },
+                    ],
+                },
+                {
+                    type: 'section',
+                    label: m('projects.sections.embeds'),
+                    description: m('projects.sections.embedsHelp'),
+                    children: [
+                        { type: 'field', name: 'embedProviders' },
+                        row(['embedDownload', 8], ['embedMaxDuration', 4]),
+                        { type: 'component', component: 'eclair-project-credentials' },
                     ],
                 },
                 { type: 'component', component: 'eclair-project-keys' },
@@ -363,6 +388,60 @@ function storagesResource(intl: IntlShape): ResourceInput {
     };
 }
 
+function credentialsResource(intl: IntlShape): ResourceInput {
+    const { m, options, field } = messages(intl);
+    const secret = (name: string, providers: string[]) =>
+        field('credentials', name, 'text', {
+            settings: { secret: true },
+            visibleWhen: { field: 'provider', in: providers },
+            rules: [{ rule: 'required' }],
+        });
+    const takes = (key: string) =>
+        Object.entries(CREDENTIAL_FIELDS)
+            .filter(([, keys]) => (keys as readonly string[]).includes(key))
+            .map(([provider]) => provider);
+    return {
+        id: 'credentials',
+        label: { singular: m('credentials.singular'), plural: m('credentials.plural') },
+        icon: 'key-square',
+        itemTitle: 'provider',
+        abilities: { viewAny: true, create: true },
+        fields: [
+            field('credentials', 'provider', 'select', {
+                options: options('providers', Object.keys(CREDENTIAL_FIELDS)),
+                rules: [{ rule: 'required' }],
+                help: m('credentials.help.provider'),
+            }),
+            secret('apiKey', takes('apiKey')),
+            secret('token', takes('token')),
+            secret('clientId', takes('clientId')),
+            secret('clientSecret', takes('clientSecret')),
+            secret('accessToken', takes('accessToken')),
+            field('credentials', 'updatedAt', 'datetime', { readOnly: true }),
+        ],
+        list: {
+            columns: [{ field: 'provider' }, { field: 'updatedAt' }],
+            perPage: 50,
+            defaultSort: 'provider',
+        },
+        actions: [
+            {
+                id: 'remove',
+                label: m('credentials.actions.remove'),
+                icon: 'trash-2',
+                scope: ['item'],
+                placement: ['row'],
+                destructive: true,
+                confirm: {
+                    title: m('credentials.actions.removeTitle'),
+                    message: m('credentials.actions.removeMessage'),
+                    confirmLabel: m('credentials.actions.remove'),
+                },
+            },
+        ],
+    };
+}
+
 function presetsResource(intl: IntlShape): ResourceInput {
     const { m, field } = messages(intl);
     return {
@@ -495,7 +574,12 @@ function jobsResource(
                     label: m('jobs.fields.project'),
                     options: projects.map(({ slug, name }) => ({ value: slug, label: name })),
                 },
-                { id: 'operation', type: 'text', label: m('jobs.filters.operation') },
+                {
+                    id: 'operation',
+                    type: 'text',
+                    label: m('jobs.filters.operation'),
+                    placeholder: 'embed.probe',
+                },
                 { id: 'created', type: 'date-range', label: m('jobs.fields.createdAt') },
             ],
             // The newest first, always, with the admin API's cursors
@@ -561,6 +645,7 @@ export function createDefinition({
             projectsResource(intl),
             keysResource(intl),
             storagesResource(intl),
+            credentialsResource(intl),
             presetsResource(intl),
         ],
         pages: {

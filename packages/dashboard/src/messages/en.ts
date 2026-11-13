@@ -63,6 +63,46 @@ export const en = {
     'projects.sections.settings': 'Settings',
     'projects.sections.settingsHelp': 'An empty field takes the server’s value.',
     'projects.sections.webhooks': 'Webhooks',
+    'projects.fields.embedProviders': 'Embed providers',
+    'projects.fields.embedDownload': 'Downloads from',
+    'projects.fields.embedMaxDuration': 'Longest download',
+    'projects.help.embedProviders':
+        'Platforms whose page URLs the project may send as embed inputs: youtube, vimeo… None when empty.',
+    'projects.help.embedDownload':
+        'Platforms the project may download its own videos from, among the ones above. None when empty.',
+    'projects.help.embedMaxDuration':
+        'The longest embed a download takes. The server’s when empty.',
+    'projects.sections.embeds': 'Embeds',
+    'projects.sections.embedsHelp':
+        'Videos and audio on platforms, by the URL of their page: probed through the platform’s API, and downloaded only when allowed.',
+    'providers.youtube': 'YouTube',
+    'providers.vimeo': 'Vimeo',
+    'providers.dailymotion': 'Dailymotion',
+    'providers.soundcloud': 'SoundCloud',
+    'providers.spotify': 'Spotify',
+    'providers.tiktok': 'TikTok',
+    'providers.instagram': 'Instagram',
+    'credentials.singular': 'provider credentials',
+    'credentials.plural': 'provider credentials',
+    'credentials.fields.provider': 'Provider',
+    'credentials.fields.apiKey': 'API key',
+    'credentials.fields.token': 'Access token',
+    'credentials.fields.clientId': 'Client ID',
+    'credentials.fields.clientSecret': 'Client secret',
+    'credentials.fields.accessToken': 'Access token',
+    'credentials.fields.updatedAt': 'Updated',
+    'credentials.help.provider':
+        'YouTube: a Data API key. Vimeo: an access token. Spotify: an app’s client ID and secret. Instagram: a Meta app token with oEmbed Read.',
+    'credentials.add': 'Add credentials',
+    'credentials.save': 'Save the credentials',
+    'credentials.encrypted':
+        'They are encrypted, and never shown again. Saving those of a provider replaces them.',
+    'credentials.fallback':
+        'Without its own credentials, a provider uses the server’s (ECLAIR_PROVIDER_…), or what it can read without any.',
+    'credentials.actions.remove': 'Remove',
+    'credentials.actions.removeTitle': 'Remove these credentials?',
+    'credentials.actions.removeMessage':
+        'The provider then uses the server’s credentials, or none.',
     'projects.columns.storages': 'Storages',
     'projects.columns.keys': 'Keys',
     'projects.columns.concurrency': 'Limit',
