@@ -7,7 +7,7 @@ import type { ReactNode } from 'react';
 import { useIntl } from 'react-intl';
 
 export interface ProjectListProps {
-    /** `keys` or `storages`. */
+    /** `keys`, `storages` or `credentials`. */
     resource: string;
     project: string;
     actions?: ReactNode;

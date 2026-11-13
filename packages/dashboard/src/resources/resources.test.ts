@@ -5,6 +5,7 @@ import { createAdminClient } from '../adapter/client.ts';
 import { createMessages } from '../messages/index.ts';
 import { type Route, json, mockFetch, problem } from '../testing/fetch.ts';
 import { ADMIN_TOKEN, apiKey, preset, project, storage } from '../testing/fixtures.ts';
+import { credentials } from './credentials.ts';
 import { keys } from './keys.ts';
 import { presets } from './presets.ts';
 import { projects } from './projects.ts';
@@ -131,6 +132,9 @@ describe('projects', () => {
                 maxInputSize: 2048,
                 operations: [],
                 concurrency: null,
+                embedProviders: ['youtube', ' '],
+                embedDownload: [],
+                embedMaxDuration: 3600,
             },
             ctx,
         );
@@ -142,6 +146,9 @@ describe('projects', () => {
                 maxInputSize: 2_147_483_648,
                 operations: null,
                 concurrency: null,
+                embedProviders: ['youtube'],
+                embedDownload: null,
+                embedMaxDuration: 3600,
             },
         });
     });
@@ -321,6 +328,64 @@ describe('storages', () => {
         });
         await expect(
             storages.runAction?.('remove', { selection: { ids: ['niche-dev/media'] } }, ctx),
+        ).resolves.toMatchObject({ result: { summary: { succeeded: 1 } } });
+    });
+});
+
+describe('credentials', () => {
+    it('lists the providers a project has credentials for, without their values', async () => {
+        const saved = {
+            provider: 'youtube',
+            createdAt: '2026-11-13T14:00:00.000Z',
+            updatedAt: '2026-11-13T14:00:00.000Z',
+        };
+        const { context: ctx, requests } = context({
+            'GET /admin/v1/projects/niche-dev/credentials': () =>
+                json({ data: [saved] }, { schema: 'CredentialsList' }),
+        });
+        await expect(credentials.list?.({}, ctx)).resolves.toMatchObject({ data: [] });
+        expect(requests).toHaveLength(0);
+        await expect(
+            credentials.list?.({ filter: { project: 'niche-dev' } }, ctx),
+        ).resolves.toMatchObject({
+            data: [{ id: 'niche-dev/youtube', provider: 'youtube', project: 'niche-dev' }],
+        });
+        await expect(credentials.get?.('niche-dev/youtube', ctx)).resolves.toMatchObject({
+            provider: 'youtube',
+            abilities: { update: false, remove: true },
+        });
+    });
+
+    it("puts only the provider's credentials, and removes them", async () => {
+        const saved = (provider: string) => ({
+            provider,
+            createdAt: '2026-11-13T14:00:00.000Z',
+            updatedAt: '2026-11-13T14:00:00.000Z',
+        });
+        const { context: ctx, requests } = context({
+            'PUT /admin/v1/projects/niche-dev/credentials/spotify': () =>
+                json(saved('spotify'), { schema: 'Credentials' }),
+            'PUT /admin/v1/projects/niche-dev/credentials/other': () => json(saved('other')),
+            'DELETE /admin/v1/projects/niche-dev/credentials/spotify': () =>
+                new Response(null, { status: 204 }),
+        });
+        await credentials.create?.(
+            {
+                project: 'niche-dev',
+                provider: 'spotify',
+                clientId: ' id ',
+                clientSecret: 'secret',
+                apiKey: 'left from youtube',
+                token: '',
+            },
+            ctx,
+        );
+        expect(requests[0]?.body).toEqual({ config: { clientId: 'id', clientSecret: 'secret' } });
+        // A provider of a plugin: whatever was typed.
+        await credentials.create?.({ project: 'niche-dev', provider: 'other', token: 't' }, ctx);
+        expect(requests[1]?.body).toEqual({ config: { token: 't' } });
+        await expect(
+            credentials.runAction?.('remove', { selection: { ids: ['niche-dev/spotify'] } }, ctx),
         ).resolves.toMatchObject({ result: { summary: { succeeded: 1 } } });
     });
 });

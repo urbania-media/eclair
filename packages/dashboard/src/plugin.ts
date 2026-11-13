@@ -11,6 +11,7 @@ import { catalogs } from './messages/index.ts';
 import { JobPage } from './pages/JobPage.tsx';
 import { OverviewPage } from './pages/OverviewPage.tsx';
 import { UsagePage } from './pages/UsagePage.tsx';
+import { ProjectCredentials } from './project/ProjectCredentials.tsx';
 import { ProjectKeys } from './project/ProjectKeys.tsx';
 import { ProjectStorages } from './project/ProjectStorages.tsx';
 import { WebhookSecret } from './project/WebhookSecret.tsx';
@@ -28,6 +29,7 @@ export const dashboardPlugin: PanneauPlugin = {
         'eclair-webhook-secret': WebhookSecret,
         'eclair-project-keys': ProjectKeys,
         'eclair-project-storages': ProjectStorages,
+        'eclair-project-credentials': ProjectCredentials,
     },
     displays: {
         'eclair-code': CodeDisplay,

@@ -31,7 +31,7 @@ Add workers when tasks wait: one server per capability that is short, with `ECLA
 
 ## The dashboard
 
-The API serves the operations dashboard at `/dashboard/` when `ECLAIR_ADMIN_TOKEN` is set, unless `ECLAIR_DASHBOARD=false` ([decision 0021](decisions/0021-dashboard-on-panneau.md)). It shows the server's health and queues, the jobs of every project, the projects with their keys, storages and settings, global presets, and usage and costs, in English or French. It reads and writes through the admin API, as the CLI does.
+The API serves the operations dashboard at `/dashboard/` when `ECLAIR_ADMIN_TOKEN` is set, unless `ECLAIR_DASHBOARD=false` ([decision 0021](decisions/0021-dashboard-on-panneau.md)). It shows the server's health and queues, the jobs of every project, the projects with their keys, storages, settings and embed providers and credentials, global presets, and usage and costs, in English or French. It reads and writes through the admin API, as the CLI does.
 
 - **Signing in** is pasting the admin token. The tab keeps it in `sessionStorage` until it is closed or the operator signs out, and sends it as a bearer token, never as a cookie. Whoever can open the dashboard holds the admin token: give it to operators only, and [replace it](#a-key-or-a-secret-leaked) when one leaves.
 - **Its page has a strict Content Security Policy:** its own scripts, styles and images only, requests to its own origin only, and no framing. Its assets have hashed names and are cached for good.
