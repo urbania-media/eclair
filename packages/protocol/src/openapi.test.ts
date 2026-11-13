@@ -86,6 +86,8 @@ describe('OpenAPI document', () => {
             '/admin/v1/keys/{key}/revoke',
             '/admin/v1/projects/{project}/storages',
             '/admin/v1/projects/{project}/storages/{storage}',
+            '/admin/v1/projects/{project}/credentials',
+            '/admin/v1/projects/{project}/credentials/{provider}',
             '/admin/v1/presets',
             '/admin/v1/presets/{name}',
             '/admin/v1/usage',

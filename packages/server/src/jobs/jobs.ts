@@ -200,6 +200,9 @@ export class Jobs {
                 }
                 fail('/input/url', error.message);
             }
+        } else if ('embed' in input) {
+            // Embed providers and the operations that read them come with decision 0022.
+            fail('/input/embed', 'this server reads no embeds');
         } else if ('upload' in input) {
             const upload = await this.#uploads.find(project.id, input.upload);
             if (upload === undefined) {

@@ -163,6 +163,14 @@ describe.skipIf(!RUNS_WITH_REDIS)('jobs', () => {
             ).rejects.toMatchObject({
                 errors: { '/input/url': ['10.0.0.1 is not a public address.'] },
             });
+            await expect(
+                jobs.create(project, {
+                    input: { embed: 'https://vimeo.com/76979871' },
+                    tasks: { probe: { op: 'probe' } },
+                }),
+            ).rejects.toMatchObject({
+                errors: { '/input/embed': ['this server reads no embeds'] },
+            });
         });
 
         it('accepts an upload of the project as input', async () => {

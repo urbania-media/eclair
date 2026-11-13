@@ -25,13 +25,14 @@ const job = {
 
 describe('the examples of the docs', () => {
     it('validate in docs/protocol.md', () => {
-        const [jobRequest, taskRequest, jobResponse, probeRequest, upload, ...others] =
+        const [jobRequest, taskRequest, jobResponse, probeRequest, embedProbe, upload, ...others] =
             readJsonExamples('docs/protocol.md');
         expect(others).toEqual([]);
         expect(validate('JobRequest', jobRequest)).toMatchObject({ valid: true });
         expect(validate('TaskRequest', taskRequest)).toMatchObject({ valid: true });
         expect(validate('Job', jobResponse)).toMatchObject({ valid: true });
         expect(validate('ProbeRequest', probeRequest)).toMatchObject({ valid: true });
+        expect(validate('ProbeResult', embedProbe)).toMatchObject({ valid: true });
         expect(validate('Upload', upload)).toMatchObject({ valid: true });
     });
 
@@ -210,6 +211,102 @@ describe('progress webhooks', () => {
         expect(pointers('ProjectSettings', { progressWebhookInterval: 1500.5 })).toContain(
             '/progressWebhookInterval',
         );
+    });
+});
+
+describe('embeds', () => {
+    const embed = 'https://www.youtube.com/watch?v=aqz-KE-bpKQ';
+
+    it('are an input of jobs and probes, by the https URL of their page', () => {
+        expect(pointers('JobRequest', { ...job, input: { embed } })).toEqual([]);
+        expect(pointers('ProbeRequest', { input: { embed } })).toEqual([]);
+        expect(
+            pointers('JobRequest', { ...job, input: { embed: 'http://vimeo.com/76979871' } }),
+        ).not.toEqual([]);
+        expect(
+            pointers('JobRequest', { ...job, input: { embed, url: 'https://example.com/a.mov' } }),
+        ).not.toEqual([]);
+        expect(pointers('JobRequest', { ...job, input: { embed, mime: 'video/mp4' } })).not.toEqual(
+            [],
+        );
+    });
+
+    it('add what the provider says to the probe', () => {
+        expect(
+            pointers('ProbeMetadata', {
+                kind: 'video',
+                mime: 'text/html',
+                duration: 634,
+                width: 1920,
+                height: 1080,
+                embed: {
+                    provider: 'youtube',
+                    id: 'aqz-KE-bpKQ',
+                    url: embed,
+                    embedUrl: 'https://www.youtube.com/embed/aqz-KE-bpKQ',
+                    title: 'Big Buck Bunny',
+                    author: { id: 'UCSMOQeBJ2RAnuFungnQOxLg', name: 'Blender' },
+                    thumbnailUrl: 'https://i.ytimg.com/vi/aqz-KE-bpKQ/maxresdefault.jpg',
+                    publishedAt: '2014-11-10T14:05:55Z',
+                    embeddable: true,
+                    live: false,
+                    privacy: 'public',
+                },
+            }),
+        ).toEqual([]);
+        expect(
+            pointers('ProbeMetadata', {
+                kind: 'video',
+                mime: 'text/html',
+                embed: { provider: 'youtube', id: 'aqz-KE-bpKQ', url: embed, privacy: 'friends' },
+            }),
+        ).toEqual(['/embed/privacy']);
+        expect(
+            pointers('ProbeMetadata', { kind: 'video', mime: 'text/html', embed: { url: embed } }),
+        ).toEqual(['/embed/provider', '/embed/id']);
+    });
+
+    it('are allowed per project, and downloads separately', () => {
+        expect(
+            pointers('ProjectSettings', {
+                embedProviders: ['youtube', 'vimeo'],
+                embedDownload: ['vimeo'],
+                embedMaxDuration: 3600,
+            }),
+        ).toEqual([]);
+        expect(pointers('ProjectSettings', { embedProviders: ['YouTube'] })).toContain(
+            '/embedProviders/0',
+        );
+        expect(pointers('ProjectSettings', { embedMaxDuration: 0 })).toContain('/embedMaxDuration');
+    });
+
+    it('have their provider credentials, never shown again', () => {
+        expect(pointers('CredentialsRequest', { config: { apiKey: 'a-key' } })).toEqual([]);
+        expect(pointers('CredentialsRequest', { apiKey: 'a-key' })).not.toEqual([]);
+        expect(
+            pointers('CredentialsList', {
+                data: [
+                    {
+                        provider: 'youtube',
+                        createdAt: '2026-11-13T14:00:00Z',
+                        updatedAt: '2026-11-13T14:00:00Z',
+                    },
+                ],
+            }),
+        ).toEqual([]);
+    });
+
+    it('are read by the operations that say so', () => {
+        expect(
+            pointers('Operation', {
+                name: 'embed.probe',
+                version: 1,
+                accepts: { embeds: true },
+                capability: 'probe',
+                outputs: { files: false, metadata: true },
+                options: {},
+            }),
+        ).toEqual([]);
     });
 });
 

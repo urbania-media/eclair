@@ -28,6 +28,9 @@ function describeInput(input: Input | undefined): string {
     if ('url' in input) {
         return input.url;
     }
+    if ('embed' in input) {
+        return input.embed;
+    }
     if ('upload' in input) {
         return `upload:${input.upload}`;
     }

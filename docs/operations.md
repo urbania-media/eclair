@@ -143,6 +143,15 @@ Both read audio files and the soundtrack of videos.
 
 `font.convert` reads TrueType, OpenType, WOFF and WOFF2 fonts with fonttools. `formats` (`["woff2", "woff"]` by default; the first is the main file) writes `font.woff2` and `font.woff`; `unicodes` (`U+0020-007E`) and `text` keep only some characters. Layout features, names and hinting are kept. It replaces the WOFF and WOFF2 files of the mediatheque's `WebFonts` job; the EOT and SVG fonts that job also wrote are left out, since no current browser needs them, and the application keeps its original TrueType or OpenType file.
 
+### Embed (`@eclair-js/operations-embed`, planned)
+
+| Operation        | Output                                                                           | 1.0 |
+| ---------------- | -------------------------------------------------------------------------------- | --- |
+| `embed.probe`    | The probe's metadata of an embed, with what the provider says about it           |     |
+| `embed.download` | The file of an embed, for the other operations, when the project may download it |     |
+
+They read embed inputs only, never files ([decision 0022](decisions/0022-embeds.md)). `embed.probe` runs on the `probe` queue and calls the provider's API or oEmbed endpoint. `embed.download` runs on a `network` queue: through the provider's API when it gives files to their owner (Vimeo), and through yt-dlp, in an opt-in variant of the image, for the others.
+
 ### AI (`@eclair-js/operations-ai`)
 
 | Operation       | Output                                                                           | 1.0 |

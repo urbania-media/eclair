@@ -444,6 +444,51 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/v1/projects/{project}/credentials": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The project's id or slug. */
+                project: components["parameters"]["Project"];
+            };
+            cookie?: never;
+        };
+        /** List a project's provider credentials */
+        get: operations["adminListCredentials"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/projects/{project}/credentials/{provider}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The project's id or slug. */
+                project: components["parameters"]["Project"];
+                provider: components["parameters"]["Provider"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set or replace a provider's credentials
+         * @description Without credentials of its own, a project uses the operator's (`ECLAIR_PROVIDER_<PROVIDER>_<KEY>`, such as `ECLAIR_PROVIDER_YOUTUBE_API_KEY` for `apiKey`), when the server has them.
+         */
+        put: operations["adminPutCredentials"];
+        post?: never;
+        /** Remove a provider's credentials */
+        delete: operations["adminDeleteCredentials"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/v1/presets": {
         parameters: {
             query?: never;
@@ -863,8 +908,8 @@ export interface components {
             mime?: components["schemas"]["MimeHint"];
             size?: components["schemas"]["SizeHint"];
         };
-        /** @description The file to process: a URL, a path in one of the project's storages, or an upload. */
-        Input: components["schemas"]["UrlInput"] | components["schemas"]["StorageInput"] | components["schemas"]["UploadInput"];
+        /** @description The file to process: a URL, a path in one of the project's storages, an upload, or an embed on a platform. */
+        Input: components["schemas"]["UrlInput"] | components["schemas"]["StorageInput"] | components["schemas"]["UploadInput"] | components["schemas"]["EmbedInput"];
         /** @description Path in a storage, without a leading `/`. */
         StoragePath: string;
         /** @description The mime type the client expects. A hint: Eclair detects the real one from the content. */
@@ -944,7 +989,7 @@ export interface components {
         /** @enum {string} */
         TaskStatus: "pending" | "queued" | "running" | "completed" | "failed" | "canceled" | "skipped";
         /**
-         * @description Stable error code: `input_unreadable`, `unsupported_input`, `timeout`, `limit_exceeded`, `operation_failed`, `storage_failed`, `provider_failed`, and `dependency_failed` when a task it depends on failed. New codes can be added: treat unknown ones as `operation_failed`.
+         * @description Stable error code: `input_unreadable`, `unsupported_input`, `timeout`, `limit_exceeded`, `operation_failed`, `storage_failed`, `provider_failed`, `dependency_failed` when a task it depends on failed, `provider_unavailable` when an embed is private, deleted or blocked where the server is, and `provider_refused` when a platform refuses the server (rate limit, bot check). New codes can be added: treat unknown ones as `operation_failed`.
          * @example input_unreadable
          * @example unsupported_input
          * @example timeout
@@ -953,6 +998,8 @@ export interface components {
          * @example storage_failed
          * @example provider_failed
          * @example dependency_failed
+         * @example provider_unavailable
+         * @example provider_refused
          */
         TaskErrorCode: string;
         TaskError: {
@@ -1083,6 +1130,11 @@ export interface components {
             accepts: {
                 kinds?: components["schemas"]["Kind"][];
                 mimes?: string[];
+                /**
+                 * @description Reads embed inputs (`embed.probe`, `embed.download`). Other operations read files only.
+                 * @default false
+                 */
+                embeds?: boolean;
             };
             /**
              * @description Queue it runs on.
@@ -1137,6 +1189,25 @@ export interface components {
             mime?: components["schemas"]["MimeHint"];
             size?: components["schemas"]["SizeHint"];
         };
+        /** @description A video or audio on a platform, by the URL of its page (decision 0022). The worker never fetches it: only operations that accept embeds (`embed.probe`, `embed.download`) read it, and other tasks read what `embed.download` wrote with `from`. */
+        EmbedInput: {
+            /**
+             * Format: uri
+             * @description `https` URL of the page, such as `https://www.youtube.com/watch?v=…` or `https://vimeo.com/…`. It must match a provider of the server that the project allows (`embedProviders`). Eclair never requests this URL: it reads the id from it and calls the provider's API or oEmbed endpoint.
+             */
+            embed: string;
+        };
+        /**
+         * @description An embed provider, by name. The server lists the ones it knows; plugins can add others.
+         * @example youtube
+         * @example vimeo
+         * @example dailymotion
+         * @example soundcloud
+         * @example spotify
+         * @example tiktok
+         * @example instagram
+         */
+        EmbedProvider: string;
         /** @description A file of a job, with the task that wrote it. */
         JobFile: components["schemas"]["OutputFile"] & {
             task: components["schemas"]["TaskName"];
@@ -1190,6 +1261,48 @@ export interface components {
             };
             /** @description A ThumbHash placeholder (https://evanw.github.io/thumbhash/) of an image other than SVG, in base64, when asked for: its first frame, upright, in sRGB, fitted in 100×100. Missing when the image can't be decoded. */
             thumbhash?: string;
+            /** @description For an embed input only. */
+            embed?: components["schemas"]["EmbedMetadata"];
+        };
+        /** @description What `embed.probe` reads about an embed, from the provider's API or oEmbed. A field the provider doesn't give is left out. `kind`, `duration`, `width` and `height` are in the probe's own fields, and its `mime` is `text/html`, the page's. */
+        EmbedMetadata: {
+            provider: components["schemas"]["EmbedProvider"];
+            /** @description The video's or audio's id at the provider. */
+            id: string;
+            /**
+             * Format: uri
+             * @description The canonical URL of its page.
+             */
+            url: string;
+            /**
+             * Format: uri
+             * @description The URL of the provider's player, for an `iframe`.
+             */
+            embedUrl?: string;
+            title?: string;
+            description?: string;
+            author?: {
+                /** @description The provider's id of the author: a YouTube channel id, a Vimeo user id… Applications compare it with an account they know, to check that a video is their user's own. */
+                id?: string;
+                name?: string;
+                /** Format: uri */
+                url?: string;
+            };
+            /**
+             * Format: uri
+             * @description The largest thumbnail the provider gives.
+             */
+            thumbnailUrl?: string;
+            /** Format: date-time */
+            publishedAt?: string;
+            /** @description Whether the provider lets other sites play it. */
+            embeddable?: boolean;
+            /** @description A live stream, current or upcoming. */
+            live?: boolean;
+            /** @enum {string} */
+            privacy?: "public" | "unlisted" | "private";
+            /** @description The player's HTML from the provider's oEmbed, when it has one. Never built from the request. */
+            html?: string;
         };
         ProbeRequest: {
             input: components["schemas"]["Input"];
@@ -1266,6 +1379,12 @@ export interface components {
              * @default 5000
              */
             progressWebhookInterval?: number;
+            /** @description Embed providers whose URLs the project may use as inputs, among the server's. None when not set. */
+            embedProviders?: components["schemas"]["EmbedProvider"][];
+            /** @description Embed providers the project may download from with `embed.download`, among its `embedProviders`. None when not set: the project is responsible for its rights to what it downloads. */
+            embedDownload?: components["schemas"]["EmbedProvider"][];
+            /** @description Longest embed that `embed.download` takes, in seconds. `ECLAIR_EMBED_MAX_DURATION` when not set. */
+            embedMaxDuration?: number;
         };
         AdminProject: {
             id: string;
@@ -1371,6 +1490,23 @@ export interface components {
         };
         StorageList: {
             data: components["schemas"]["Storage"][];
+        };
+        /** @description A provider's credentials for the project, encrypted and never shown again. `youtube`: `apiKey` (YouTube Data API). `vimeo`: `token`. `spotify`: `clientId`, `clientSecret`. `instagram`: `accessToken` (a Meta app token, for oEmbed). Each provider checks its own. */
+        CredentialsRequest: {
+            config: {
+                [key: string]: unknown;
+            };
+        };
+        /** @description A provider's credentials of a project, without their values. */
+        Credentials: {
+            provider: components["schemas"]["EmbedProvider"];
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        CredentialsList: {
+            data: components["schemas"]["Credentials"][];
         };
         UsageLine: {
             /** @description The project's slug. */
@@ -1641,6 +1777,7 @@ export interface components {
         Project: string;
         /** @description Name of one of the project's storages. */
         StorageNameParameter: components["schemas"]["StorageName"];
+        Provider: components["schemas"]["EmbedProvider"];
     };
     requestBodies: never;
     headers: never;
@@ -2616,6 +2753,86 @@ export interface operations {
                 project: components["parameters"]["Project"];
                 /** @description Name of one of the project's storages. */
                 storage: components["parameters"]["StorageNameParameter"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removed. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["AdminUnauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    adminListCredentials: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The project's id or slug. */
+                project: components["parameters"]["Project"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The providers that have credentials, without their values. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CredentialsList"];
+                };
+            };
+            401: components["responses"]["AdminUnauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    adminPutCredentials: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The project's id or slug. */
+                project: components["parameters"]["Project"];
+                provider: components["parameters"]["Provider"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CredentialsRequest"];
+            };
+        };
+        responses: {
+            /** @description The credentials, without their values. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Credentials"];
+                };
+            };
+            401: components["responses"]["AdminUnauthorized"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["Invalid"];
+        };
+    };
+    adminDeleteCredentials: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The project's id or slug. */
+                project: components["parameters"]["Project"];
+                provider: components["parameters"]["Provider"];
             };
             cookie?: never;
         };

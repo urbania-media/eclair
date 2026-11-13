@@ -25,3 +25,4 @@ Architecture decision records for Eclair. Each record is short: context, decisio
 | [0019](0019-h264-for-the-web-and-passthrough.md)   | H.264 for progressive playback on the web, and `passthrough`       | Proposed                                                                |
 | [0020](0020-progress-webhooks.md)                  | Progress webhooks for running tasks                                | Accepted                                                                |
 | [0021](0021-dashboard-on-panneau.md)               | The dashboard is a Panneau 5 app, served by Eclair                 | Accepted                                                                |
+| [0022](0022-embeds.md)                             | Embeds, probed through providers and downloaded on opt-in          | Proposed                                                                |

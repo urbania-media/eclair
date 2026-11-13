@@ -30,16 +30,16 @@ The protocol is the contract between Eclair and its clients. It is published in 
 }
 ```
 
-| Field      | Content                                                                                                                                                                            |
-| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `input`    | `{ "url": "https://…" }`, `{ "storage": "<name>", "path": "<path>" }` or `{ "upload": "upl_…" }`. Optional `mime` and `size` hints, never trusted.                                 |
-| `output`   | `{ "storage": "<name>", "prefix": "<prefix>", "path": "<pattern>" }`. `"storage": "eclair"` writes to the temporary storage. Optional when no task writes files (a `probe` alone). |
-| `preset`   | Name of a preset of the project, or of a global preset. Its tasks are merged with `tasks`.                                                                                         |
-| `tasks`    | Named tasks. A name is also the output's name, so it is the handle the application reads.                                                                                          |
-| `webhook`  | URL called when the job ends. Defaults to the project's webhook.                                                                                                                   |
-| `metadata` | Free object, returned as is in the job and the webhook. Used to find the application's record.                                                                                     |
-| `priority` | `low`, `normal` or `high`, within the project's limits.                                                                                                                            |
-| `failFast` | Cancel the remaining tasks as soon as one fails. Defaults to `false`.                                                                                                              |
+| Field      | Content                                                                                                                                                                                                                               |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `input`    | `{ "url": "https://…" }`, `{ "storage": "<name>", "path": "<path>" }` or `{ "upload": "upl_…" }`. Optional `mime` and `size` hints, never trusted. Or `{ "embed": "https://…" }`, a video or audio on a platform ([Embeds](#embeds)). |
+| `output`   | `{ "storage": "<name>", "prefix": "<prefix>", "path": "<pattern>" }`. `"storage": "eclair"` writes to the temporary storage. Optional when no task writes files (a `probe` alone).                                                    |
+| `preset`   | Name of a preset of the project, or of a global preset. Its tasks are merged with `tasks`.                                                                                                                                            |
+| `tasks`    | Named tasks. A name is also the output's name, so it is the handle the application reads.                                                                                                                                             |
+| `webhook`  | URL called when the job ends. Defaults to the project's webhook.                                                                                                                                                                      |
+| `metadata` | Free object, returned as is in the job and the webhook. Used to find the application's record.                                                                                                                                        |
+| `priority` | `low`, `normal` or `high`, within the project's limits.                                                                                                                                                                               |
+| `failFast` | Cancel the remaining tasks as soon as one fails. Defaults to `false`.                                                                                                                                                                 |
 
 A **task**:
 
@@ -151,6 +151,55 @@ The input takes the same forms as a job input. The file can also be sent as the 
 
 With a file body, `timeout`, `checksum` and `thumbhash` are query parameters.
 
+## Embeds
+
+An embed is a video or audio on a platform, given by the `https` URL of its page: `{ "embed": "https://www.youtube.com/watch?v=aqz-KE-bpKQ" }` ([decision 0022](decisions/0022-embeds.md)). It is an input of jobs and probes, like a file, with these differences:
+
+- The URL must match a provider of the server that the project allows (`embedProviders`, none by default). The providers are `youtube`, `vimeo`, `dailymotion`, `soundcloud`, `spotify`, `tiktok` and `instagram`.
+- Eclair never requests that URL. It reads the id from it, then calls the provider's API or oEmbed endpoint.
+- The worker never fetches an embed. Only operations whose `accepts.embeds` is `true` read it: `embed.probe` reads its metadata, and `embed.download` writes its file. Other tasks read that file with `"from": "download"`. The project may only download from the providers of its `embedDownload` (none by default), and the project is responsible for its rights to what it downloads.
+- `POST /v1/probe` with an embed runs `embed.probe`. `checksum` and `thumbhash` don't apply to it.
+
+The probe's metadata of an embed has its `kind` (`video`, `audio`, `image` or `other`, from the provider), its `duration`, `width` and `height` when the provider gives them, and an `embed` object with what the provider says. Its `mime` is `text/html`, the type of the page: Eclair doesn't read the media itself, so `size`, `checksum` and codecs are left out.
+
+```json
+{
+    "metadata": {
+        "kind": "video",
+        "mime": "text/html",
+        "duration": 634,
+        "width": 1920,
+        "height": 1080,
+        "embed": {
+            "provider": "youtube",
+            "id": "aqz-KE-bpKQ",
+            "url": "https://www.youtube.com/watch?v=aqz-KE-bpKQ",
+            "embedUrl": "https://www.youtube.com/embed/aqz-KE-bpKQ",
+            "title": "Big Buck Bunny 60fps 4K",
+            "author": {
+                "id": "UCSMOQeBJ2RAnuFungnQOxLg",
+                "name": "Blender",
+                "url": "https://www.youtube.com/@BlenderOfficial"
+            },
+            "thumbnailUrl": "https://i.ytimg.com/vi/aqz-KE-bpKQ/maxresdefault.jpg",
+            "publishedAt": "2014-11-10T14:05:55Z",
+            "embeddable": true,
+            "live": false,
+            "privacy": "public"
+        }
+    }
+}
+```
+
+`author.id` is the provider's id of the author: a YouTube channel id, a Vimeo user id… An application compares it with an account it knows, to check that a video is its user's own. `html` is only present when it comes from the provider's oEmbed. A field that the provider doesn't give is left out.
+
+Two task error codes are specific to embeds:
+
+- `provider_unavailable`: the video is private, deleted, or blocked where the server is.
+- `provider_refused`: the platform refused the server, with a rate limit or a bot check.
+
+A project's provider credentials (a YouTube Data API key, a Vimeo token…) are set through the [admin API](#admin-api). Without them, a provider uses the operator's, when the server has them (`ECLAIR_PROVIDER_<PROVIDER>_<KEY>`, such as `ECLAIR_PROVIDER_YOUTUBE_API_KEY` for `apiKey`), or what it can read without a key.
+
 ## Uploads
 
 ### `POST /v1/uploads`
@@ -215,21 +264,22 @@ The signature covers the timestamp, the path and the SHA-256 of the body (sent i
 
 Under `/admin/v1`, with the server's admin token (`Authorization: Bearer <ECLAIR_ADMIN_TOKEN>`), never with a project's key. It manages projects, keys, storages, global presets and limits, and reads jobs, the install's state, stats and usage, for tools such as the dashboard ([decision 0021](decisions/0021-dashboard-on-panneau.md)). The `eclair` CLI does the same directly on the database, where it runs next to the server.
 
-| Endpoint                                                                          | What it does                                                                                                                    |
-| --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `GET`, `POST /admin/v1/projects`                                                  | List, create (the response has the webhook secret, once)                                                                        |
-| `GET`, `PATCH`, `DELETE /admin/v1/projects/{project}`                             | Read, change (settings are merged; `null` restores a default), delete with everything it owns                                   |
-| `GET`, `POST /admin/v1/projects/{project}/webhook-secret`                         | Read, replace (`{ "grace": <seconds> }` keeps the previous secret valid, 24 hours by default)                                   |
-| `GET`, `POST /admin/v1/projects/{project}/keys`                                   | List, create (the key is shown once)                                                                                            |
-| `POST /admin/v1/keys/{key}/revoke`                                                | Revoke a key                                                                                                                    |
-| `GET /admin/v1/projects/{project}/storages`, `PUT`, `DELETE …/storages/{storage}` | List without credentials, create or replace, remove                                                                             |
-| `GET /admin/v1/presets`, `PUT`, `DELETE …/presets/{name}`                         | Global presets, built-in ones included. A global preset replaces a built-in one of the same name                                |
-| `GET /admin/v1/usage?project=…&days=30`                                           | Usage per project and UTC day                                                                                                   |
-| `GET /admin/v1/jobs`, `GET /admin/v1/jobs/{id}`                                   | Jobs of every project, with their `project`: the filters of `GET /v1/jobs`, plus `project`, `operation` and `createdBefore`     |
-| `POST /admin/v1/jobs/{id}/cancel`, `…/retry`                                      | As `/v1`, for any project's job                                                                                                 |
-| `GET /admin/v1/jobs/{id}/deliveries`                                              | The job's webhooks, with their status, attempts and last response                                                               |
-| `GET /admin/v1/status`                                                            | The checks of `/ready`, the live hosts and the queues they serve, each queue's waiting, active and slots, the temporary storage |
-| `GET /admin/v1/stats?since=…&until=…&interval=hour`                               | Tasks per interval by outcome, operations with p50 and p95, webhooks, created jobs                                              |
-| `POST /admin/v1/projects/{project}/storages/{storage}/check`                      | Writes, reads back and deletes a file under `.eclair/` (an `http` storage is only read)                                         |
+| Endpoint                                                                                 | What it does                                                                                                                    |
+| ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `GET`, `POST /admin/v1/projects`                                                         | List, create (the response has the webhook secret, once)                                                                        |
+| `GET`, `PATCH`, `DELETE /admin/v1/projects/{project}`                                    | Read, change (settings are merged; `null` restores a default), delete with everything it owns                                   |
+| `GET`, `POST /admin/v1/projects/{project}/webhook-secret`                                | Read, replace (`{ "grace": <seconds> }` keeps the previous secret valid, 24 hours by default)                                   |
+| `GET`, `POST /admin/v1/projects/{project}/keys`                                          | List, create (the key is shown once)                                                                                            |
+| `POST /admin/v1/keys/{key}/revoke`                                                       | Revoke a key                                                                                                                    |
+| `GET /admin/v1/projects/{project}/storages`, `PUT`, `DELETE …/storages/{storage}`        | List without credentials, create or replace, remove                                                                             |
+| `GET /admin/v1/presets`, `PUT`, `DELETE …/presets/{name}`                                | Global presets, built-in ones included. A global preset replaces a built-in one of the same name                                |
+| `GET /admin/v1/usage?project=…&days=30`                                                  | Usage per project and UTC day                                                                                                   |
+| `GET /admin/v1/jobs`, `GET /admin/v1/jobs/{id}`                                          | Jobs of every project, with their `project`: the filters of `GET /v1/jobs`, plus `project`, `operation` and `createdBefore`     |
+| `POST /admin/v1/jobs/{id}/cancel`, `…/retry`                                             | As `/v1`, for any project's job                                                                                                 |
+| `GET /admin/v1/jobs/{id}/deliveries`                                                     | The job's webhooks, with their status, attempts and last response                                                               |
+| `GET /admin/v1/status`                                                                   | The checks of `/ready`, the live hosts and the queues they serve, each queue's waiting, active and slots, the temporary storage |
+| `GET /admin/v1/stats?since=…&until=…&interval=hour`                                      | Tasks per interval by outcome, operations with p50 and p95, webhooks, created jobs                                              |
+| `POST /admin/v1/projects/{project}/storages/{storage}/check`                             | Writes, reads back and deletes a file under `.eclair/` (an `http` storage is only read)                                         |
+| `GET /admin/v1/projects/{project}/credentials`, `PUT`, `DELETE …/credentials/{provider}` | List the providers that have credentials, without their values; set or replace them (encrypted, never shown again); remove them |
 
 `{project}` is a project's id or slug.
