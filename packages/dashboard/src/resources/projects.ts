@@ -37,6 +37,10 @@ export const SETTINGS = {
     taskWebhooks: { unit: null },
     progressWebhooks: { unit: null },
     progressWebhookInterval: { unit: 1000 },
+    // Kept as they are when a project is saved. Their fields come with the embed operations (#106).
+    embedProviders: { unit: null },
+    embedDownload: { unit: null },
+    embedMaxDuration: { unit: 1 },
 } as const satisfies Record<keyof ProjectSettings, { unit: number | null }>;
 
 type SettingName = keyof typeof SETTINGS;
