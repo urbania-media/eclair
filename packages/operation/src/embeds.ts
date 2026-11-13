@@ -1,5 +1,6 @@
 import type { TSchema } from 'typebox';
 
+import type { ExecOptions, ExecResult } from './exec.ts';
 import type { JsonSchemaObject, OperationLogger, OutputOptions } from './operation.ts';
 
 /** An embed that a provider recognized in a page URL. */
@@ -115,6 +116,18 @@ export interface EmbedOperationContext {
      */
     download(url: string, path: string, options?: DownloadOptions): Promise<DownloadResult>;
     limits: EmbedLimits;
+    /**
+     * Runs a binary the operation declared in `binaries` or `optionalBinaries`, by name, with the
+     * task's time limit, killed on cancel. The binary inherits the worker's proxy variables
+     * (`HTTPS_PROXY`…), which can restrict its network.
+     */
+    exec(
+        binary: string,
+        args: readonly string[],
+        options?: Omit<ExecOptions, 'signal'>,
+    ): Promise<ExecResult>;
+    /** Whether a binary runs on this worker, for `optionalBinaries`. */
+    available(binary: string): Promise<boolean>;
     /**
      * The credentials of the input's provider: the project's, or else the operator's
      * (`ECLAIR_PROVIDER_<PROVIDER>_<KEY>`). `undefined` when neither has any.

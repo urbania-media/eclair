@@ -107,8 +107,9 @@ Jobs stay `pending` and their tasks `queued`.
 1. Find the error code in the failed tasks (`GET /v1/jobs/{id}` or the worker logs): `input_unreadable` and `unsupported_input` come from the files, `timeout` and `limit_exceeded` from the limits, `operation_failed` from the binary, `storage_failed` from a storage.
 2. `operation_failed` on every task of an operation, after an upgrade or on a new server: `eclair doctor` on that worker shows a binary that is missing or doesn't run.
 3. `timeout`: raise the project's `taskTimeout`, in milliseconds (`eclair projects:update <project> --set taskTimeout=7200000`), or `ECLAIR_TASK_TIMEOUT`, or move the work to a faster server.
-4. `provider_unavailable` comes from the embed itself: private, deleted, or blocked where the server is. `provider_refused` means a platform refuses the server: an exhausted YouTube Data API quota or a rate limit. It passes with time, or with the project's own credentials (`eclair credentials:set`) instead of the operator's ([decision 0022](decisions/0022-embeds.md)). `provider_failed` with credentials: the provider refuses them.
-5. `storage_failed`: the project's storage refuses Eclair's credentials or is unreachable. Check the storage with the project's owner, then set it again (`eclair storages:set`).
+4. `provider_failed` from yt-dlp on one platform, on every embed: the platform changed, and the image's yt-dlp is too old. Pull a newer image of the `-embed` variant ([deployment](deployment.md#yt-dlp)).
+5. `provider_unavailable` comes from the embed itself: private, deleted, or blocked where the server is. `provider_refused` means a platform refuses the server: an exhausted YouTube Data API quota or a rate limit. It passes with time, or with the project's own credentials (`eclair credentials:set`) instead of the operator's ([decision 0022](decisions/0022-embeds.md)). `provider_failed` with credentials: the provider refuses them.
+6. `storage_failed`: the project's storage refuses Eclair's credentials or is unreachable. Check the storage with the project's owner, then set it again (`eclair storages:set`).
 
 Once fixed, `POST /v1/jobs/{id}/retry` runs the failed tasks of a job again.
 

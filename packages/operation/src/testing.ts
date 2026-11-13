@@ -19,6 +19,7 @@ import type {
 } from './embeds.ts';
 import { OperationError } from './errors.ts';
 import { execBinary } from './exec.ts';
+import type { ExecOptions, ExecResult } from './exec.ts';
 import type {
     EmbedOperation,
     FileOperation,
@@ -169,6 +170,16 @@ export interface RunEmbedOperationOptions {
     cache?: OperationCache;
     /** 2 GB and an hour by default. */
     limits?: Partial<EmbedLimits>;
+    /**
+     * Runs the operation's binaries: by default the real ones, on `PATH`. A function fakes them,
+     * for binaries that would reach the network (yt-dlp).
+     */
+    exec?: (binary: string, args: readonly string[], options: ExecOptions) => Promise<ExecResult>;
+    /**
+     * Which binaries `available()` says this worker has: none by default, so that a binary on the
+     * machine, such as yt-dlp, never reaches the network in a test without being asked to.
+     */
+    available?: Record<string, boolean>;
 }
 
 export interface RunEmbedOperationResult {
@@ -281,6 +292,19 @@ export async function runEmbedOperation(
                 return { size, contentType: response.headers?.['content-type'] };
             },
             limits,
+            exec: (binary, args, execOptions = {}) => {
+                if (
+                    !operation.binaries.includes(binary) &&
+                    !(operation.optionalBinaries ?? []).includes(binary)
+                ) {
+                    throw new Error(`${operation.key} runs ${binary} without declaring it.`);
+                }
+                const options = { cwd: workdir, ...execOptions };
+                return run.exec !== undefined
+                    ? run.exec(binary, args, options)
+                    : execBinary(binary, args, options);
+            },
+            available: (binary) => Promise.resolve(run.available?.[binary] ?? false),
             credentials: run.credentials,
             http: (target, requestOptions = {}) => {
                 requests.push({ url: target, ...requestOptions });

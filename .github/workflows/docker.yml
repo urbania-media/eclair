@@ -51,6 +51,7 @@ jobs:
               with:
                   context: .
                   file: docker/Dockerfile
+                  target: runtime
                   platforms: linux/amd64
                   load: true
                   tags: ${{ env.TEST_TAG }}
@@ -152,10 +153,74 @@ jobs:
               with:
                   context: .
                   file: docker/Dockerfile
+                  target: runtime
                   platforms: linux/amd64
                   push: true
                   tags: ${{ steps.meta.outputs.tags }}
                   labels: ${{ steps.meta.outputs.labels }}
+                  cache-from: type=gha
+                  provenance: mode=max
+                  sbom: true
+
+            # The embed variant: the same image with yt-dlp (decision 0022), tagged <tag>-embed.
+            - name: Embed variant tags and labels
+              id: meta-embed
+              uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+              with:
+                  images: ${{ env.IMAGE }}
+                  flavor: suffix=-embed,onlatest=true
+                  tags: |
+                      type=ref,event=branch
+                      type=ref,event=pr
+                      type=semver,pattern={{version}}
+                      type=semver,pattern={{major}}.{{minor}}
+                      type=semver,pattern={{major}}
+                      type=sha
+
+            - name: Build the embed variant
+              uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+              with:
+                  context: .
+                  file: docker/Dockerfile
+                  target: embed
+                  platforms: linux/amd64
+                  load: true
+                  tags: eclair:test-embed
+                  labels: ${{ steps.meta-embed.outputs.labels }}
+                  cache-from: type=gha
+                  no-cache-filters: runtime
+
+            # The smoke test checks yt-dlp too when the image has it, on a read-only file system.
+            - name: Smoke test the embed variant
+              run: |
+                  docker run --rm --read-only --cap-drop ALL --security-opt no-new-privileges \
+                      -v /tmp/eclair -v /var/lib/eclair \
+                      -v "$PWD/docker/smoke-test.sh:/smoke-test.sh:ro" \
+                      eclair:test-embed sh /smoke-test.sh > versions-embed.md
+                  grep -q '^| yt-dlp' versions-embed.md
+
+            - name: Scan the embed variant for vulnerabilities
+              uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+              with:
+                  version: v0.75.0
+                  image-ref: eclair:test-embed
+                  scanners: vuln
+                  severity: HIGH,CRITICAL
+                  ignore-unfixed: true
+                  exit-code: '1'
+                  format: table
+
+            - name: Push the embed variant
+              if: github.event_name != 'pull_request'
+              uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+              with:
+                  context: .
+                  file: docker/Dockerfile
+                  target: embed
+                  platforms: linux/amd64
+                  push: true
+                  tags: ${{ steps.meta-embed.outputs.tags }}
+                  labels: ${{ steps.meta-embed.outputs.labels }}
                   cache-from: type=gha
                   provenance: mode=max
                   sbom: true

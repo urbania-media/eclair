@@ -4,6 +4,7 @@ import { OperationError, defineEmbedOperation } from '@eclair-js/operation';
 
 import { removeUndefined } from './common.ts';
 import { PROVIDERS } from './providers/index.ts';
+import { YTDLP, canUseYtdlp, ytdlpDownload } from './ytdlp.ts';
 
 /**
  * Downloads the file of an embed, for the other tasks of the job (decision 0022): only from the
@@ -17,6 +18,7 @@ export const embedDownload = defineEmbedOperation({
         'Download the file of a video on a platform, when the platform gives it to its owner (Vimeo), for the other tasks of the job.',
     capability: 'network',
     binaries: [],
+    optionalBinaries: [YTDLP],
     downloads: true,
     options: Type.Object(
         {
@@ -39,16 +41,19 @@ export const embedDownload = defineEmbedOperation({
 
     async run(context, options) {
         const module = PROVIDERS.get(context.input.provider);
-        if (module?.download === undefined) {
+        const request = { quality: options.quality, audioOnly: options.audioOnly };
+        let metadata: Record<string, unknown>;
+        if (module?.download !== undefined) {
+            // The provider's API, when it gives files to their owner.
+            metadata = await module.download(context, request);
+        } else if (await canUseYtdlp(context)) {
+            metadata = await ytdlpDownload(context, request);
+        } else {
             throw new OperationError(
                 'unsupported_input',
-                `embed.download can't download from ${context.input.provider} yet.`,
+                `embed.download can't download from ${context.input.provider} on this server: it needs yt-dlp, in the embed variant of the image.`,
             );
         }
-        const metadata = await module.download(context, {
-            quality: options.quality,
-            audioOnly: options.audioOnly,
-        });
         context.progress(1);
         return { metadata: removeUndefined(metadata) };
     },

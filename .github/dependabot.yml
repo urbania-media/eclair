@@ -15,3 +15,9 @@ updates:
       directory: /
       schedule:
           interval: weekly
+
+    # yt-dlp of the embed variant: platforms change often, and an old yt-dlp stops working.
+    - package-ecosystem: pip
+      directory: /docker/yt-dlp
+      schedule:
+          interval: daily

@@ -1,0 +1,7 @@
+# yt-dlp for the embed variant of the image (decision 0022), with its YouTube challenge solver.
+# Dependabot keeps them up to date: platforms change often, and an old yt-dlp stops working.
+# The other extras of yt-dlp[default] are left out: it falls back on the standard library.
+yt-dlp==2026.10.26 \
+    --hash=sha256:a05c5b5d8562f7e8a62f5334348b406af4930d56d3a65f8021d14af0e22339ae
+yt-dlp-ejs==0.8.0 \
+    --hash=sha256:79300e5fca7f937a1eeede11f0456862c1b41107ce1d726871e0207424f4bdb4
