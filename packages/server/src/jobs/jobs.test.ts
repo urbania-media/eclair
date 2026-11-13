@@ -216,6 +216,26 @@ describe.skipIf(!RUNS_WITH_REDIS)('jobs', () => {
                 tasks: { probe: { op: 'embed.probe' } },
             });
             expect(job).toMatchObject({ input: embed, tasks: { probe: { op: 'embed.probe@1' } } });
+
+            // Downloading needs the provider in embedDownload too.
+            const importing = {
+                input: embed,
+                output: { storage: 'eclair', prefix: 'imports/' },
+                tasks: {
+                    download: { op: 'embed.download' },
+                    h264: { op: 'video.transcode', from: 'download' },
+                },
+            };
+            await expect(jobs.create(allowed, importing)).rejects.toMatchObject({
+                errors: { '/tasks/download/op': ['the project may not download from example'] },
+            });
+            await services.projects.update('embeds', { settings: { embedDownload: ['example'] } });
+            const downloads = await services.projects.get('embeds');
+            await expect(jobs.create(downloads, importing)).resolves.toMatchObject({
+                job: {
+                    tasks: { download: { op: 'embed.download@1' }, h264: { from: 'download' } },
+                },
+            });
         });
 
         it('accepts an upload of the project as input', async () => {

@@ -1,3 +1,4 @@
+import type { EmbedOperation } from '@eclair-js/operation';
 import type {
     Job,
     JobFile,
@@ -239,6 +240,18 @@ export class Jobs {
                 fail(`${pointer}/op`, `${task.operation.name} only reads the job's embed input`);
             } else if (readsEmbeds && task.condition !== undefined) {
                 fail(`${pointer}/when`, `${task.operation.name} takes no condition`);
+            } else if (
+                readsEmbeds &&
+                (task.operation as EmbedOperation).downloads === true &&
+                'embed' in input
+            ) {
+                const provider = this.#operations.matchEmbed(input.embed)?.provider;
+                if (
+                    provider !== undefined &&
+                    !(project.settings.embedDownload ?? []).includes(provider)
+                ) {
+                    fail(`${pointer}/op`, `the project may not download from ${provider}`);
+                }
             } else if (!readsEmbeds && task.source === undefined && 'embed' in input) {
                 fail(
                     `${pointer}/op`,

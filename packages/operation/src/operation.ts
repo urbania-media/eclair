@@ -110,6 +110,11 @@ export interface OperationDefinition<
 export interface EmbedOperationDefinition<
     S extends TSchema | JsonSchemaObject = TSchema | JsonSchemaObject,
 > extends OperationBase<S> {
+    /**
+     * Whether it downloads the embed's file. The project must then allow the provider in its
+     * `embedDownload`: the server refuses the task otherwise (decision 0022).
+     */
+    downloads?: boolean;
     run(context: EmbedOperationContext, options: OptionsOf<S>): Promise<OperationResult>;
 }
 

@@ -34,7 +34,7 @@ import { toOutputRecord } from '../jobs/records.ts';
 import type { Scheduler } from '../jobs/scheduler.ts';
 import type { Metrics } from '../metrics.ts';
 import type { GuardOptions } from '../net/ssrf.ts';
-import { NO_CACHE, operationHttp } from '../operations/embeds.ts';
+import { NO_CACHE, operationDownload, operationHttp } from '../operations/embeds.ts';
 import type { OperationCacheFactory } from '../operations/embeds.ts';
 import type { OperationRegistry } from '../operations/registry.ts';
 import type { Project, Projects } from '../projects/projects.ts';
@@ -72,7 +72,7 @@ export interface TaskRunnerOptions {
         | 'tempRetention'
         | 'tempMaxRetention'
     > &
-        Partial<Pick<Config, 'providerCredentials'>>;
+        Partial<Pick<Config, 'providerCredentials' | 'embedMaxDuration'>>;
     /** The projects' credentials for embed providers. */
     credentials?: Credentials | undefined;
     /** The caches of operations, in Redis. Nothing is cached without it. */
@@ -105,6 +105,18 @@ const THUMBHASH_PATTERN = /^[A-Za-z0-9+/]+={0,2}$/;
 interface DeclaredFile extends OutputOptions {
     name: string;
     path: string;
+}
+
+/** A path of an operation, resolved in its work directory, which it can't leave. */
+function inWorkdir(operation: Operation, workdir: string, path: string, what: string): string {
+    const full = resolve(workdir, path);
+    if (relative(workdir, full).startsWith('..')) {
+        throw new OperationError(
+            'operation_failed',
+            `${operation.key} ${what} outside its work directory.`,
+        );
+    }
+    return full;
 }
 
 /** Errors that may pass if the task runs again: storage and the unexpected. */
@@ -364,20 +376,25 @@ export class TaskRunner {
             let inputSize = 0;
             if (operation.accepts.embeds === true) {
                 // An embed is never fetched: the operation reads it from its provider (decision 0022).
-                const embed = this.#embedOf(task, job.input, operation);
+                const embed = this.#embedOf(task, job.input, project, operation as EmbedOperation);
                 stage = 'run';
+                const context = await this.#embedContext(
+                    operation,
+                    task,
+                    project,
+                    embed,
+                    workdir,
+                    files,
+                    controller.signal,
+                    options,
+                    this.#progressWebhooks(project, job, task),
+                );
                 result = await (operation as EmbedOperation).run(
-                    await this.#embedContext(
-                        operation,
-                        task,
-                        project,
-                        embed,
-                        controller.signal,
-                        options,
-                        this.#progressWebhooks(project, job, task),
-                    ),
+                    context.context,
                     task.options as never,
                 );
+                // The bytes downloaded from the provider are the task's input.
+                inputSize = context.downloaded();
                 probe = result.metadata as ProbeMetadata | undefined;
             } else {
                 const input = await this.#fetchTaskInput(
@@ -651,7 +668,12 @@ export class TaskRunner {
     }
 
     /** The embed an embed operation reads: the job's input, recognized by a provider of the server. */
-    #embedOf(task: TaskRecord, jobInput: JobRecord['input'], operation: Operation): OperationEmbed {
+    #embedOf(
+        task: TaskRecord,
+        jobInput: JobRecord['input'],
+        project: Project,
+        operation: EmbedOperation,
+    ): OperationEmbed {
         if (task.source !== undefined || !('embed' in jobInput)) {
             throw new OperationError('unsupported_input', `${operation.key} only reads embeds.`);
         }
@@ -662,6 +684,16 @@ export class TaskRunner {
                 'No embed provider of this server recognizes the input.',
             );
         }
+        // The settings may have changed since the job was created.
+        if (
+            operation.downloads === true &&
+            !(project.settings.embedDownload ?? []).includes(match.provider)
+        ) {
+            throw new OperationError(
+                'unsupported_input',
+                `The project may not download from ${match.provider}.`,
+            );
+        }
         return { ...match, input: jobInput.embed };
     }
 
@@ -670,22 +702,47 @@ export class TaskRunner {
         task: TaskRecord,
         project: Project,
         embed: OperationEmbed,
+        workdir: string,
+        files: DeclaredFile[],
         signal: AbortSignal,
         options: RunOptions,
         sendProgress: ((progress: number) => void) | undefined,
-    ): Promise<EmbedOperationContext> {
+    ): Promise<{ context: EmbedOperationContext; downloaded: () => number }> {
         const credentials =
             (await this.#options.credentials?.get(project.id, embed.provider)) ??
             this.#options.config.providerCredentials?.[embed.provider];
-        return {
+        const { config } = this.#options;
+        const limits = {
+            maxSize: project.settings.maxInputSize ?? config.maxInputSize,
+            maxDuration:
+                project.settings.embedMaxDuration ??
+                Math.round((config.embedMaxDuration ?? 2 * 3_600_000) / 1000),
+        };
+        const progress = this.#progress(task, options, sendProgress);
+        const download = operationDownload(signal, this.#options.guard, limits.maxSize, progress);
+        let downloaded = 0;
+        const context: EmbedOperationContext = {
             input: embed,
+            workdir,
+            output: this.#output(operation, workdir, files),
+            download: async (url, path, downloadOptions) => {
+                const result = await download(
+                    url,
+                    inWorkdir(operation, workdir, path, 'downloaded a file'),
+                    downloadOptions,
+                );
+                downloaded += result.size;
+                return result;
+            },
+            limits,
             credentials,
             http: operationHttp(signal, this.#options.guard),
             cache: this.#options.cache?.(project.id, operation.name) ?? NO_CACHE,
-            progress: this.#progress(task, options, sendProgress),
+            progress,
             log: this.#log(task, operation),
             signal,
         };
+        return { context, downloaded: () => downloaded };
     }
 
     #context(
@@ -720,26 +777,29 @@ export class TaskRunner {
             },
             progress: this.#progress(task, options, sendProgress),
             log: this.#log(task, operation),
-            output: (name, path, outputOptions) => {
-                const full = resolve(workdir, path);
-                if (relative(workdir, full).startsWith('..')) {
-                    throw new OperationError(
-                        'operation_failed',
-                        `${operation.key} declared a file outside its work directory.`,
-                    );
-                }
-                if (
-                    outputOptions?.thumbhash !== undefined &&
-                    (outputOptions.thumbhash.length > 64 ||
-                        !THUMBHASH_PATTERN.test(outputOptions.thumbhash))
-                ) {
-                    throw new OperationError(
-                        'operation_failed',
-                        `${operation.key} gave ${name} a placeholder that isn't a ThumbHash.`,
-                    );
-                }
-                files.push({ name: checkOutputName(name), path: full, ...outputOptions });
-            },
+            output: this.#output(operation, workdir, files),
+        };
+    }
+
+    /** Declares the files of a task, in its work directory only. */
+    #output(
+        operation: Operation,
+        workdir: string,
+        files: DeclaredFile[],
+    ): OperationContext['output'] {
+        return (name, path, outputOptions) => {
+            const full = inWorkdir(operation, workdir, path, 'declared a file');
+            if (
+                outputOptions?.thumbhash !== undefined &&
+                (outputOptions.thumbhash.length > 64 ||
+                    !THUMBHASH_PATTERN.test(outputOptions.thumbhash))
+            ) {
+                throw new OperationError(
+                    'operation_failed',
+                    `${operation.key} gave ${name} a placeholder that isn't a ThumbHash.`,
+                );
+            }
+            files.push({ name: checkOutputName(name), path: full, ...outputOptions });
         };
     }
 

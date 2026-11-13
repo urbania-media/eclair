@@ -2,6 +2,7 @@ import addFormatsModule from 'ajv-formats';
 import { Ajv2020 } from 'ajv/dist/2020.js';
 import { spawnSync } from 'node:child_process';
 import { mkdtemp, rm, stat } from 'node:fs/promises';
+import { writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -9,12 +10,14 @@ import type { ProbeMetadata } from '@eclair-js/protocol';
 
 import { detectType } from './detect.ts';
 import type {
+    EmbedLimits,
     EmbedMatch,
     EmbedProvider,
     HttpRequestOptions,
     HttpResponse,
     OperationCache,
 } from './embeds.ts';
+import { OperationError } from './errors.ts';
 import { execBinary } from './exec.ts';
 import type {
     EmbedOperation,
@@ -135,11 +138,11 @@ export function skipWithoutBinaries(binaries: readonly string[]): boolean {
     return missingBinaries(binaries).length > 0 && process.env['ECLAIR_TEST_BINARIES'] !== '1';
 }
 
-/** A provider's answer, for `runEmbedOperation()`: a JSON body, or text with a status. */
+/** A provider's answer, for `runEmbedOperation()`: a JSON body, text or bytes, with a status. */
 export interface FakeResponse {
     status?: number;
     headers?: Record<string, string>;
-    /** A string is sent as it is; anything else as JSON. */
+    /** A string or bytes are sent as they are; anything else as JSON. */
     body?: unknown;
 }
 
@@ -164,16 +167,31 @@ export interface RunEmbedOperationOptions {
         | ((url: string, options: HttpRequestOptions) => FakeResponse | undefined);
     /** The cache, shared between runs to test it. An empty one by default. */
     cache?: OperationCache;
+    /** 2 GB and an hour by default. */
+    limits?: Partial<EmbedLimits>;
 }
 
 export interface RunEmbedOperationResult {
     metadata: Record<string, unknown> | undefined;
     requests: RecordedRequest[];
+    /** The files the operation declared, in `workdir`. */
+    files: ({ name: string; path: string } & OutputOptions)[];
+    progress: number[];
+    workdir: string;
+    /** Deletes the work directory. */
+    cleanup(): Promise<void>;
+}
+
+function bodyOf(response: FakeResponse): string | Uint8Array {
+    if (typeof response.body === 'string' || response.body instanceof Uint8Array) {
+        return response.body;
+    }
+    return JSON.stringify(response.body ?? null);
 }
 
 function toHttpResponse(response: FakeResponse): HttpResponse {
-    const body =
-        typeof response.body === 'string' ? response.body : JSON.stringify(response.body ?? null);
+    const raw = bodyOf(response);
+    const body = typeof raw === 'string' ? raw : Buffer.from(raw).toString('utf8');
     return {
         status: response.status ?? 200,
         headers: response.headers ?? {},
@@ -217,6 +235,10 @@ export async function runEmbedOperation(
         throw new Error(`No provider recognizes ${run.url}.`);
     }
     const requests: RecordedRequest[] = [];
+    const files: RunEmbedOperationResult['files'] = [];
+    const progress: number[] = [];
+    const limits: EmbedLimits = { maxSize: 2 * 1024 ** 3, maxDuration: 3600, ...run.limits };
+    const workdir = await mkdtemp(join(tmpdir(), `eclair-${operation.name}-`));
     const answer = (
         target: string,
         requestOptions: HttpRequestOptions,
@@ -227,9 +249,38 @@ export async function runEmbedOperation(
         }
         return responses?.[target] ?? responses?.[target.split('?')[0] ?? target];
     };
-    const result = await operation.run(
+    const run_ = operation.run(
         {
             input: { ...match, input: run.url },
+            workdir,
+            output: (name, path, outputOptions) => files.push({ name, path, ...outputOptions }),
+            download: async (target, path, downloadOptions = {}) => {
+                const { maxSize: wanted, ...requestOptions } = downloadOptions;
+                requests.push({ url: target, ...requestOptions });
+                const response = answer(target, requestOptions);
+                if (response === undefined) {
+                    throw new Error(`No response for ${target}.`);
+                }
+                if ((response.status ?? 200) !== 200) {
+                    throw new OperationError(
+                        'provider_failed',
+                        `The download answered ${response.status ?? 200}.`,
+                    );
+                }
+                const body = bodyOf(response);
+                const size = typeof body === 'string' ? Buffer.byteLength(body) : body.length;
+                const maxSize = Math.min(wanted ?? limits.maxSize, limits.maxSize);
+                if (size > maxSize) {
+                    throw new OperationError(
+                        'limit_exceeded',
+                        `The file is larger than ${maxSize} bytes.`,
+                    );
+                }
+                await writeFile(path, body);
+                progress.push(1);
+                return { size, contentType: response.headers?.['content-type'] };
+            },
+            limits,
             credentials: run.credentials,
             http: (target, requestOptions = {}) => {
                 requests.push({ url: target, ...requestOptions });
@@ -240,11 +291,18 @@ export async function runEmbedOperation(
                 return Promise.resolve(toHttpResponse(response));
             },
             cache: run.cache ?? memoryCache(),
-            progress: () => {},
+            progress: (ratio) => progress.push(ratio),
             log: { debug: () => {}, info: () => {}, warn: () => {} },
             signal: new AbortController().signal,
         },
         options as never,
     );
-    return { metadata: result.metadata, requests };
+    const cleanup = () => rm(workdir, { recursive: true, force: true });
+    try {
+        const result = await run_;
+        return { metadata: result.metadata, requests, files, progress, workdir, cleanup };
+    } catch (error) {
+        await cleanup();
+        throw error;
+    }
 }

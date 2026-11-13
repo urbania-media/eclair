@@ -94,6 +94,7 @@ const EnvironmentSchema = Type.Object({
     ECLAIR_MAX_INPUT_SIZE: size('2GB', 'a size (2GB)'),
     ECLAIR_TASK_TIMEOUT: duration('1h', 'a duration (1h)'),
     ECLAIR_JOB_RETENTION: duration('30d', 'a duration (30d)'),
+    ECLAIR_EMBED_MAX_DURATION: duration('2h', 'a duration (2h)'),
     ECLAIR_LOG_LEVEL: Type.Union(
         LOG_LEVELS.map((level) => Type.Literal(level)),
         { default: 'info', description: LOG_LEVELS.join(', ') },
@@ -137,6 +138,8 @@ export interface Config {
     taskTimeout: number;
     /** Milliseconds. */
     jobRetention: number;
+    /** Milliseconds: the longest embed `embed.download` takes, when the project doesn't set one. */
+    embedMaxDuration: number;
     logLevel: LogLevel;
     binaries: Record<BinaryName, string>;
     /**
@@ -196,6 +199,9 @@ function defaultConcurrency(name: QueueName): number {
         case 'cpu':
             return availableParallelism();
         case 'probe':
+            return 2;
+        // Downloads wait on the network more than they use the CPU.
+        case 'network':
             return 2;
         default:
             return 1;
@@ -306,6 +312,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
         maxInputSize: parseSize(environment.ECLAIR_MAX_INPUT_SIZE),
         taskTimeout: parseDuration(environment.ECLAIR_TASK_TIMEOUT),
         jobRetention: parseDuration(environment.ECLAIR_JOB_RETENTION),
+        embedMaxDuration: parseDuration(environment.ECLAIR_EMBED_MAX_DURATION),
         logLevel: environment.ECLAIR_LOG_LEVEL,
         binaries,
         providerCredentials: providerCredentialsOf(env),

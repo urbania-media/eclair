@@ -1,7 +1,16 @@
 import type { Redis } from 'ioredis';
+import { createWriteStream } from 'node:fs';
+import { Transform } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 
 import { OperationError } from '@eclair-js/operation';
-import type { HttpRequestOptions, HttpResponse, OperationCache } from '@eclair-js/operation';
+import type {
+    DownloadOptions,
+    DownloadResult,
+    HttpRequestOptions,
+    HttpResponse,
+    OperationCache,
+} from '@eclair-js/operation';
 
 import { BlockedUrlError, guardedRequest } from '../net/ssrf.ts';
 import type { GuardOptions } from '../net/ssrf.ts';
@@ -128,5 +137,82 @@ export function operationHttp(
                 }
             },
         };
+    };
+}
+
+/**
+ * The `download()` of an embed operation: a file to the work directory, through the SSRF guard,
+ * with redirects checked again, within `maxSize`, reporting its progress when the size is known.
+ * A refused request is `provider_failed`, a file too large `limit_exceeded`.
+ */
+export function operationDownload(
+    signal: AbortSignal,
+    guard: Pick<GuardOptions, 'allowHttp' | 'allowPrivateAddresses'> | undefined,
+    limit: number,
+    onProgress: (ratio: number) => void,
+): (url: string, path: string, options?: DownloadOptions) => Promise<DownloadResult> {
+    return async (url, path, options = {}) => {
+        const maxSize = Math.min(options.maxSize ?? limit, limit);
+        const host = URL.canParse(url) ? new URL(url).host : 'the provider';
+        let response;
+        try {
+            response = await guardedRequest(url, {
+                ...guard,
+                headers: { 'user-agent': 'Eclair', ...options.headers },
+                signal,
+                headersTimeout: options.timeout ?? 30_000,
+                maxRedirects: 5,
+            });
+        } catch (error) {
+            if (signal.aborted) {
+                throw error;
+            }
+            throw new OperationError(
+                'provider_failed',
+                error instanceof BlockedUrlError
+                    ? error.message
+                    : `Could not download from ${host}: ${(error as Error).message}`,
+                { cause: error },
+            );
+        }
+        if (response.statusCode !== 200) {
+            await response.body.dump();
+            throw new OperationError(
+                response.statusCode === 403 ||
+                    response.statusCode === 404 ||
+                    response.statusCode === 410
+                    ? 'provider_unavailable'
+                    : 'provider_failed',
+                `${host} answered ${response.statusCode} to the download.`,
+            );
+        }
+        const announced = Number(response.headers['content-length']);
+        if (Number.isFinite(announced) && announced > maxSize) {
+            response.body.on('error', () => {});
+            response.body.destroy();
+            throw new OperationError('limit_exceeded', `The file is larger than ${maxSize} bytes.`);
+        }
+        let size = 0;
+        const counter = new Transform({
+            transform(chunk: Buffer, _encoding, callback) {
+                size += chunk.length;
+                if (size > maxSize) {
+                    callback(
+                        new OperationError(
+                            'limit_exceeded',
+                            `The file is larger than ${maxSize} bytes.`,
+                        ),
+                    );
+                    return;
+                }
+                if (Number.isFinite(announced) && announced > 0) {
+                    onProgress(size / announced);
+                }
+                callback(null, chunk);
+            },
+        });
+        await pipeline(response.body, counter, createWriteStream(path), { signal });
+        const type = response.headers['content-type'];
+        return { size, contentType: Array.isArray(type) ? type[0] : type };
     };
 }

@@ -88,6 +88,7 @@ describe('/admin/v1 for the dashboard', () => {
                 'gpu',
                 'ai',
                 'probe',
+                'network',
             ]);
             expect(status.queues[0]).toEqual({
                 name: 'cpu',

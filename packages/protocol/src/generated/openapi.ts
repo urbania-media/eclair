@@ -1137,11 +1137,13 @@ export interface components {
                 embeds?: boolean;
             };
             /**
-             * @description Queue it runs on.
+             * @description Queue it runs on: `cpu`, `video`, `gpu`, `ai`, `probe`, or `network` for tasks that wait on the network, such as `embed.download`.
              * @example cpu
              * @example video
              * @example gpu
              * @example ai
+             * @example probe
+             * @example network
              */
             capability: string;
             outputs: {

@@ -35,7 +35,7 @@ export default defineOperation({
 | `name`       | `<domain>.<action>`, unique on the server. `probe` is the only name without a domain.                      |
 | `version`    | Major version. A change to options or outputs that breaks clients is a new version, and the old one stays. |
 | `accepts`    | Kinds and mime types it can read. The scheduler skips or refuses other inputs before running anything.     |
-| `capability` | Queue it runs on: `cpu`, `video`, `gpu` or `ai`.                                                           |
+| `capability` | Queue it runs on: `cpu`, `video`, `gpu`, `ai`, or `network` for tasks that wait on the network.            |
 | `binaries`   | Binaries it calls. `eclair doctor` and `/ready` check them; a worker without them doesn't take the task.   |
 | `options`    | JSON Schema of the options. It's validated when the job is created, and published in `GET /v1/operations`. |
 | `outputs`    | Whether it produces files, metadata or both.                                                               |
@@ -171,7 +171,20 @@ They read embed inputs only, never files ([decision 0022](decisions/0022-embeds.
 
 The author's `id` only comes from the provider's answer, never from the URL, so that an application can compare it with its user's account. A missing, private or non-embeddable video fails with `provider_unavailable`; an exhausted quota or a rate limit with `provider_refused`; credentials the provider refuses with `provider_failed`.
 
-`embed.download` comes next, on a `network` queue: through the provider's API when it gives files to their owner (Vimeo), and through yt-dlp, in an opt-in variant of the image, for the others.
+`embed.download` writes the embed's file, as `video.mp4` (or the extension of its detected type), for the other tasks of the job: they read it with `"from": "download"`, so an import is a job such as `{ "input": { "embed": "https://vimeo.com/…" }, "tasks": { "download": { "op": "embed.download" }, "h264": { "op": "video.transcode", "from": "download" } } }`.
+
+- It runs on the `network` queue, so a download holds neither a `video` slot nor a CPU slot while it waits on the network.
+- The project must allow the provider in `embedDownload` (none by default), besides `embedProviders`: the API refuses the job otherwise, and the worker checks again. The project is responsible for its rights to what it downloads.
+- It refuses live streams, embeds longer than the project's `embedMaxDuration` (`ECLAIR_EMBED_MAX_DURATION`, 2 hours by default) and files larger than its `maxInputSize`, with `unsupported_input` and `limit_exceeded`. The file's type is detected from its content: anything but a video is `input_unreadable`.
+- `quality`: `best` (the original when the provider gives it), or the largest height to download. `audioOnly`: only the soundtrack, where the provider gives it apart.
+- Its metadata says what it downloaded: provider, id, quality, mime, size, dimensions and duration.
+
+| Provider | Download                                                                                                                                                             |
+| -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `vimeo`  | Through the API, with the project's `token`: the download links Vimeo gives the video's owner, the original included, on a plan that allows downloads. No audio only |
+| Others   | Not yet: they give no file through an API. yt-dlp, in an opt-in variant of the image, comes next                                                                     |
+
+An application that holds its user's token for a platform (Vimeo, Instagram's `media_url`) can also resolve the file's URL itself and send it as a `{ "url": … }` input: it is fetched through the SSRF guard like any URL, and the token never reaches Eclair.
 
 ### AI (`@eclair-js/operations-ai`)
 
