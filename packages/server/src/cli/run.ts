@@ -3,7 +3,7 @@ import { hostname } from 'node:os';
 import { parseArgs } from 'node:util';
 import { pino } from 'pino';
 
-import { checkBinaries } from '../binaries.ts';
+import { OPTIONAL_BINARIES, checkBinaries } from '../binaries.ts';
 import { ConfigError, loadConfig } from '../config/config.ts';
 import type { Config } from '../config/config.ts';
 import { createDatabase } from '../database/connection.ts';
@@ -355,6 +355,8 @@ async function doctor(io: CliIo): Promise<number> {
     for (const binary of binaries) {
         if (binary.status === 'ok') {
             line('ok', `${binary.name}: ${binary.output ?? binary.path}`);
+        } else if (binary.status === 'missing' && OPTIONAL_BINARIES.includes(binary.name)) {
+            line('ok', `${binary.name}: not in this image (optional)`);
         } else if (binary.status === 'missing') {
             line('warn', `${binary.name}: not found (${binary.path})`);
         } else {
@@ -371,8 +373,16 @@ async function doctor(io: CliIo): Promise<number> {
         );
         for (const operation of operations.list()) {
             const missing = operation.binaries.filter((binary) => !working.has(binary));
+            const without = (operation.optionalBinaries ?? []).filter(
+                (binary) => !working.has(binary),
+            );
             if (missing.length === 0) {
-                line('ok', `operation ${operation.key} (${operation.capability})`);
+                line(
+                    'ok',
+                    `operation ${operation.key} (${operation.capability})${
+                        without.length === 0 ? '' : `, without ${without.join(', ')}`
+                    }`,
+                );
             } else {
                 line('warn', `operation ${operation.key} can't run here: no ${missing.join(', ')}`);
             }

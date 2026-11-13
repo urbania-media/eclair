@@ -38,6 +38,13 @@ const INHERITED_VARIABLES = [
     'MAGICK_TEMPORARY_PATH',
     'GS_OPTIONS',
     'TZ',
+    // The operator's egress proxy, for binaries that reach the network themselves (yt-dlp).
+    'HTTP_PROXY',
+    'HTTPS_PROXY',
+    'NO_PROXY',
+    'http_proxy',
+    'https_proxy',
+    'no_proxy',
 ];
 
 function baseEnvironment(): Record<string, string> {

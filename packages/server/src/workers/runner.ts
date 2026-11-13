@@ -23,7 +23,8 @@ import type {
 } from '@eclair-js/operation';
 import type { ProbeMetadata, TaskCondition, TaskError } from '@eclair-js/protocol';
 
-import type { Config } from '../config/config.ts';
+import { isAvailable } from '../binaries.ts';
+import type { BinaryName, Config } from '../config/config.ts';
 import type { Credentials } from '../credentials/credentials.ts';
 import type { Database } from '../database/connection.ts';
 import type { OutputsTable } from '../database/tables.ts';
@@ -735,6 +736,13 @@ export class TaskRunner {
                 return result;
             },
             limits,
+            exec: this.#exec(operation, workdir, signal),
+            available: (binary) => {
+                const path = (config.binaries as Record<string, string>)[binary];
+                return path === undefined
+                    ? Promise.resolve(false)
+                    : isAvailable(binary as BinaryName, path);
+            },
             credentials,
             http: operationHttp(signal, this.#options.guard),
             cache: this.#options.cache?.(project.id, operation.name) ?? NO_CACHE,
@@ -755,29 +763,37 @@ export class TaskRunner {
         options: RunOptions,
         sendProgress: ((progress: number) => void) | undefined,
     ): OperationContext {
-        const { binaries } = this.#options.config;
         return {
             input,
             workdir,
             signal,
-            exec: (binary, args, execOptions) => {
-                if (!operation.binaries.includes(binary)) {
-                    throw new OperationError(
-                        'operation_failed',
-                        `${operation.key} runs ${binary} without declaring it.`,
-                    );
-                }
-                const path = (binaries as Record<string, string>)[binary] ?? binary;
-                return execBinary(path, args, {
-                    cwd: workdir,
-                    ...execOptions,
-                    env: { TMPDIR: workdir, MAGICK_TEMPORARY_PATH: workdir, ...execOptions?.env },
-                    signal,
-                });
-            },
+            exec: this.#exec(operation, workdir, signal),
             progress: this.#progress(task, options, sendProgress),
             log: this.#log(task, operation),
             output: this.#output(operation, workdir, files),
+        };
+    }
+
+    /** Runs a binary the operation declared, at its configured path, in its work directory. */
+    #exec(operation: Operation, workdir: string, signal: AbortSignal): OperationContext['exec'] {
+        const { binaries } = this.#options.config;
+        return (binary, args, execOptions) => {
+            if (
+                !operation.binaries.includes(binary) &&
+                !(operation.optionalBinaries ?? []).includes(binary)
+            ) {
+                throw new OperationError(
+                    'operation_failed',
+                    `${operation.key} runs ${binary} without declaring it.`,
+                );
+            }
+            const path = (binaries as Record<string, string>)[binary] ?? binary;
+            return execBinary(path, args, {
+                cwd: workdir,
+                ...execOptions,
+                env: { TMPDIR: workdir, MAGICK_TEMPORARY_PATH: workdir, ...execOptions?.env },
+                signal,
+            });
         };
     }
 

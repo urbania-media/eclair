@@ -197,6 +197,14 @@ done
 echo "== whisper.cpp" >&2
 check 'whisper-cli runs' whisper-cli --help
 
+# Only in the embed variant (decision 0022): yt-dlp, which solves YouTube's challenges with Node.
+if command -v yt-dlp >/dev/null 2>&1; then
+    echo "== yt-dlp" >&2
+    version yt-dlp 20 "$(yt-dlp --version 2>/dev/null)"
+    check 'yt-dlp has its challenge solver' /opt/yt-dlp/bin/python -c 'import yt_dlp_ejs'
+    refuse '/opt/yt-dlp is read-only' writable /opt/yt-dlp
+fi
+
 echo "== Entry point and permissions" >&2
 refuse 'runs as a non-root user' test "$(id -u)" = 0
 check 'TMPDIR is ECLAIR_TMP_DIR' test "${TMPDIR:-}" = "$ECLAIR_TMP_DIR"

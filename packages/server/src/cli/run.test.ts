@@ -270,5 +270,7 @@ describe('runCli', () => {
         expect(await runCli(['doctor'], io)).toBe(EXIT.failure);
         expect(output.stdout).toContain('error DATABASE_URL is not set');
         expect(output.stdout).toContain('warn  ffmpeg: not found (/nonexistent/ffmpeg)');
+        // The embed variant's yt-dlp is optional: no warning without it.
+        expect(output.stdout).toContain('ok    yt-dlp: not in this image (optional)');
     });
 });

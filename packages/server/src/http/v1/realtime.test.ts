@@ -438,7 +438,7 @@ describe.skipIf(!RUNS_WITH_REDIS)('webhooks, events and probes', () => {
                 const options: unknown =
                     typeof task.options === 'string' ? JSON.parse(task.options) : task.options;
                 expect(task.operation).toBe('embed.probe');
-                expect(options).toEqual({ refresh: false });
+                expect(options).toEqual({ refresh: false, complete: false });
             } finally {
                 await services.projects.update('niche', { settings: { embedProviders: null } });
             }

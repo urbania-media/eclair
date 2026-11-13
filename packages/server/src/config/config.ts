@@ -28,6 +28,8 @@ export const BINARIES = {
     audiowaveform: 'AUDIOWAVEFORM_BIN',
     fonttools: 'FONTTOOLS_BIN',
     'whisper-cli': 'WHISPER_BIN',
+    // Only in the image variant for embeds (decision 0022).
+    'yt-dlp': 'YTDLP_BIN',
 } as const;
 
 export type BinaryName = keyof typeof BINARIES;

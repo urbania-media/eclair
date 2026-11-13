@@ -41,6 +41,19 @@ describe('execBinary', () => {
         }
     });
 
+    it("passes the worker's egress proxy, for binaries that reach the network", async () => {
+        process.env['HTTPS_PROXY'] = 'http://proxy.internal:3128';
+        try {
+            const result = await execBinary(
+                node,
+                script('console.log(process.env.HTTPS_PROXY ?? "")'),
+            );
+            expect(result.stdout.trim()).toBe('http://proxy.internal:3128');
+        } finally {
+            delete process.env['HTTPS_PROXY'];
+        }
+    });
+
     it('fails with the exit code, and keeps stderr as the cause', async () => {
         const error = await execBinary(
             node,

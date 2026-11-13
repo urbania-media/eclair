@@ -63,6 +63,23 @@ RUN curl -fsSL -o source.tar.gz \
     && cmake --build build --target whisper-cli -j"$(nproc)" \
     && install -D -m 0755 build/bin/whisper-cli /out/usr/local/bin/whisper-cli
 
+# yt-dlp, for the embed variant only: pinned with hashes, without its optional dependencies, in a
+# virtual environment that the variant copies. pip doesn't go into the image.
+FROM node AS yt-dlp
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends python3 python3-venv \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY docker/yt-dlp/requirements.txt /tmp/requirements.txt
+RUN python3 -m venv /opt/yt-dlp \
+    && /opt/yt-dlp/bin/pip install --no-cache-dir --no-deps --require-hashes \
+        -r /tmp/requirements.txt \
+    && rm -rf /opt/yt-dlp/bin/pip* /opt/yt-dlp/lib/python3*/site-packages/pip* \
+    && /opt/yt-dlp/bin/yt-dlp --version
+
 # The Eclair packages, as they are published to npm, with their production dependencies.
 FROM node AS app
 
@@ -166,3 +183,15 @@ WORKDIR /app
 
 ENTRYPOINT ["/usr/bin/tini", "--", "eclair-entrypoint"]
 CMD ["all"]
+
+# The embed variant (eclair:<version>-embed): the image with yt-dlp, for embed.download and
+# embed.probe on the platforms that give no file through an API (decision 0022). Opt-in: operators
+# who run it are responsible for the platforms' terms. Build it with --target embed.
+FROM runtime AS embed
+
+USER root
+COPY --from=yt-dlp /opt/yt-dlp /opt/yt-dlp
+RUN ln -s /opt/yt-dlp/bin/yt-dlp /usr/local/bin/yt-dlp \
+    && yt-dlp --version
+LABEL org.opencontainers.image.description="Self-hosted media processing server, with yt-dlp for embeds"
+USER eclair

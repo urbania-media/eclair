@@ -92,6 +92,11 @@ interface OperationBase<S extends TSchema | JsonSchemaObject> {
     capability: Capability;
     /** Binaries it calls through `context.exec()`. */
     binaries: string[];
+    /**
+     * Binaries it can do without, such as yt-dlp for embeds: it asks `context.available()` before
+     * running one. `eclair doctor` reports them without a warning.
+     */
+    optionalBinaries?: string[];
     /** JSON Schema of the options, written with TypeBox or by hand. Objects refuse unknown properties. */
     options: S;
     outputs: { files: boolean; metadata: boolean };

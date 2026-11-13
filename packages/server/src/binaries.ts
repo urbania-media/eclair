@@ -14,7 +14,23 @@ const VERSION_ARGUMENTS: Record<BinaryName, string[]> = {
     audiowaveform: ['--version'],
     fonttools: ['help'],
     'whisper-cli': ['--version'],
+    'yt-dlp': ['--version'],
 };
+
+/** Binaries that only some images have: the embed variant's yt-dlp (decision 0022). */
+export const OPTIONAL_BINARIES: readonly BinaryName[] = ['yt-dlp'];
+
+const availability = new Map<string, Promise<boolean>>();
+
+/** Whether a binary runs on this machine, checked once per path. */
+export function isAvailable(name: BinaryName, path: string): Promise<boolean> {
+    let known = availability.get(path);
+    if (known === undefined) {
+        known = checkBinary(name, path).then(({ status }) => status === 'ok');
+        availability.set(path, known);
+    }
+    return known;
+}
 
 export interface BinaryStatus {
     name: BinaryName;

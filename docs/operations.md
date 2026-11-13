@@ -157,7 +157,7 @@ Both read audio files and the soundtrack of videos.
 
 They read embed inputs only, never files ([decision 0022](decisions/0022-embeds.md)): the job's input is `{ "embed": "<page URL>" }` of a provider that the project allows (`embedProviders`). Eclair never requests the page: it reads the id from the URL and calls the provider's endpoints, through the SSRF guard.
 
-`embed.probe` runs on the `probe` queue, and `POST /v1/probe` runs it for an embed. Its metadata has `kind`, `mime: text/html`, the `duration`, `width` and `height` the provider gives, and the `embed` object of the protocol. It keeps a provider's answer for an hour, per project; `refresh: true` asks again.
+`embed.probe` runs on the `probe` queue, and `POST /v1/probe` runs it for an embed. Its metadata has `kind`, `mime: text/html`, the `duration`, `width` and `height` the provider gives, and the `embed` object of the protocol. It keeps a provider's answer for an hour, per project; `refresh: true` asks again. `complete: true` fills what the API and oEmbed don't give, such as the duration of SoundCloud, TikTok and Instagram embeds, with yt-dlp when the image has it: slower, since it reads the platform's page, and never replacing what the provider gave. When yt-dlp fails, the probe keeps the provider's answer.
 
 | Provider      | Pages                                                                                        | Without credentials                                                                                    | With credentials                                                                                                |
 | ------------- | -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
@@ -179,10 +179,11 @@ The author's `id` only comes from the provider's answer, never from the URL, so 
 - `quality`: `best` (the original when the provider gives it), or the largest height to download. `audioOnly`: only the soundtrack, where the provider gives it apart.
 - Its metadata says what it downloaded: provider, id, quality, mime, size, dimensions and duration.
 
-| Provider | Download                                                                                                                                                             |
-| -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `vimeo`  | Through the API, with the project's `token`: the download links Vimeo gives the video's owner, the original included, on a plan that allows downloads. No audio only |
-| Others   | Not yet: they give no file through an API. yt-dlp, in an opt-in variant of the image, comes next                                                                     |
+| Provider                                                      | Download                                                                                                                                                                                                                            |
+| ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `vimeo`                                                       | Through the API, with the project's `token`: the download links Vimeo gives the video's owner, the original included, on a plan that allows downloads. No audio only                                                                |
+| `youtube`, `dailymotion`, `soundcloud`, `tiktok`, `instagram` | With yt-dlp, in the `-embed` variant of the image ([deployment](deployment.md#yt-dlp)): one run, with the provider's extractor only, the project's limits as filters, and the `quality` as yt-dlp's formats. SoundCloud gives audio |
+| `spotify`                                                     | Never: its files are protected                                                                                                                                                                                                      |
 
 An application that holds its user's token for a platform (Vimeo, Instagram's `media_url`) can also resolve the file's URL itself and send it as a `{ "url": … }` input: it is fetched through the SSRF guard like any URL, and the token never reaches Eclair.
 
