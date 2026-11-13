@@ -150,10 +150,11 @@ Both read audio files and the soundtrack of videos.
 
 ### Embed (`@eclair-js/operations-embed`)
 
-| Operation        | Output                                                                           | 1.0 |
-| ---------------- | -------------------------------------------------------------------------------- | --- |
-| `embed.probe`    | The probe's metadata of an embed, with what the provider says about it           |     |
-| `embed.download` | The file of an embed, for the other operations, when the project may download it |     |
+| Operation         | Output                                                                           | 1.0 |
+| ----------------- | -------------------------------------------------------------------------------- | --- |
+| `embed.probe`     | The probe's metadata of an embed, with what the provider says about it           |     |
+| `embed.download`  | The file of an embed, for the other operations, when the project may download it |     |
+| `embed.thumbnail` | The thumbnail of an embed, as its provider gives it, for the other operations    |     |
 
 They read embed inputs only, never files ([decision 0022](decisions/0022-embeds.md)): the job's input is `{ "embed": "<page URL>" }` of a provider that the project allows (`embedProviders`). Eclair never requests the page: it reads the id from the URL and calls the provider's endpoints, through the SSRF guard.
 
@@ -184,6 +185,12 @@ The author's `id` only comes from the provider's answer, never from the URL, so 
 | `vimeo`                                                       | Through the API, with the project's `token`: the download links Vimeo gives the video's owner, the original included, on a plan that allows downloads. No audio only                                                                |
 | `youtube`, `dailymotion`, `soundcloud`, `tiktok`, `instagram` | With yt-dlp, in the `-embed` variant of the image ([deployment](deployment.md#yt-dlp)): one run, with the provider's extractor only, the project's limits as filters, and the `quality` as yt-dlp's formats. SoundCloud gives audio |
 | `spotify`                                                     | Never: its files are protected                                                                                                                                                                                                      |
+
+`embed.thumbnail` writes the thumbnail the provider gives (`embed.thumbnailUrl` of `embed.probe`), as `thumbnail.jpg` (or the extension of its detected type), for the other tasks of the job: an `image.convert` task with `"from": "thumbnail"` makes a poster of it, in the application's format and size, without its metadata, with its ThumbHash. A job such as `{ "input": { "embed": "https://vimeo.com/…" }, "tasks": { "thumbnail": { "op": "embed.thumbnail", "keep": false }, "poster": { "op": "image.convert", "from": "thumbnail", "options": { "thumbhash": true } } } }` keeps the poster only.
+
+- It reads the provider's answer from `embed.probe`'s cache of the last hour; `refresh: true` asks again, for providers whose thumbnails expire (Instagram, TikTok).
+- It downloads the thumbnail through the SSRF guard, up to 20 MB or the project's `maxInputSize`, on the `network` queue. It isn't the embed's file: `embedDownload` doesn't apply.
+- A JPEG, PNG, WebP or GIF only, detected from its content: anything else fails with `provider_failed`. A provider that gives no thumbnail (some TikTok embeds, Instagram without a token) fails with `provider_unavailable`.
 
 An application that holds its user's token for a platform (Vimeo, Instagram's `media_url`) can also resolve the file's URL itself and send it as a `{ "url": … }` input: it is fetched through the SSRF guard like any URL, and the token never reaches Eclair.
 

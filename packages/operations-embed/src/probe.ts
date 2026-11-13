@@ -1,6 +1,7 @@
 import { Type } from 'typebox';
 
 import { OperationError, defineEmbedOperation } from '@eclair-js/operation';
+import type { EmbedOperationContext } from '@eclair-js/operation';
 
 import { PROVIDERS } from './providers/index.ts';
 import { YTDLP, canUseYtdlp, completeWithInfo, ytdlpInfo } from './ytdlp.ts';
@@ -38,34 +39,46 @@ export const embedProbe = defineEmbedOperation({
     outputs: { files: false, metadata: true },
 
     async run(context, options) {
-        const module = PROVIDERS.get(context.input.provider);
-        if (module === undefined) {
-            throw new OperationError(
-                'unsupported_input',
-                `embed.probe doesn't read embeds from ${context.input.provider}.`,
-            );
-        }
-        // The answer depends on the credentials: a key gives more than oEmbed.
-        const key = `${context.input.provider}:${context.input.id}:${context.credentials === undefined ? 'public' : 'credentials'}${options.complete ? ':complete' : ''}`;
-        if (!options.refresh) {
-            const cached = await context.cache.get(key);
-            if (typeof cached === 'object' && cached !== null) {
-                return { metadata: cached as Record<string, unknown> };
-            }
-        }
-        let metadata = await module.probe(context);
-        if (options.complete && metadata.duration === undefined && (await canUseYtdlp(context))) {
-            try {
-                metadata = completeWithInfo(metadata, await ytdlpInfo(context));
-            } catch (error) {
-                // What the provider gave stands: yt-dlp only adds to it.
-                context.log.warn('yt-dlp could not complete the probe', {
-                    error: (error as Error).message,
-                });
-            }
-        }
-        await context.cache.set(key, metadata, CACHE_TTL);
+        const metadata = await readEmbed(context, options);
         context.progress(1);
-        return { metadata: metadata as Record<string, unknown> };
+        return { metadata };
     },
 });
+
+/**
+ * What the input's provider says about it, from the project's cache of the last hour unless
+ * `refresh` is set: `embed.probe`'s metadata. `embed.thumbnail` reads the thumbnail's URL from it.
+ */
+export async function readEmbed(
+    context: EmbedOperationContext,
+    options: { refresh: boolean; complete: boolean },
+): Promise<Record<string, unknown>> {
+    const module = PROVIDERS.get(context.input.provider);
+    if (module === undefined) {
+        throw new OperationError(
+            'unsupported_input',
+            `Eclair doesn't read embeds from ${context.input.provider}.`,
+        );
+    }
+    // The answer depends on the credentials: a key gives more than oEmbed.
+    const key = `${context.input.provider}:${context.input.id}:${context.credentials === undefined ? 'public' : 'credentials'}${options.complete ? ':complete' : ''}`;
+    if (!options.refresh) {
+        const cached = await context.cache.get(key);
+        if (typeof cached === 'object' && cached !== null) {
+            return cached as Record<string, unknown>;
+        }
+    }
+    let metadata = await module.probe(context);
+    if (options.complete && metadata.duration === undefined && (await canUseYtdlp(context))) {
+        try {
+            metadata = completeWithInfo(metadata, await ytdlpInfo(context));
+        } catch (error) {
+            // What the provider gave stands: yt-dlp only adds to it.
+            context.log.warn('yt-dlp could not complete the probe', {
+                error: (error as Error).message,
+            });
+        }
+    }
+    await context.cache.set(key, metadata, CACHE_TTL);
+    return metadata as Record<string, unknown>;
+}

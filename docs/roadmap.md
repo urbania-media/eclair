@@ -61,6 +61,7 @@ Videos and audio on platforms, as inputs ([decision 0022](decisions/0022-embeds.
 - `embed.probe` for YouTube, Vimeo, Dailymotion, SoundCloud, Spotify, TikTok and Instagram, through their APIs and oEmbed (#105), and its settings in the dashboard (#106).
 - The `network` capability and `embed.download`, through the providers' APIs (#107).
 - yt-dlp as an opt-in backend, once measured from a server (#108).
+- `embed.thumbnail`: an embed's thumbnail, for its poster (#116).
 
 ## 1.0
 
