@@ -1054,7 +1054,7 @@
             }
         },
         "EmbedMetadata": {
-            "description": "What `embed.probe` reads about an embed, from the provider's API or oEmbed. A field the provider doesn't give is left out. `kind`, `duration`, `width` and `height` are in the probe's own fields.",
+            "description": "What `embed.probe` reads about an embed, from the provider's API or oEmbed. A field the provider doesn't give is left out. `kind`, `duration`, `width` and `height` are in the probe's own fields, and its `mime` is `text/html`, the page's.",
             "type": "object",
             "required": [
                 "provider",

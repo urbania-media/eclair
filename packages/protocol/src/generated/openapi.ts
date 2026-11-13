@@ -478,7 +478,7 @@ export interface paths {
         get?: never;
         /**
          * Set or replace a provider's credentials
-         * @description Without credentials of its own, a project uses the operator's (`ECLAIR_YOUTUBE_API_KEY`…), when the server has them.
+         * @description Without credentials of its own, a project uses the operator's (`ECLAIR_PROVIDER_<PROVIDER>_<KEY>`, such as `ECLAIR_PROVIDER_YOUTUBE_API_KEY` for `apiKey`), when the server has them.
          */
         put: operations["adminPutCredentials"];
         post?: never;
@@ -1264,7 +1264,7 @@ export interface components {
             /** @description For an embed input only. */
             embed?: components["schemas"]["EmbedMetadata"];
         };
-        /** @description What `embed.probe` reads about an embed, from the provider's API or oEmbed. A field the provider doesn't give is left out. `kind`, `duration`, `width` and `height` are in the probe's own fields. */
+        /** @description What `embed.probe` reads about an embed, from the provider's API or oEmbed. A field the provider doesn't give is left out. `kind`, `duration`, `width` and `height` are in the probe's own fields, and its `mime` is `text/html`, the page's. */
         EmbedMetadata: {
             provider: components["schemas"]["EmbedProvider"];
             /** @description The video's or audio's id at the provider. */

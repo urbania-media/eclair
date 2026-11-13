@@ -235,7 +235,7 @@ describe('embeds', () => {
         expect(
             pointers('ProbeMetadata', {
                 kind: 'video',
-                mime: 'video/mp4',
+                mime: 'text/html',
                 duration: 634,
                 width: 1920,
                 height: 1080,
@@ -257,12 +257,12 @@ describe('embeds', () => {
         expect(
             pointers('ProbeMetadata', {
                 kind: 'video',
-                mime: 'video/mp4',
+                mime: 'text/html',
                 embed: { provider: 'youtube', id: 'aqz-KE-bpKQ', url: embed, privacy: 'friends' },
             }),
         ).toEqual(['/embed/privacy']);
         expect(
-            pointers('ProbeMetadata', { kind: 'video', mime: 'video/mp4', embed: { url: embed } }),
+            pointers('ProbeMetadata', { kind: 'video', mime: 'text/html', embed: { url: embed } }),
         ).toEqual(['/embed/provider', '/embed/id']);
     });
 

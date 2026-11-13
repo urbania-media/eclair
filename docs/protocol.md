@@ -160,13 +160,13 @@ An embed is a video or audio on a platform, given by the `https` URL of its page
 - The worker never fetches an embed. Only operations whose `accepts.embeds` is `true` read it: `embed.probe` reads its metadata, and `embed.download` writes its file. Other tasks read that file with `"from": "download"`. The project may only download from the providers of its `embedDownload` (none by default), and the project is responsible for its rights to what it downloads.
 - `POST /v1/probe` with an embed runs `embed.probe`. `checksum` and `thumbhash` don't apply to it.
 
-The probe's metadata of an embed has its usual `kind`, `duration`, `width` and `height` when the provider gives them, and an `embed` object with what the provider says:
+The probe's metadata of an embed has its `kind` (`video`, `audio`, `image` or `other`, from the provider), its `duration`, `width` and `height` when the provider gives them, and an `embed` object with what the provider says. Its `mime` is `text/html`, the type of the page: Eclair doesn't read the media itself, so `size`, `checksum` and codecs are left out.
 
 ```json
 {
     "metadata": {
         "kind": "video",
-        "mime": "video/mp4",
+        "mime": "text/html",
         "duration": 634,
         "width": 1920,
         "height": 1080,
@@ -198,7 +198,7 @@ Two task error codes are specific to embeds:
 - `provider_unavailable`: the video is private, deleted, or blocked where the server is.
 - `provider_refused`: the platform refused the server, with a rate limit or a bot check.
 
-A project's provider credentials (a YouTube Data API key, a Vimeo token…) are set through the [admin API](#admin-api). Without them, a provider uses the operator's, when the server has them, or what it can read without a key.
+A project's provider credentials (a YouTube Data API key, a Vimeo token…) are set through the [admin API](#admin-api). Without them, a provider uses the operator's, when the server has them (`ECLAIR_PROVIDER_<PROVIDER>_<KEY>`, such as `ECLAIR_PROVIDER_YOUTUBE_API_KEY` for `apiKey`), or what it can read without a key.
 
 ## Uploads
 

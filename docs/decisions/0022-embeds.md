@@ -33,7 +33,7 @@ A `{ "url" }` input is a direct file. The worker downloads it before each task, 
     - yt-dlp is a later backend for what they don't give: some durations, and the files of YouTube, Dailymotion, SoundCloud, TikTok and Instagram. It runs in an opt-in variant of the image, and its egress is restricted by the deployment.
 - **Credentials:**
     - Each project has its own provider credentials, such as a YouTube Data API key or a Vimeo token. They are set through the admin API, encrypted with `ECLAIR_SECRET_KEY`, and never shown again.
-    - The operator can set server-wide fallbacks in environment variables (`ECLAIR_YOUTUBE_API_KEY`…).
+    - The operator can set server-wide fallbacks in environment variables (`ECLAIR_PROVIDER_<PROVIDER>_<KEY>`, such as `ECLAIR_PROVIDER_YOUTUBE_API_KEY`), so the server knows no provider by name.
     - Tokens of an application's end users never reach Eclair. The application resolves a direct file URL with them, and sends it as a `{ "url" }` input.
 - **Downloads are off by default.**
     - `embedDownload` lists the providers a project may download from, and `embedMaxDuration` limits how long a downloaded embed can be.
