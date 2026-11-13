@@ -386,10 +386,13 @@ describe.skipIf(!RUNS_WITH_REDIS)('workers', () => {
             .selectAll()
             .where('project_id', '=', owner.id)
             .execute();
-        expect(usage.map(({ media_ms, bytes_in }) => [media_ms, bytes_in])).toEqual([
-            [12_000, 0],
-            [12_000, 0],
-        ]);
+        // PostgreSQL gives 64-bit integers as strings.
+        expect(usage.map(({ media_ms, bytes_in }) => [Number(media_ms), Number(bytes_in)])).toEqual(
+            [
+                [12_000, 0],
+                [12_000, 0],
+            ],
+        );
     });
 
     it('runs a pipeline, with an intermediate output, and records it all', async () => {
