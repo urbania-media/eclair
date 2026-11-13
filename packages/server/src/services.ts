@@ -1,5 +1,6 @@
 import type { Redis } from 'ioredis';
 
+import { Credentials } from './credentials/credentials.ts';
 import type { Database } from './database/connection.ts';
 import { FileLinks } from './files/links.ts';
 import { JobEvents } from './jobs/events.ts';
@@ -35,6 +36,7 @@ export interface Services {
     projects: Projects;
     apiKeys: ApiKeys;
     storages: Storages;
+    credentials: Credentials;
     presets: Presets;
     uploads: Uploads;
     resolver: StorageResolver;
@@ -78,6 +80,8 @@ export function createServices(options: ServicesOptions): Services {
     const { database, secretKey, temporary, limits, operations, queues, redis } = options;
     const projects = new Projects(database, secretKey);
     const storages = new Storages(database, projects, secretKey);
+    const credentials = new Credentials(database, projects, secretKey);
+    credentials.setOperations(operations);
     const presets = new Presets(database);
     if (operations !== undefined) {
         presets.setTaskChecker(async (tasks, pointer, projectId) => {
@@ -93,6 +97,7 @@ export function createServices(options: ServicesOptions): Services {
         projects,
         apiKeys: new ApiKeys(database, projects),
         storages,
+        credentials,
         presets,
         uploads,
         resolver: new StorageResolver(storages, projects, temporary),

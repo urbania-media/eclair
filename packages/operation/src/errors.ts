@@ -10,6 +10,10 @@ export const ERROR_CODES = [
     'operation_failed',
     'storage_failed',
     'provider_failed',
+    /** An embed is private, deleted, or blocked where the server is (decision 0022). */
+    'provider_unavailable',
+    /** A platform refused the server: a rate limit, a bot check, an exhausted quota. */
+    'provider_refused',
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];

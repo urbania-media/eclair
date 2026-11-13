@@ -56,6 +56,11 @@ An operation never reads environment variables, the database or another project'
 
 A plugin is an npm package that exports one or more operations. The server loads the built-in packages and the ones listed in `ECLAIR_PLUGINS`. Operations can also be restricted per project. The Docker image includes the built-in operations and their binaries. Adding a plugin with new binaries means extending the image.
 
+A plugin can also export **embed providers** (`export default { operations, embedProviders }`), for operations that read embeds ([decision 0022](decisions/0022-embeds.md)):
+
+- `defineEmbedProvider({ name, title, match(url), credentials })`: `match()` recognizes a page of the platform and reads the video's id from it, without any request. The server uses it to check embed inputs. `credentials` is the JSON Schema of the provider's credentials, which `PUT /admin/v1/projects/{project}/credentials/{provider}` checks.
+- `defineEmbedOperation({ … })`: an operation that reads the job's embed instead of a file. Its context has the embed (`input`: its URL, provider and id), the provider's `credentials` (the project's, else the operator's), `http()` to call the provider through the SSRF guard, and a `cache` scoped to the project and the operation. `runEmbedOperation()` of `@eclair-js/operation/testing` runs one on recorded answers.
+
 ## Built-in operations
 
 **1.0** marks what ships in 1.0. The others come in 1.x, in the order of the [roadmap](roadmap.md).
@@ -143,14 +148,30 @@ Both read audio files and the soundtrack of videos.
 
 `font.convert` reads TrueType, OpenType, WOFF and WOFF2 fonts with fonttools. `formats` (`["woff2", "woff"]` by default; the first is the main file) writes `font.woff2` and `font.woff`; `unicodes` (`U+0020-007E`) and `text` keep only some characters. Layout features, names and hinting are kept. It replaces the WOFF and WOFF2 files of the mediatheque's `WebFonts` job; the EOT and SVG fonts that job also wrote are left out, since no current browser needs them, and the application keeps its original TrueType or OpenType file.
 
-### Embed (`@eclair-js/operations-embed`, planned)
+### Embed (`@eclair-js/operations-embed`)
 
 | Operation        | Output                                                                           | 1.0 |
 | ---------------- | -------------------------------------------------------------------------------- | --- |
 | `embed.probe`    | The probe's metadata of an embed, with what the provider says about it           |     |
 | `embed.download` | The file of an embed, for the other operations, when the project may download it |     |
 
-They read embed inputs only, never files ([decision 0022](decisions/0022-embeds.md)). `embed.probe` runs on the `probe` queue and calls the provider's API or oEmbed endpoint. `embed.download` runs on a `network` queue: through the provider's API when it gives files to their owner (Vimeo), and through yt-dlp, in an opt-in variant of the image, for the others.
+They read embed inputs only, never files ([decision 0022](decisions/0022-embeds.md)): the job's input is `{ "embed": "<page URL>" }` of a provider that the project allows (`embedProviders`). Eclair never requests the page: it reads the id from the URL and calls the provider's endpoints, through the SSRF guard.
+
+`embed.probe` runs on the `probe` queue, and `POST /v1/probe` runs it for an embed. Its metadata has `kind`, `mime: text/html`, the `duration`, `width` and `height` the provider gives, and the `embed` object of the protocol. It keeps a provider's answer for an hour, per project; `refresh: true` asks again.
+
+| Provider      | Pages                                                                                        | Without credentials                                                                                    | With credentials                                                                                                |
+| ------------- | -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
+| `youtube`     | `youtube.com/watch?v=`, `/shorts/`, `/embed/`, `/live/`, `youtu.be/`, `youtube-nocookie.com` | oEmbed: title, author's name, thumbnail, player size. No duration                                      | `apiKey`: the Data API (1 unit of quota): duration, channel id, publication, privacy, `embeddable`, `live`      |
+| `vimeo`       | `vimeo.com/<id>[/<hash>]`, `player.vimeo.com/video/<id>`, channels, groups, showcases        | oEmbed: title, author's name, duration, size, thumbnail                                                | `token`: the API, which adds the author's id, release time, privacy and `embeddable`, and reads unlisted videos |
+| `dailymotion` | `dailymotion.com/video/<id>`, `dai.ly/<id>`, `geo.dailymotion.com/player.html?video=`        | The public API: title, owner, duration, publication, privacy, `embeddable`, `live`                     | —                                                                                                               |
+| `soundcloud`  | `soundcloud.com/<user>/<track>[/s-<secret>]`                                                 | oEmbed: title, author, artwork, player. No duration: the API is closed to new apps                     | —                                                                                                               |
+| `spotify`     | `open.spotify.com/track/<id>`, `/episode/<id>`                                               | oEmbed: title, cover, player                                                                           | `clientId` and `clientSecret` of an app: the Web API adds the duration, the artist or show, the release date    |
+| `tiktok`      | `tiktok.com/@<user>/video/<id>`                                                              | oEmbed: the player, sometimes the title, author and thumbnail. It answers for ids that don't exist too | —                                                                                                               |
+| `instagram`   | `instagram.com/p/<code>`, `/reel/<code>`, `/tv/<code>`                                       | Not readable: Meta's oEmbed needs a token                                                              | `accessToken` of a Meta app with oEmbed Read: author, thumbnail, player. A reel is a `video`, a post `other`    |
+
+The author's `id` only comes from the provider's answer, never from the URL, so that an application can compare it with its user's account. A missing, private or non-embeddable video fails with `provider_unavailable`; an exhausted quota or a rate limit with `provider_refused`; credentials the provider refuses with `provider_failed`.
+
+`embed.download` comes next, on a `network` queue: through the provider's API when it gives files to their owner (Vimeo), and through yt-dlp, in an opt-in variant of the image, for the others.
 
 ### AI (`@eclair-js/operations-ai`)
 

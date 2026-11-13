@@ -4,6 +4,7 @@ import type { Kind, ProbeMetadata } from '@eclair-js/protocol';
 
 import type { Capability } from './capabilities.ts';
 import { matchesMime } from './detect.ts';
+import type { EmbedOperationContext, EmbedProvider } from './embeds.ts';
 import type { ExecOptions, ExecResult } from './exec.ts';
 
 /** The input of a task, on the worker's disk. */
@@ -73,16 +74,20 @@ export type JsonSchemaObject = { type: 'object' } & Record<string, unknown>;
 
 type OptionsOf<S> = S extends TSchema ? Static<S> : Record<string, unknown>;
 
-export interface OperationDefinition<
-    S extends TSchema | JsonSchemaObject = TSchema | JsonSchemaObject,
-> {
+/** Inputs an operation can read. */
+export interface OperationAccepts {
+    kinds?: Kind[];
+    mimes?: string[];
+    /** Reads embed inputs, never files: `defineEmbedOperation()` sets it (decision 0022). */
+    embeds?: boolean;
+}
+
+interface OperationBase<S extends TSchema | JsonSchemaObject> {
     /** `<domain>.<action>` (`image.palette`), or `probe`. */
     name: string;
     /** Major version. A change that breaks clients is a new version, and the old one stays. */
     version: number;
     description: string;
-    /** Inputs it can read. Other inputs are refused before anything runs. Every input when empty. */
-    accepts: { kinds?: Kind[]; mimes?: string[] };
     /** The queue it runs on. */
     capability: Capability;
     /** Binaries it calls through `context.exec()`. */
@@ -90,21 +95,42 @@ export interface OperationDefinition<
     /** JSON Schema of the options, written with TypeBox or by hand. Objects refuse unknown properties. */
     options: S;
     outputs: { files: boolean; metadata: boolean };
+}
+
+/** An operation that reads files. */
+export interface OperationDefinition<
+    S extends TSchema | JsonSchemaObject = TSchema | JsonSchemaObject,
+> extends OperationBase<S> {
+    /** Inputs it can read. Other inputs are refused before anything runs. Every file when empty. */
+    accepts: { kinds?: Kind[]; mimes?: string[] };
     run(context: OperationContext, options: OptionsOf<S>): Promise<OperationResult>;
 }
 
+/** An operation that reads embeds: a video or audio on a platform, by its page (decision 0022). */
+export interface EmbedOperationDefinition<
+    S extends TSchema | JsonSchemaObject = TSchema | JsonSchemaObject,
+> extends OperationBase<S> {
+    run(context: EmbedOperationContext, options: OptionsOf<S>): Promise<OperationResult>;
+}
+
+/** An operation that reads files, as the server registers it. */
+export type FileOperation = Omit<OperationDefinition, 'accepts'> & {
+    readonly key: string;
+    readonly accepts: OperationAccepts & { embeds?: false };
+};
+
+/** An operation that reads embeds, as the server registers it. */
+export type EmbedOperation = EmbedOperationDefinition & {
+    readonly key: string;
+    readonly accepts: OperationAccepts & { embeds: true };
+};
+
 /** An operation as the server registers it. */
-export type Operation = OperationDefinition & { readonly key: string };
+export type Operation = FileOperation | EmbedOperation;
 
 const NAME_PATTERN = /^(probe|[a-z][a-z0-9]*\.[a-z][a-zA-Z0-9]*)$/;
 
-/**
- * Defines an operation. Checks its name and version, so a broken plugin fails when it loads rather
- * than when a task runs.
- */
-export function defineOperation<S extends TSchema | JsonSchemaObject>(
-    definition: OperationDefinition<S>,
-): Operation {
+function checkDefinition(definition: { name: string; version: number }): void {
     if (!NAME_PATTERN.test(definition.name)) {
         throw new TypeError(
             `"${definition.name}" is not an operation name: use <domain>.<action>.`,
@@ -113,10 +139,37 @@ export function defineOperation<S extends TSchema | JsonSchemaObject>(
     if (!Number.isInteger(definition.version) || definition.version < 1) {
         throw new TypeError(`${definition.name}: the version must be an integer from 1.`);
     }
+}
+
+/**
+ * Defines an operation that reads files. Checks its name and version, so a broken plugin fails when
+ * it loads rather than when a task runs.
+ */
+export function defineOperation<S extends TSchema | JsonSchemaObject>(
+    definition: OperationDefinition<S>,
+): FileOperation {
+    checkDefinition(definition);
     return Object.freeze({
         ...(definition as unknown as OperationDefinition),
         key: `${definition.name}@${definition.version}`,
+    }) as FileOperation;
+}
+
+/** Defines an operation that reads embeds instead of files (decision 0022). */
+export function defineEmbedOperation<S extends TSchema | JsonSchemaObject>(
+    definition: EmbedOperationDefinition<S>,
+): EmbedOperation {
+    checkDefinition(definition);
+    return Object.freeze({
+        ...(definition as unknown as EmbedOperationDefinition),
+        accepts: { embeds: true as const },
+        key: `${definition.name}@${definition.version}`,
     });
+}
+
+/** Whether an operation reads embeds rather than files. */
+export function isEmbedOperation(operation: Pick<Operation, 'accepts'>): boolean {
+    return operation.accepts.embeds === true;
 }
 
 /** Whether an operation can read an input of this kind and mime type. */
@@ -124,7 +177,10 @@ export function acceptsInput(
     operation: Pick<Operation, 'accepts'>,
     input: { kind: Kind; mime: string },
 ): boolean {
-    const { kinds, mimes } = operation.accepts;
+    const { kinds, mimes, embeds } = operation.accepts;
+    if (embeds === true) {
+        return false;
+    }
     if (kinds !== undefined && kinds.length > 0 && !kinds.includes(input.kind)) {
         return false;
     }
@@ -138,5 +194,10 @@ export function acceptsInput(
     return true;
 }
 
-/** What a plugin package exports: a list of operations, or an object with one. */
-export type OperationPlugin = readonly Operation[] | { operations: readonly Operation[] };
+/**
+ * What a plugin package exports: a list of operations, or an object with them and the embed
+ * providers they read (decision 0022).
+ */
+export type OperationPlugin =
+    | readonly Operation[]
+    | { operations: readonly Operation[]; embedProviders?: readonly EmbedProvider[] };

@@ -21,6 +21,7 @@
         "packages/operations-document",
         "packages/operations-font",
         "packages/operations-image",
+        "packages/operations-embed",
         "packages/client",
         "packages/server"
     ],

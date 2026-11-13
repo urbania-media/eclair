@@ -1,0 +1,30 @@
+{
+    "id": "6rqhFgbbKwnb9MLmUQDhG6",
+    "name": "Speak To Me - 2011 Remastered Version",
+    "duration_ms": 67960,
+    "explicit": false,
+    "artists": [
+        {
+            "id": "0k17h0D3J5VfsdmQ1iZtE9",
+            "name": "Pink Floyd",
+            "external_urls": {
+                "spotify": "https://open.spotify.com/artist/0k17h0D3J5VfsdmQ1iZtE9"
+            }
+        }
+    ],
+    "album": {
+        "name": "The Dark Side of the Moon",
+        "release_date": "1973-03-01",
+        "release_date_precision": "day",
+        "images": [
+            {
+                "url": "https://i.scdn.co/image/ab67616d0000b27305d4eec40a828850aa8cd2f7",
+                "width": 640,
+                "height": 640
+            }
+        ]
+    },
+    "external_urls": {
+        "spotify": "https://open.spotify.com/track/6rqhFgbbKwnb9MLmUQDhG6"
+    }
+}

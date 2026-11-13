@@ -11,10 +11,20 @@ import {
     execBinary,
     matchesMime,
 } from '@eclair-js/operation';
-import type { Operation, OperationContext, OutputOptions } from '@eclair-js/operation';
+import type {
+    EmbedOperation,
+    EmbedOperationContext,
+    FileOperation,
+    Operation,
+    OperationContext,
+    OperationEmbed,
+    OperationResult,
+    OutputOptions,
+} from '@eclair-js/operation';
 import type { ProbeMetadata, TaskCondition, TaskError } from '@eclair-js/protocol';
 
 import type { Config } from '../config/config.ts';
+import type { Credentials } from '../credentials/credentials.ts';
 import type { Database } from '../database/connection.ts';
 import type { OutputsTable } from '../database/tables.ts';
 import { toJson } from '../database/values.ts';
@@ -24,6 +34,8 @@ import { toOutputRecord } from '../jobs/records.ts';
 import type { Scheduler } from '../jobs/scheduler.ts';
 import type { Metrics } from '../metrics.ts';
 import type { GuardOptions } from '../net/ssrf.ts';
+import { NO_CACHE, operationHttp } from '../operations/embeds.ts';
+import type { OperationCacheFactory } from '../operations/embeds.ts';
 import type { OperationRegistry } from '../operations/registry.ts';
 import type { Project, Projects } from '../projects/projects.ts';
 import { StorageError, checkStoragePath } from '../storages/drivers/types.ts';
@@ -59,7 +71,12 @@ export interface TaskRunnerOptions {
         | 'maxInputSize'
         | 'tempRetention'
         | 'tempMaxRetention'
-    >;
+    > &
+        Partial<Pick<Config, 'providerCredentials'>>;
+    /** The projects' credentials for embed providers. */
+    credentials?: Credentials | undefined;
+    /** The caches of operations, in Redis. Nothing is cached without it. */
+    cache?: OperationCacheFactory | undefined;
     /** Name of this worker, recorded on the tasks it runs. */
     worker: string;
     logger: RunnerLogger;
@@ -341,44 +358,70 @@ export class TaskRunner {
         let stage: 'input' | 'run' | 'output' = 'input';
 
         try {
-            const input = await this.#fetchTaskInput(
-                task,
-                job.input,
-                project,
-                workdir,
-                controller.signal,
-            );
-            const type = await detectType(input.path);
-            if (!acceptsInput(operation, type)) {
-                throw new OperationError(
-                    'unsupported_input',
-                    `${operation.key} doesn't read ${type.mime} files.`,
-                );
-            }
-
-            const probe = await this.#probeOf(task, job.id);
-            if (task.condition !== undefined && !matchesCondition(task.condition, type, probe)) {
-                if (await this.#end(task, 'skipped')) {
-                    await scheduler.advance(job.id);
-                }
-                return 'skipped';
-            }
-
-            stage = 'run';
             const files: DeclaredFile[] = [];
-            const result = await operation.run(
-                this.#context(
-                    operation,
+            let result: OperationResult;
+            let probe: ProbeMetadata | undefined;
+            let inputSize = 0;
+            if (operation.accepts.embeds === true) {
+                // An embed is never fetched: the operation reads it from its provider (decision 0022).
+                const embed = this.#embedOf(task, job.input, operation);
+                stage = 'run';
+                result = await (operation as EmbedOperation).run(
+                    await this.#embedContext(
+                        operation,
+                        task,
+                        project,
+                        embed,
+                        controller.signal,
+                        options,
+                        this.#progressWebhooks(project, job, task),
+                    ),
+                    task.options as never,
+                );
+                probe = result.metadata as ProbeMetadata | undefined;
+            } else {
+                const input = await this.#fetchTaskInput(
                     task,
-                    { ...type, path: input.path, size: input.size, probe },
+                    job.input,
+                    project,
                     workdir,
                     controller.signal,
-                    files,
-                    options,
-                    this.#progressWebhooks(project, job, task),
-                ),
-                task.options as never,
-            );
+                );
+                inputSize = input.size;
+                const type = await detectType(input.path);
+                if (!acceptsInput(operation, type)) {
+                    throw new OperationError(
+                        'unsupported_input',
+                        `${operation.key} doesn't read ${type.mime} files.`,
+                    );
+                }
+
+                probe = await this.#probeOf(task, job.id);
+                if (
+                    task.condition !== undefined &&
+                    !matchesCondition(task.condition, type, probe)
+                ) {
+                    if (await this.#end(task, 'skipped')) {
+                        await scheduler.advance(job.id);
+                    }
+                    return 'skipped';
+                }
+
+                stage = 'run';
+                result = await (operation as FileOperation).run(
+                    this.#context(
+                        operation,
+                        task,
+                        { ...type, path: input.path, size: input.size, probe },
+                        workdir,
+                        controller.signal,
+                        files,
+                        options,
+                        this.#progressWebhooks(project, job, task),
+                    ),
+                    task.options as never,
+                );
+            }
             if (controller.signal.aborted) {
                 throw new OperationError(
                     controller.signal.reason === 'timeout' ? 'timeout' : 'operation_failed',
@@ -408,7 +451,7 @@ export class TaskRunner {
                 task,
                 project,
                 operation,
-                input.size,
+                inputSize,
                 written,
                 probe,
                 Date.now() - startedAt,
@@ -565,6 +608,86 @@ export class TaskRunner {
         };
     }
 
+    /** Reports a task's progress, at most once a second. */
+    #progress(
+        task: TaskRecord,
+        options: RunOptions,
+        sendProgress: ((progress: number) => void) | undefined,
+    ): (ratio: number) => void {
+        let lastProgress = 0;
+        return (ratio) => {
+            const now = Date.now();
+            if (now - lastProgress < 1000) {
+                return;
+            }
+            lastProgress = now;
+            const progress = Math.min(1, Math.max(0, ratio));
+            options.onProgress?.(progress);
+            sendProgress?.(progress);
+            void this.#options.scheduler.emit({
+                type: 'task.progress',
+                job: task.jobId,
+                task: task.name,
+                progress,
+            });
+            void this.#options.database.kysely
+                .updateTable('tasks')
+                .set({ progress })
+                .where('id', '=', task.id)
+                .where('status', '=', 'running')
+                .execute()
+                .catch(() => {});
+        };
+    }
+
+    #log(task: TaskRecord, operation: Operation): OperationContext['log'] {
+        const log = this.#options.logger;
+        const fields = { task: task.id, job: task.jobId, operation: operation.key };
+        return {
+            debug: (message, data) => log.debug({ ...fields, ...data }, message),
+            info: (message, data) => log.info({ ...fields, ...data }, message),
+            warn: (message, data) => log.warn({ ...fields, ...data }, message),
+        };
+    }
+
+    /** The embed an embed operation reads: the job's input, recognized by a provider of the server. */
+    #embedOf(task: TaskRecord, jobInput: JobRecord['input'], operation: Operation): OperationEmbed {
+        if (task.source !== undefined || !('embed' in jobInput)) {
+            throw new OperationError('unsupported_input', `${operation.key} only reads embeds.`);
+        }
+        const match = this.#options.operations.matchEmbed(jobInput.embed);
+        if (match === undefined) {
+            throw new OperationError(
+                'unsupported_input',
+                'No embed provider of this server recognizes the input.',
+            );
+        }
+        return { ...match, input: jobInput.embed };
+    }
+
+    async #embedContext(
+        operation: Operation,
+        task: TaskRecord,
+        project: Project,
+        embed: OperationEmbed,
+        signal: AbortSignal,
+        options: RunOptions,
+        sendProgress: ((progress: number) => void) | undefined,
+    ): Promise<EmbedOperationContext> {
+        const credentials =
+            (await this.#options.credentials?.get(project.id, embed.provider)) ??
+            this.#options.config.providerCredentials?.[embed.provider];
+        return {
+            input: embed,
+            credentials,
+            http: operationHttp(signal, this.#options.guard),
+            cache: this.#options.cache?.(project.id, operation.name) ?? NO_CACHE,
+            progress: this.#progress(task, options, sendProgress),
+            log: this.#log(task, operation),
+            signal,
+        };
+    }
+
     #context(
         operation: Operation,
         task: TaskRecord,
@@ -576,9 +699,6 @@ export class TaskRunner {
         sendProgress: ((progress: number) => void) | undefined,
     ): OperationContext {
         const { binaries } = this.#options.config;
-        const log = this.#options.logger;
-        const fields = { task: task.id, job: task.jobId, operation: operation.key };
-        let lastProgress = 0;
         return {
             input,
             workdir,
@@ -598,34 +718,8 @@ export class TaskRunner {
                     signal,
                 });
             },
-            progress: (ratio) => {
-                const now = Date.now();
-                if (now - lastProgress < 1000) {
-                    return;
-                }
-                lastProgress = now;
-                const progress = Math.min(1, Math.max(0, ratio));
-                options.onProgress?.(progress);
-                sendProgress?.(progress);
-                void this.#options.scheduler.emit({
-                    type: 'task.progress',
-                    job: task.jobId,
-                    task: task.name,
-                    progress,
-                });
-                void this.#options.database.kysely
-                    .updateTable('tasks')
-                    .set({ progress })
-                    .where('id', '=', task.id)
-                    .where('status', '=', 'running')
-                    .execute()
-                    .catch(() => {});
-            },
-            log: {
-                debug: (message, data) => log.debug({ ...fields, ...data }, message),
-                info: (message, data) => log.info({ ...fields, ...data }, message),
-                warn: (message, data) => log.warn({ ...fields, ...data }, message),
-            },
+            progress: this.#progress(task, options, sendProgress),
+            log: this.#log(task, operation),
             output: (name, path, outputOptions) => {
                 const full = resolve(workdir, path);
                 if (relative(workdir, full).startsWith('..')) {

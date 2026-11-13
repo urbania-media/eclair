@@ -15,6 +15,7 @@ import { findDashboard } from '../http/dashboard.ts';
 import { TaskQueues } from '../jobs/queues.ts';
 import { Maintenance } from '../maintenance/maintenance.ts';
 import { Metrics } from '../metrics.ts';
+import { redisOperationCache } from '../operations/embeds.ts';
 import { createRedis } from '../redis.ts';
 import { usageReport } from '../usage/usage.ts';
 import { VERSION } from '../version.ts';
@@ -93,6 +94,8 @@ async function start(io: CliIo, roles: { api: boolean; worker: boolean }): Promi
                 logger,
                 webhooks: services.webhooks,
                 metrics,
+                credentials: services.credentials,
+                cache: redisOperationCache(redis),
             });
             workers = new TaskWorkers({
                 connection: redis,

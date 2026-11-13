@@ -1,0 +1,53 @@
+{
+    "kind": "youtube#videoListResponse",
+    "items": [
+        {
+            "kind": "youtube#video",
+            "id": "aqz-KE-bpKQ",
+            "snippet": {
+                "publishedAt": "2014-11-10T14:05:55Z",
+                "channelId": "UCSMOQeBJ2RAnuFungnQOxLg",
+                "title": "Big Buck Bunny 60fps 4K - Official Blender Foundation Short Film",
+                "description": "Big Buck Bunny tells the story of a giant rabbit with a heart bigger than himself.",
+                "thumbnails": {
+                    "default": {
+                        "url": "https://i.ytimg.com/vi/aqz-KE-bpKQ/default.jpg",
+                        "width": 120,
+                        "height": 90
+                    },
+                    "high": {
+                        "url": "https://i.ytimg.com/vi/aqz-KE-bpKQ/hqdefault.jpg",
+                        "width": 480,
+                        "height": 360
+                    },
+                    "maxres": {
+                        "url": "https://i.ytimg.com/vi/aqz-KE-bpKQ/maxresdefault.jpg",
+                        "width": 1280,
+                        "height": 720
+                    }
+                },
+                "channelTitle": "Blender",
+                "liveBroadcastContent": "none"
+            },
+            "contentDetails": {
+                "duration": "PT10M35S",
+                "dimension": "2d",
+                "definition": "hd"
+            },
+            "status": {
+                "uploadStatus": "processed",
+                "privacyStatus": "public",
+                "embeddable": true
+            },
+            "player": {
+                "embedHtml": "<iframe width=\"1920\" height=\"1080\" src=\"//www.youtube.com/embed/aqz-KE-bpKQ\"></iframe>",
+                "embedHeight": "1080",
+                "embedWidth": "1920"
+            }
+        }
+    ],
+    "pageInfo": {
+        "totalResults": 1,
+        "resultsPerPage": 1
+    }
+}

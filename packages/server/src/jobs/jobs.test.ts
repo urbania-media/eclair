@@ -163,14 +163,59 @@ describe.skipIf(!RUNS_WITH_REDIS)('jobs', () => {
             ).rejects.toMatchObject({
                 errors: { '/input/url': ['10.0.0.1 is not a public address.'] },
             });
+        });
+
+        it('takes an embed of a provider the project allows, read by embed operations only', async () => {
+            const embed = { embed: 'https://video.example.com/abc' };
             await expect(
-                jobs.create(project, {
+                jobs.create(project, { input: embed, tasks: { probe: { op: 'embed.probe' } } }),
+            ).rejects.toMatchObject({
+                errors: { '/input/embed': ["the project doesn't allow embeds from example"] },
+            });
+            const allowed = (
+                await services.projects.create({
+                    slug: 'embeds',
+                    settings: { embedProviders: ['example'] },
+                })
+            ).project;
+            await expect(
+                jobs.create(allowed, {
                     input: { embed: 'https://vimeo.com/76979871' },
-                    tasks: { probe: { op: 'probe' } },
+                    tasks: { probe: { op: 'embed.probe' } },
                 }),
             ).rejects.toMatchObject({
-                errors: { '/input/embed': ['this server reads no embeds'] },
+                errors: { '/input/embed': ['is not a page of an embed provider of this server'] },
             });
+            await expect(
+                jobs.create(allowed, {
+                    input: embed,
+                    output: { storage: 'eclair' },
+                    tasks: {
+                        probe: { op: 'embed.probe', when: { kind: ['video'] } },
+                        h264: { op: 'video.transcode' },
+                    },
+                }),
+            ).rejects.toMatchObject({
+                errors: {
+                    '/tasks/probe/when': ['embed.probe takes no condition'],
+                    '/tasks/h264/op': [
+                        'video.transcode reads files: read what embed.download wrote, with "from"',
+                    ],
+                },
+            });
+            await expect(
+                jobs.create(allowed, {
+                    input: pipeline.input,
+                    tasks: { probe: { op: 'embed.probe' } },
+                }),
+            ).rejects.toMatchObject({
+                errors: { '/tasks/probe/op': ["embed.probe only reads the job's embed input"] },
+            });
+            const { job } = await jobs.create(allowed, {
+                input: embed,
+                tasks: { probe: { op: 'embed.probe' } },
+            });
+            expect(job).toMatchObject({ input: embed, tasks: { probe: { op: 'embed.probe@1' } } });
         });
 
         it('accepts an upload of the project as input', async () => {

@@ -1,0 +1,12 @@
+{
+    "version": "1.0",
+    "author_name": "instagram",
+    "provider_name": "Instagram",
+    "provider_url": "https://www.instagram.com/",
+    "type": "rich",
+    "width": 658,
+    "html": "<blockquote class=\"instagram-media\" data-instgrm-permalink=\"https://www.instagram.com/reel/C0abcdefGhI/\"></blockquote><script async src=\"//www.instagram.com/embed.js\"></script>",
+    "thumbnail_url": "https://scontent.cdninstagram.com/v/t51.example.jpg",
+    "thumbnail_width": 640,
+    "thumbnail_height": 1136
+}

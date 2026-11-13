@@ -1,8 +1,9 @@
 import { Type } from 'typebox';
 import { describe, expect, it } from 'vitest';
 
-import { defineOperation } from '@eclair-js/operation';
+import { defineEmbedProvider, defineOperation } from '@eclair-js/operation';
 
+import { testEmbedProbe, testEmbedProvider } from '../jobs/testing.ts';
 import { InvalidValueError } from '../validation.ts';
 import { BUILT_IN_PLUGINS, OperationRegistry, PluginError } from './registry.ts';
 
@@ -40,6 +41,61 @@ describe('OperationRegistry.load', () => {
         expect(registry.resolve('document.thumbnails')?.key).toBe('document.thumbnails@1');
         expect(registry.resolve('font.convert')?.key).toBe('font.convert@1');
         expect(registry.resolve('image.palette')?.key).toBe('image.palette@1');
+        expect(registry.resolve('embed.probe')?.accepts).toEqual({ embeds: true });
+        expect(registry.embedProviders().map(({ name }) => name)).toEqual([
+            'dailymotion',
+            'instagram',
+            'soundcloud',
+            'spotify',
+            'tiktok',
+            'vimeo',
+            'youtube',
+        ]);
+        expect(registry.matchEmbed('https://youtu.be/aqz-KE-bpKQ')).toEqual({
+            provider: 'youtube',
+            id: 'aqz-KE-bpKQ',
+            url: 'https://www.youtube.com/watch?v=aqz-KE-bpKQ',
+        });
+    });
+
+    it('loads the embed providers of a plugin, and recognizes their pages', async () => {
+        const modules: Record<string, unknown> = {
+            embeds: {
+                default: { operations: [testEmbedProbe], embedProviders: [testEmbedProvider] },
+            },
+            again: { default: { operations: [], embedProviders: [testEmbedProvider] } },
+            broken: { default: { operations: [], embedProviders: [{ name: 'nope' }] } },
+            notList: { default: { operations: [], embedProviders: testEmbedProvider } },
+        };
+        const importModule = async (name: string) => modules[name];
+        const registry = await OperationRegistry.load(['embeds'], importModule);
+        expect(registry.embedProvider('example')?.title).toBe('Example');
+        expect(registry.matchEmbed('https://video.example.com/abc')).toEqual({
+            provider: 'example',
+            id: 'abc',
+            url: 'https://video.example.com/abc',
+        });
+        expect(registry.matchEmbed('https://video.example.com/a/b')).toBeUndefined();
+        expect(registry.matchEmbed('not a url')).toBeUndefined();
+        expect(
+            registry.describe(undefined).find(({ name }) => name === 'embed.probe'),
+        ).toMatchObject({
+            accepts: { embeds: true },
+            capability: 'probe',
+        });
+
+        await expect(OperationRegistry.load(['embeds', 'again'], importModule)).rejects.toThrow(
+            'Two plugins provide the embed provider example.',
+        );
+        await expect(OperationRegistry.load(['broken'], importModule)).rejects.toThrow(
+            /defineEmbedProvider/,
+        );
+        await expect(OperationRegistry.load(['notList'], importModule)).rejects.toThrow(
+            'embedProviders must be a list.',
+        );
+        expect(() => defineEmbedProvider({ ...testEmbedProvider, name: 'Not A Name' })).toThrow(
+            TypeError,
+        );
     });
 
     it('accepts a list or { operations }, and refuses anything else', async () => {

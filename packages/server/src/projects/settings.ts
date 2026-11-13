@@ -42,6 +42,16 @@ export const ProjectSettingsSchema = Type.Object(
         progressWebhooks: Type.Boolean({ default: false }),
         /** The shortest time between two `task.progress` webhooks of a task, in milliseconds. */
         progressWebhookInterval: Type.Integer({ minimum: 1000, default: 5000 }),
+        /** Embed providers whose URLs the project may use as inputs. None when not set (decision 0022). */
+        embedProviders: Type.Optional(
+            Type.Array(Type.String({ pattern: '^[a-z][a-z0-9-]{0,63}$' }), { uniqueItems: true }),
+        ),
+        /** Embed providers the project may download from, among its `embedProviders`. None when not set. */
+        embedDownload: Type.Optional(
+            Type.Array(Type.String({ pattern: '^[a-z][a-z0-9-]{0,63}$' }), { uniqueItems: true }),
+        ),
+        /** Longest embed that `embed.download` takes, in seconds. */
+        embedMaxDuration: Type.Optional(Type.Integer({ minimum: 1 })),
     },
     { additionalProperties: false },
 );

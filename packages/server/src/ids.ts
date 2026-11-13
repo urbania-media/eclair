@@ -12,6 +12,7 @@ export const ID_PREFIXES = {
     upload: 'upl',
     delivery: 'whd',
     usage: 'use',
+    credentials: 'crd',
 } as const;
 
 export type IdKind = keyof typeof ID_PREFIXES;

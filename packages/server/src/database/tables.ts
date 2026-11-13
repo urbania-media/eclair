@@ -205,6 +205,17 @@ export interface WebhookDeliveriesTable {
     updated_at: Timestamp;
 }
 
+/** A project's credentials for an embed provider (decision 0022). */
+export interface CredentialsTable {
+    id: string;
+    project_id: string;
+    provider: string;
+    /** The credentials, encrypted with `ECLAIR_SECRET_KEY`. */
+    config: string;
+    created_at: Timestamp;
+    updated_at: Timestamp;
+}
+
 export interface Tables {
     projects: ProjectsTable;
     api_keys: ApiKeysTable;
@@ -216,6 +227,7 @@ export interface Tables {
     uploads: UploadsTable;
     usage: UsageTable;
     webhook_deliveries: WebhookDeliveriesTable;
+    credentials: CredentialsTable;
 }
 
 type ColumnList<T> = readonly (keyof T & string)[];
@@ -248,6 +260,7 @@ export const COLUMNS = {
         'revoked_at',
     ],
     storages: ['id', 'project_id', 'name', 'kind', 'config', 'created_at', 'updated_at'],
+    credentials: ['id', 'project_id', 'provider', 'config', 'created_at', 'updated_at'],
     presets: [
         'id',
         'scope',
