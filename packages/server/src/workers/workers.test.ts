@@ -392,7 +392,10 @@ describe.skipIf(!RUNS_WITH_REDIS)('workers', () => {
             .select(['operation', 'bytes_in'])
             .where('job_id', '=', done.id)
             .execute();
-        expect(usage).toContainEqual({ operation: 'test.fetch@1', bytes_in: 14 });
+        // PostgreSQL gives 64-bit integers as strings.
+        expect(
+            usage.map(({ operation, bytes_in }) => [operation, Number(bytes_in)]),
+        ).toContainEqual(['test.fetch@1', 14]);
 
         // Outside its work directory, or larger than the project's limit: refused.
         const escaped = await waitForJob(
