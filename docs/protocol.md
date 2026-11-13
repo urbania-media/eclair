@@ -143,7 +143,7 @@ The input takes the same forms as a job input. The file can also be sent as the 
 
 - `200` with `{ "metadata": { … } }`, the same object as the `probe` operation's output.
 - `202` with a job when the probe takes longer than `timeout` (10 seconds by default, 30 at most). The result comes with the job and its webhook.
-- `422` when the file can't be read or its type isn't supported.
+- `422` when the file can't be read or its type isn't supported, or when the probe failed: its `code` is the probe's error code (`input_unreadable`, `unsupported_input`, and for an embed `provider_unavailable` or `provider_refused`), so a client can try again later after a `provider_refused`.
 
 `checksum: true` adds a SHA-256 of the whole file, which reads all of it and can take longer.
 

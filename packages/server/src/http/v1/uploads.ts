@@ -214,7 +214,12 @@ export async function uploadRoutes(
             return reply.code(200).send({ metadata: outcome.metadata } satisfies ProbeResult);
         }
         if (outcome.status === 'failed') {
-            throw problems.invalid({ '': [outcome.error.message] }, outcome.error.message);
+            // The probe's error code, so a client tells a file it can't read from a provider that refused
+            throw problems.invalid(
+                { '': [outcome.error.message] },
+                outcome.error.message,
+                outcome.error.code,
+            );
         }
         return reply.code(202).header('location', `/v1/jobs/${outcome.job.id}`).send(outcome.job);
     });

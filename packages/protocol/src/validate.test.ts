@@ -310,6 +310,26 @@ describe('embeds', () => {
     });
 });
 
+describe('problems', () => {
+    it('carry the error code of a task the request waited for', () => {
+        expect(
+            pointers('Problem', {
+                title: 'Unprocessable Content',
+                status: 422,
+                detail: 'Vimeo limits the requests.',
+                code: 'provider_refused',
+            }),
+        ).toEqual([]);
+        expect(
+            pointers('Problem', {
+                title: 'Unprocessable Content',
+                status: 422,
+                code: 'Not A Code',
+            }),
+        ).toContain('/code');
+    });
+});
+
 describe('toProblemErrors', () => {
     it('groups messages by pointer', () => {
         const result = validate('JobRequest', { input: {}, priority: 'urgent', tasks: {} });

@@ -1179,6 +1179,8 @@ export interface components {
             errors?: {
                 [key: string]: string[];
             };
+            /** @description The error code of a task that failed while the request waited for it: the probe of `POST /v1/probe` that answers `422`. */
+            code?: components["schemas"]["TaskErrorCode"];
         };
         /**
          * @description Prefixed ULID.
