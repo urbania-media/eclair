@@ -85,6 +85,10 @@ export async function fetchInput(
     if ('url' in input) {
         return fetchUrl(input.url, destination, options);
     }
+    if ('embed' in input) {
+        // Only operations that accept embeds read them, without a local copy (decision 0022).
+        throw new StorageError('storage_failed', 'An embed is not a file: it is never fetched.');
+    }
     if ('upload' in input) {
         return options.uploads.fetch(
             options.project.id,

@@ -1529,6 +1529,114 @@
                 }
             }
         },
+        "/admin/v1/projects/{project}/credentials": {
+            "parameters": [
+                {
+                    "$ref": "#/components/parameters/Project"
+                }
+            ],
+            "get": {
+                "operationId": "adminListCredentials",
+                "tags": ["Admin"],
+                "summary": "List a project's provider credentials",
+                "security": [
+                    {
+                        "adminToken": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The providers that have credentials, without their values.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CredentialsList"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFound"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AdminUnauthorized"
+                    }
+                }
+            }
+        },
+        "/admin/v1/projects/{project}/credentials/{provider}": {
+            "parameters": [
+                {
+                    "$ref": "#/components/parameters/Project"
+                },
+                {
+                    "$ref": "#/components/parameters/Provider"
+                }
+            ],
+            "put": {
+                "operationId": "adminPutCredentials",
+                "tags": ["Admin"],
+                "summary": "Set or replace a provider's credentials",
+                "security": [
+                    {
+                        "adminToken": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The credentials, without their values.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Credentials"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFound"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/Invalid"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AdminUnauthorized"
+                    }
+                },
+                "description": "Without credentials of its own, a project uses the operator's (`ECLAIR_YOUTUBE_API_KEY`…), when the server has them.",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CredentialsRequest"
+                            }
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "operationId": "adminDeleteCredentials",
+                "tags": ["Admin"],
+                "summary": "Remove a provider's credentials",
+                "security": [
+                    {
+                        "adminToken": []
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "Removed."
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFound"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AdminUnauthorized"
+                    }
+                }
+            }
+        },
         "/admin/v1/presets": {
             "get": {
                 "operationId": "adminListPresets",
@@ -2397,6 +2505,14 @@
                 "schema": {
                     "$ref": "#/components/schemas/StorageName"
                 }
+            },
+            "Provider": {
+                "name": "provider",
+                "in": "path",
+                "required": true,
+                "schema": {
+                    "$ref": "#/components/schemas/EmbedProvider"
+                }
             }
         },
         "pathItems": {
@@ -2624,7 +2740,7 @@
                 }
             },
             "Input": {
-                "description": "The file to process: a URL, a path in one of the project's storages, or an upload.",
+                "description": "The file to process: a URL, a path in one of the project's storages, an upload, or an embed on a platform.",
                 "oneOf": [
                     {
                         "$ref": "#/components/schemas/UrlInput"
@@ -2634,6 +2750,9 @@
                     },
                     {
                         "$ref": "#/components/schemas/UploadInput"
+                    },
+                    {
+                        "$ref": "#/components/schemas/EmbedInput"
                     }
                 ]
             },
@@ -2831,7 +2950,7 @@
                 ]
             },
             "TaskErrorCode": {
-                "description": "Stable error code: `input_unreadable`, `unsupported_input`, `timeout`, `limit_exceeded`, `operation_failed`, `storage_failed`, `provider_failed`, and `dependency_failed` when a task it depends on failed. New codes can be added: treat unknown ones as `operation_failed`.",
+                "description": "Stable error code: `input_unreadable`, `unsupported_input`, `timeout`, `limit_exceeded`, `operation_failed`, `storage_failed`, `provider_failed`, `dependency_failed` when a task it depends on failed, `provider_unavailable` when an embed is private, deleted or blocked where the server is, and `provider_refused` when a platform refuses the server (rate limit, bot check). New codes can be added: treat unknown ones as `operation_failed`.",
                 "type": "string",
                 "pattern": "^[a-z][a-z0-9_]*$",
                 "examples": [
@@ -2842,7 +2961,9 @@
                     "operation_failed",
                     "storage_failed",
                     "provider_failed",
-                    "dependency_failed"
+                    "dependency_failed",
+                    "provider_unavailable",
+                    "provider_refused"
                 ]
             },
             "TaskError": {
@@ -3167,6 +3288,11 @@
                                 "items": {
                                     "type": "string"
                                 }
+                            },
+                            "embeds": {
+                                "description": "Reads embed inputs (`embed.probe`, `embed.download`). Other operations read files only.",
+                                "type": "boolean",
+                                "default": false
                             }
                         }
                     },
@@ -3281,6 +3407,36 @@
                         "$ref": "#/components/schemas/SizeHint"
                     }
                 }
+            },
+            "EmbedInput": {
+                "description": "A video or audio on a platform, by the URL of its page (decision 0022). The worker never fetches it: only operations that accept embeds (`embed.probe`, `embed.download`) read it, and other tasks read what `embed.download` wrote with `from`.",
+                "type": "object",
+                "required": ["embed"],
+                "additionalProperties": false,
+                "properties": {
+                    "embed": {
+                        "description": "`https` URL of the page, such as `https://www.youtube.com/watch?v=…` or `https://vimeo.com/…`. It must match a provider of the server that the project allows (`embedProviders`). Eclair never requests this URL: it reads the id from it and calls the provider's API or oEmbed endpoint.",
+                        "type": "string",
+                        "format": "uri",
+                        "pattern": "^https://",
+                        "maxLength": 4096
+                    }
+                }
+            },
+            "EmbedProvider": {
+                "description": "An embed provider, by name. The server lists the ones it knows; plugins can add others.",
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9-]*$",
+                "maxLength": 64,
+                "examples": [
+                    "youtube",
+                    "vimeo",
+                    "dailymotion",
+                    "soundcloud",
+                    "spotify",
+                    "tiktok",
+                    "instagram"
+                ]
             },
             "JobFile": {
                 "description": "A file of a job, with the task that wrote it.",
@@ -3402,6 +3558,81 @@
                         "type": "string",
                         "pattern": "^[A-Za-z0-9+/]+={0,2}$",
                         "maxLength": 64
+                    },
+                    "embed": {
+                        "$ref": "#/components/schemas/EmbedMetadata",
+                        "description": "For an embed input only."
+                    }
+                }
+            },
+            "EmbedMetadata": {
+                "description": "What `embed.probe` reads about an embed, from the provider's API or oEmbed. A field the provider doesn't give is left out. `kind`, `duration`, `width` and `height` are in the probe's own fields.",
+                "type": "object",
+                "required": ["provider", "id", "url"],
+                "properties": {
+                    "provider": {
+                        "$ref": "#/components/schemas/EmbedProvider"
+                    },
+                    "id": {
+                        "description": "The video's or audio's id at the provider.",
+                        "type": "string"
+                    },
+                    "url": {
+                        "description": "The canonical URL of its page.",
+                        "type": "string",
+                        "format": "uri"
+                    },
+                    "embedUrl": {
+                        "description": "The URL of the provider's player, for an `iframe`.",
+                        "type": "string",
+                        "format": "uri"
+                    },
+                    "title": {
+                        "type": "string"
+                    },
+                    "description": {
+                        "type": "string"
+                    },
+                    "author": {
+                        "type": "object",
+                        "properties": {
+                            "id": {
+                                "description": "The provider's id of the author: a YouTube channel id, a Vimeo user id… Applications compare it with an account they know, to check that a video is their user's own.",
+                                "type": "string"
+                            },
+                            "name": {
+                                "type": "string"
+                            },
+                            "url": {
+                                "type": "string",
+                                "format": "uri"
+                            }
+                        }
+                    },
+                    "thumbnailUrl": {
+                        "description": "The largest thumbnail the provider gives.",
+                        "type": "string",
+                        "format": "uri"
+                    },
+                    "publishedAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "embeddable": {
+                        "description": "Whether the provider lets other sites play it.",
+                        "type": "boolean"
+                    },
+                    "live": {
+                        "description": "A live stream, current or upcoming.",
+                        "type": "boolean"
+                    },
+                    "privacy": {
+                        "type": "string",
+                        "enum": ["public", "unlisted", "private"]
+                    },
+                    "html": {
+                        "description": "The player's HTML from the provider's oEmbed, when it has one. Never built from the request.",
+                        "type": "string"
                     }
                 }
             },
@@ -3544,6 +3775,27 @@
                         "type": "integer",
                         "minimum": 1000,
                         "default": 5000
+                    },
+                    "embedProviders": {
+                        "description": "Embed providers whose URLs the project may use as inputs, among the server's. None when not set.",
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/EmbedProvider"
+                        },
+                        "uniqueItems": true
+                    },
+                    "embedDownload": {
+                        "description": "Embed providers the project may download from with `embed.download`, among its `embedProviders`. None when not set: the project is responsible for its rights to what it downloads.",
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/EmbedProvider"
+                        },
+                        "uniqueItems": true
+                    },
+                    "embedMaxDuration": {
+                        "description": "Longest embed that `embed.download` takes, in seconds. `ECLAIR_EMBED_MAX_DURATION` when not set.",
+                        "type": "integer",
+                        "minimum": 1
                     }
                 }
             },
@@ -3844,6 +4096,48 @@
                         "type": "array",
                         "items": {
                             "$ref": "#/components/schemas/Storage"
+                        }
+                    }
+                }
+            },
+            "CredentialsRequest": {
+                "description": "A provider's credentials for the project, encrypted and never shown again. `youtube`: `apiKey` (YouTube Data API). `vimeo`: `token`. `spotify`: `clientId`, `clientSecret`. `instagram`: `accessToken` (a Meta app token, for oEmbed). Each provider checks its own.",
+                "type": "object",
+                "required": ["config"],
+                "additionalProperties": false,
+                "properties": {
+                    "config": {
+                        "type": "object",
+                        "additionalProperties": true
+                    }
+                }
+            },
+            "Credentials": {
+                "description": "A provider's credentials of a project, without their values.",
+                "type": "object",
+                "required": ["provider", "createdAt", "updatedAt"],
+                "properties": {
+                    "provider": {
+                        "$ref": "#/components/schemas/EmbedProvider"
+                    },
+                    "createdAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "updatedAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    }
+                }
+            },
+            "CredentialsList": {
+                "type": "object",
+                "required": ["data"],
+                "properties": {
+                    "data": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/Credentials"
                         }
                     }
                 }

@@ -54,7 +54,7 @@ Eclair doesn't keep media beyond a retention period. A project registers one or 
 | `http`   | yes         | yes           | Outputs are uploaded to an endpoint of the application, signed like webhooks. For applications that store files on their own disk. `laravel-eclair` provides this endpoint.                                                                                         |
 | `eclair` | yes         | yes           | Eclair's temporary storage, under the reserved name `eclair`. Holds uploads (`POST /v1/uploads`) and outputs until they expire (24 hours by default). The application downloads outputs with signed URLs. See [decision 0011](decisions/0011-temporary-storage.md). |
 
-An input can also be a plain `https` URL (for example a presigned URL), fetched through the SSRF guard.
+An input can also be a plain `https` URL (for example a presigned URL), fetched through the SSRF guard. An embed, a video or audio on a platform given by the URL of its page, is never fetched: the operations that accept embeds read it through the provider's API ([decision 0022](decisions/0022-embeds.md)).
 
 The temporary storage's backend is a local directory on a single server, or an S3-compatible bucket owned by the operator when there are several servers. Files are stored under the project's id and can't be listed. A cleaner deletes expired files and marks them as expired on their job.
 

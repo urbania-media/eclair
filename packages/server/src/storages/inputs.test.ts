@@ -87,6 +87,16 @@ describe('fetchInput', () => {
         project = await services.projects.get('niche');
     });
 
+    it('never fetches an embed', async () => {
+        await expect(
+            fetchInput(
+                { embed: 'https://vimeo.com/76979871' },
+                join(directory, 'embed'),
+                options(),
+            ),
+        ).rejects.toMatchObject({ code: 'storage_failed' });
+    });
+
     it('reads a path of the temporary storage and an upload', async () => {
         const local = join(directory, 'local');
         writeFileSync(local, 'stored');

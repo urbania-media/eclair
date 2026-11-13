@@ -53,6 +53,15 @@ The operations that `laravel-mediatheque` runs today, with the same outputs:
 - `ai.highlights` (suggested extracts).
 - GPU image and GPU workers.
 
+## Embeds
+
+Videos and audio on platforms, as inputs ([decision 0022](decisions/0022-embeds.md), #103):
+
+- The protocol: `embed` inputs, the probe's `embed` metadata, providers and credentials of a project (#104).
+- `embed.probe` for YouTube, Vimeo, Dailymotion, SoundCloud, Spotify, TikTok and Instagram, through their APIs and oEmbed (#105), and its settings in the dashboard (#106).
+- The `network` capability and `embed.download`, through the providers' APIs (#107).
+- yt-dlp as an opt-in backend, once measured from a server (#108).
+
 ## 1.0
 
 Eclair 1.0 ships when:
