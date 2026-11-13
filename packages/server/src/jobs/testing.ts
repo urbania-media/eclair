@@ -75,6 +75,22 @@ export const testEmbedProbe = defineEmbedOperation({
     run: async () => ({ metadata: {} }),
 });
 
+/** An embed operation that downloads, for the tests of jobs. */
+export const testEmbedDownload = defineEmbedOperation({
+    name: 'embed.download',
+    version: 1,
+    description: 'Downloads an embed',
+    capability: 'network',
+    binaries: [],
+    downloads: true,
+    options: Type.Object({}, { additionalProperties: false }),
+    outputs: { files: true, metadata: true },
+    run: async () => ({}),
+});
+
 export function testRegistry(): OperationRegistry {
-    return new OperationRegistry([...testOperations, testEmbedProbe], [testEmbedProvider]);
+    return new OperationRegistry(
+        [...testOperations, testEmbedProbe, testEmbedDownload],
+        [testEmbedProvider],
+    );
 }

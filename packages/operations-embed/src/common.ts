@@ -7,10 +7,25 @@ import type {
 } from '@eclair-js/operation';
 import type { EmbedMetadata, ProbeMetadata } from '@eclair-js/protocol';
 
-/** A provider of the plugin: what the server matches, and how `embed.probe` reads it. */
+/** The options of `embed.download`. */
+export interface DownloadRequest {
+    /** `best`, or the largest height to download. */
+    quality: 'best' | number;
+    audioOnly: boolean;
+}
+
+/** A provider of the plugin: what the server matches, how `embed.probe` reads it, and how `embed.download` downloads it when it can. */
 export interface ProviderModule {
     provider: EmbedProvider;
     probe(context: EmbedOperationContext): Promise<ProbeMetadata>;
+    /**
+     * Downloads the embed's file to the work directory and declares it as an output. Returns the
+     * metadata of what it downloaded.
+     */
+    download?(
+        context: EmbedOperationContext,
+        request: DownloadRequest,
+    ): Promise<Record<string, unknown>>;
 }
 
 /** The hosts of a provider, with and without `www.`, in lowercase. */

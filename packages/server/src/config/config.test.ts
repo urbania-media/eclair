@@ -32,6 +32,7 @@ describe('loadConfig', () => {
             taskTimeout: 3_600_000,
             logLevel: 'info',
             dashboard: true,
+            embedMaxDuration: 2 * 3_600_000,
         });
         expect(config.queues).toEqual([
             { name: 'cpu', concurrency: availableParallelism() },
@@ -104,7 +105,7 @@ describe('loadConfig', () => {
             }),
         ).toEqual([
             'ECLAIR_PORT must be between 0 and 65535.',
-            'ECLAIR_QUEUES: "turbo" is not a queue (cpu, video, gpu, ai, probe).',
+            'ECLAIR_QUEUES: "turbo" is not a queue (cpu, video, gpu, ai, probe, network).',
             'ECLAIR_TEMP_RETENTION must not be longer than ECLAIR_TEMP_MAX_RETENTION.',
         ]);
     });
@@ -127,6 +128,17 @@ describe('the temporary storage', () => {
                 ECLAIR_TEMP_S3_SECRET_ACCESS_KEY: 'secret',
             }).tempStorageCredentials,
         ).toEqual({ accessKeyId: 'id', secretAccessKey: 'secret' });
+    });
+});
+
+describe('embed downloads', () => {
+    it('serve the network queue with two slots by default, and limit their duration', () => {
+        const config = loadConfig({
+            ECLAIR_QUEUES: 'cpu:2,network',
+            ECLAIR_EMBED_MAX_DURATION: '30m',
+        });
+        expect(config.queues).toContainEqual({ name: 'network', concurrency: 2 });
+        expect(config.embedMaxDuration).toBe(30 * 60_000);
     });
 });
 

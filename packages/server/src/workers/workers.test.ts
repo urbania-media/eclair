@@ -38,6 +38,24 @@ const providerRequests: string[] = [];
 
 const operations = [
     defineEmbedOperation({
+        name: 'test.fetch',
+        version: 1,
+        description: 'Downloads an embed from the local provider',
+        capability: 'cpu',
+        binaries: [],
+        downloads: true,
+        options: Type.Object({ path: Type.String({ default: 'download.txt' }) }),
+        outputs: { files: true, metadata: true },
+        async run(context, options) {
+            const { size } = await context.download(
+                `${providerUrl}/files/${context.input.id}`,
+                options.path,
+            );
+            context.output('download.txt', join(context.workdir, options.path), { role: 'main' });
+            return { metadata: { size, limits: context.limits } };
+        },
+    }),
+    defineEmbedOperation({
         name: 'test.embed',
         version: 1,
         description: 'Reads an embed from the local provider',
@@ -311,6 +329,11 @@ describe.skipIf(!RUNS_WITH_REDIS)('workers', () => {
         await workers.start();
         project = (await services.projects.create({ slug: 'niche' })).project;
         provider = createServer((request, response) => {
+            if (request.url?.startsWith('/files/') === true) {
+                const body = `downloaded ${request.url.slice('/files/'.length)}`;
+                response.writeHead(200, { 'content-length': String(body.length) }).end(body);
+                return;
+            }
             providerRequests.push(request.url ?? '');
             response.setHeader('content-type', 'application/json');
             response.end(JSON.stringify({ path: request.url }));
@@ -323,6 +346,66 @@ describe.skipIf(!RUNS_WITH_REDIS)('workers', () => {
         await workers?.close();
         await services?.close();
         await new Promise<void>((resolve) => provider?.close(() => resolve()));
+    });
+
+    it('downloads an embed for the tasks that read it, within the limits of the project', async () => {
+        const jobs = services.jobs as NonNullable<Services['jobs']>;
+        const owner = (
+            await services.projects.create({
+                slug: `downloads-${Date.now()}`,
+                settings: {
+                    embedProviders: ['example'],
+                    embedDownload: ['example'],
+                    embedMaxDuration: 600,
+                },
+            })
+        ).project;
+        const request = (options: Record<string, unknown> = {}) => ({
+            input: { embed: 'https://video.example.com/abc' },
+            output: { storage: 'eclair', prefix: 'imports/' },
+            tasks: {
+                download: { op: 'test.fetch', options },
+                shout: { op: 'test.shout', from: 'download' },
+            },
+        });
+        const done = await waitForJob(owner.id, (await jobs.create(owner, request())).job.id);
+        expect(done).toMatchObject({
+            status: 'completed',
+            tasks: {
+                download: {
+                    status: 'completed',
+                    outputs: {
+                        metadata: {
+                            size: 14,
+                            limits: { maxSize: 1024 ** 2, maxDuration: 600 },
+                        },
+                        files: [{ name: 'download.txt', path: 'imports/download/download.txt' }],
+                    },
+                },
+                shout: { status: 'completed' },
+            },
+        });
+        const shouted = join(services.temporaryRoot, owner.id, 'imports', 'shout', 'shout.txt');
+        expect(await readFile(shouted, 'utf8')).toBe('DOWNLOADED ABC');
+        const usage = await services.database.kysely
+            .selectFrom('usage')
+            .select(['operation', 'bytes_in'])
+            .where('job_id', '=', done.id)
+            .execute();
+        // PostgreSQL gives 64-bit integers as strings.
+        expect(
+            usage.map(({ operation, bytes_in }) => [operation, Number(bytes_in)]),
+        ).toContainEqual(['test.fetch@1', 14]);
+
+        // Outside its work directory, or larger than the project's limit: refused.
+        const escaped = await waitForJob(
+            owner.id,
+            (await jobs.create(owner, request({ path: '../escape.txt' }))).job.id,
+        );
+        expect(escaped.tasks['download']?.error?.code).toBe('operation_failed');
+        await services.projects.update(owner.id, { settings: { maxInputSize: 10 } });
+        const limited = await waitForJob(owner.id, (await jobs.create(owner, request())).job.id);
+        expect(limited.tasks['download']?.error?.code).toBe('limit_exceeded');
     });
 
     it("runs an embed task without fetching the embed, with the project's credentials and cache", async () => {

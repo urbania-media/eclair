@@ -26,6 +26,7 @@ async function probe(
         responses,
         ...rest,
     });
+    await result.cleanup();
     expect(validate('ProbeMetadata', result.metadata)).toMatchObject({ valid: true });
     return result;
 }

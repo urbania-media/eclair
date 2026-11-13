@@ -19,9 +19,9 @@ Start with one server in `all` mode, then size from what Eclair reports: queue w
 
 ### Queues and concurrency
 
-Each operation runs on its capability's queue: `cpu`, `video`, `gpu`, `ai`, and `probe` for probes. `ECLAIR_QUEUES` sets the queues a worker serves and how many tasks of each it runs at once:
+Each operation runs on its capability's queue: `cpu`, `video`, `gpu`, `ai`, `network` for downloads of embeds, and `probe` for probes. `ECLAIR_QUEUES` sets the queues a worker serves and how many tasks of each it runs at once:
 
-- `cpu` defaults to the number of cores, other queues to 1. Every worker also serves `probe` with 2 slots, so synchronous probes don't wait behind long tasks (`probe:0` turns it off).
+- `cpu` defaults to the number of cores, `network` to 2, other queues to 1. A worker serves `network` only when `ECLAIR_QUEUES` lists it: without it, `embed.download` tasks wait. Every worker also serves `probe` with 2 slots, so synchronous probes don't wait behind long tasks (`probe:0` turns it off).
 - Concurrency is per worker process. On a server with 16 cores that runs both, `ECLAIR_QUEUES=cpu:8,video:2` leaves room for ffmpeg's own threads.
 - A project's `concurrency` (4 by default) caps how many of its tasks run at once over every worker, so one project can't take the whole server. The total of the workers' slots should be above the sum of the concurrency of the projects that are busy at the same time.
 

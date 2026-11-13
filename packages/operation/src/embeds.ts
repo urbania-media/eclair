@@ -1,6 +1,6 @@
 import type { TSchema } from 'typebox';
 
-import type { JsonSchemaObject, OperationLogger } from './operation.ts';
+import type { JsonSchemaObject, OperationLogger, OutputOptions } from './operation.ts';
 
 /** An embed that a provider recognized in a page URL. */
 export interface EmbedMatch {
@@ -79,9 +79,42 @@ export interface OperationCache {
     set(key: string, value: unknown, ttl: number): Promise<void>;
 }
 
+export interface DownloadOptions extends Omit<HttpRequestOptions, 'method' | 'body'> {
+    /** Bytes. At most the task's `limits.maxSize`, which applies without it. */
+    maxSize?: number;
+}
+
+export interface DownloadResult {
+    /** Bytes written. */
+    size: number;
+    /** The `content-type` the server announced, never trusted: detect the file's type. */
+    contentType: string | undefined;
+}
+
+/** What an embed operation may download, from the project's settings and the server's. */
+export interface EmbedLimits {
+    /** Bytes: the project's `maxInputSize`, or `ECLAIR_MAX_INPUT_SIZE`. */
+    maxSize: number;
+    /** Seconds: the project's `embedMaxDuration`, or `ECLAIR_EMBED_MAX_DURATION`. */
+    maxDuration: number;
+}
+
 /** What an embed operation receives besides its options. */
 export interface EmbedOperationContext {
     input: OperationEmbed;
+    /** A directory for the operation's files. The worker deletes it after the task. */
+    workdir: string;
+    /**
+     * Declares a file in `workdir` as an output of the task (`video.mp4`): the worker uploads it under
+     * the task's path, and other tasks read it with `from`.
+     */
+    output(name: string, path: string, options?: OutputOptions): void;
+    /**
+     * Downloads a file to `path`, in `workdir`, through the SSRF guard like `http()`, with redirects
+     * checked, up to `limits.maxSize`, and reports its progress when the size is announced.
+     */
+    download(url: string, path: string, options?: DownloadOptions): Promise<DownloadResult>;
+    limits: EmbedLimits;
     /**
      * The credentials of the input's provider: the project's, or else the operator's
      * (`ECLAIR_PROVIDER_<PROVIDER>_<KEY>`). `undefined` when neither has any.

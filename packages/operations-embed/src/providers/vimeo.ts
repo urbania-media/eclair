@@ -1,6 +1,7 @@
+import { join } from 'node:path';
 import { Type } from 'typebox';
 
-import { defineEmbedProvider } from '@eclair-js/operation';
+import { OperationError, defineEmbedProvider, detectType } from '@eclair-js/operation';
 import type { EmbedOperationContext } from '@eclair-js/operation';
 import type { ProbeMetadata } from '@eclair-js/protocol';
 
@@ -16,7 +17,7 @@ import {
     string,
     withQuery,
 } from '../common.ts';
-import type { ProviderModule } from '../common.ts';
+import type { DownloadRequest, ProviderModule } from '../common.ts';
 
 const TITLE = 'Vimeo';
 const ID = /^\d{1,12}$/;
@@ -172,10 +173,140 @@ async function probeWithOembed(context: EmbedOperationContext): Promise<ProbeMet
     });
 }
 
+/** A file of the API's `download` list: the original (`source`) and its renditions. */
+interface DownloadLink {
+    quality: string | undefined;
+    rendition: string | undefined;
+    type: string | undefined;
+    width: number | undefined;
+    height: number | undefined;
+    size: number | undefined;
+    link: string;
+}
+
+function downloadLinks(value: unknown): DownloadLink[] {
+    const list = Array.isArray(value) ? (value as Record<string, unknown>[]) : [];
+    return list.flatMap((entry) => {
+        const link = httpsUrl(entry['link']);
+        const type = string(entry['type']);
+        // The original's type is `source`; the renditions' are `video/mp4`.
+        return link === undefined ||
+            (type !== undefined && type !== 'source' && !type.startsWith('video/'))
+            ? []
+            : [
+                  {
+                      quality: string(entry['quality']),
+                      rendition: string(entry['rendition']),
+                      type,
+                      width: positive(entry['width']),
+                      height: positive(entry['height']),
+                      size: positive(entry['size']),
+                      link,
+                  },
+              ];
+    });
+}
+
+/** The original for `best`, else the largest file within the height, else the smallest. */
+function pickLink(
+    links: DownloadLink[],
+    quality: DownloadRequest['quality'],
+): DownloadLink | undefined {
+    const byHeight = [...links].sort((a, b) => (b.height ?? 0) - (a.height ?? 0));
+    if (quality === 'best') {
+        return links.find((link) => link.quality === 'source') ?? byHeight[0];
+    }
+    return byHeight.find((link) => (link.height ?? 0) <= quality) ?? byHeight.at(-1);
+}
+
+/**
+ * Downloads a video of the token's account: the API gives its owner download links, the original
+ * included, on a plan that allows downloads. No yt-dlp: Vimeo hands the file over.
+ */
+async function download(
+    context: EmbedOperationContext,
+    request: DownloadRequest,
+): Promise<Record<string, unknown>> {
+    const token = context.credentials?.['token'];
+    if (token === undefined) {
+        throw new OperationError(
+            'provider_failed',
+            'Downloading from Vimeo needs a token of the account that owns the video: set the credentials of the project.',
+        );
+    }
+    if (request.audioOnly) {
+        throw new OperationError(
+            'unsupported_input',
+            'Vimeo gives no audio-only file: download the video, then run audio.transcode on it.',
+        );
+    }
+    const { id } = context.input;
+    const hash = hashOf(context);
+    const body = await requestJson(
+        context,
+        TITLE,
+        withQuery(`https://api.vimeo.com/videos/${id}${hash === undefined ? '' : `:${hash}`}`, {
+            fields: 'type,duration,width,height,download',
+        }),
+        {
+            headers: {
+                authorization: `bearer ${token}`,
+                accept: 'application/vnd.vimeo.*+json;version=3.4',
+            },
+        },
+    );
+    if (body['type'] === 'live') {
+        throw new OperationError('unsupported_input', "A live stream can't be downloaded.");
+    }
+    const duration = positive(body['duration']);
+    if (duration !== undefined && duration > context.limits.maxDuration) {
+        throw new OperationError(
+            'limit_exceeded',
+            `The video lasts ${Math.round(duration)} s, more than the ${context.limits.maxDuration} s the project downloads.`,
+        );
+    }
+    const link = pickLink(downloadLinks(body['download']), request.quality);
+    if (link === undefined) {
+        throw new OperationError(
+            'provider_unavailable',
+            'Vimeo gives no download link to this token: the video must belong to its account, on a plan that allows downloads.',
+        );
+    }
+    if (link.size !== undefined && link.size > context.limits.maxSize) {
+        throw new OperationError(
+            'limit_exceeded',
+            `The file is larger than ${context.limits.maxSize} bytes.`,
+        );
+    }
+    const path = join(context.workdir, 'download');
+    const { size } = await context.download(link.link, path);
+    // Never the announced type: what the file is.
+    const type = await detectType(path);
+    if (type.kind !== 'video') {
+        throw new OperationError(
+            'input_unreadable',
+            `Vimeo sent a ${type.mime} file, not a video.`,
+        );
+    }
+    context.output(`video.${type.extension ?? 'mp4'}`, path, { mime: type.mime, role: 'main' });
+    return {
+        provider: 'vimeo',
+        id,
+        quality: link.quality,
+        rendition: link.rendition,
+        mime: type.mime,
+        size,
+        width: link.width,
+        height: link.height,
+        duration,
+    };
+}
+
 export const vimeo: ProviderModule = {
     provider,
     probe(context) {
         const token = context.credentials?.['token'];
         return token === undefined ? probeWithOembed(context) : probeWithApi(context, token);
     },
+    download,
 };

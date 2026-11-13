@@ -745,13 +745,15 @@
                     }
                 },
                 "capability": {
-                    "description": "Queue it runs on.",
+                    "description": "Queue it runs on: `cpu`, `video`, `gpu`, `ai`, `probe`, or `network` for tasks that wait on the network, such as `embed.download`.",
                     "type": "string",
                     "examples": [
                         "cpu",
                         "video",
                         "gpu",
-                        "ai"
+                        "ai",
+                        "probe",
+                        "network"
                     ]
                 },
                 "outputs": {

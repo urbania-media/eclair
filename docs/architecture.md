@@ -72,7 +72,7 @@ Every worker serves the `probe` queue by default, with reserved slots, so transc
 
 ## Queues and scaling
 
-- Each operation declares the **capability** it needs: `cpu` (default), `video` (long transcodes), `gpu`, `ai`. Each capability is a BullMQ queue. Probes have their own `probe` queue.
+- Each operation declares the **capability** it needs: `cpu` (default), `video` (long transcodes), `gpu`, `ai`, `network` (tasks that wait on the network, such as downloading an embed). Each capability is a BullMQ queue. Probes have their own `probe` queue.
 - Each worker lists the capabilities it serves (`ECLAIR_QUEUES=cpu,video`) and its concurrency per queue. Adding capacity means starting another worker with the same configuration on another server.
 - Projects have a priority and a concurrency limit, so one project's backlog doesn't starve the others.
 - Workers only need Redis, the database and the project storages. They don't need to share a disk.
