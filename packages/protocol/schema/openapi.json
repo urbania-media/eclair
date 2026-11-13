@@ -3382,6 +3382,10 @@
                                 "type": "string"
                             }
                         }
+                    },
+                    "code": {
+                        "$ref": "#/components/schemas/TaskErrorCode",
+                        "description": "The error code of a task that failed while the request waited for it: the probe of `POST /v1/probe` that answers `422`."
                     }
                 }
             },

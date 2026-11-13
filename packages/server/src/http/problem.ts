@@ -8,6 +8,8 @@ export interface ProblemOptions {
     type?: string;
     /** Validation errors: messages by JSON pointer. */
     errors?: Record<string, string[]>;
+    /** The error code of a task that failed while the request waited for it. */
+    code?: string;
     /** Extra response headers, such as `Retry-After`. */
     headers?: Record<string, string>;
 }
@@ -23,6 +25,7 @@ export class HttpProblem extends Error {
     readonly detail: string | undefined;
     readonly type: string | undefined;
     readonly errors: Record<string, string[]> | undefined;
+    readonly code: string | undefined;
     readonly headers: Record<string, string>;
 
     constructor(status: number, title?: string, options: ProblemOptions = {}) {
@@ -34,6 +37,7 @@ export class HttpProblem extends Error {
         this.detail = options.detail;
         this.type = options.type;
         this.errors = options.errors;
+        this.code = options.code;
         this.headers = options.headers ?? {};
     }
 
@@ -44,6 +48,7 @@ export class HttpProblem extends Error {
             status: this.status,
             ...(this.detail === undefined ? {} : { detail: this.detail }),
             ...(this.errors === undefined ? {} : { errors: this.errors }),
+            ...(this.code === undefined ? {} : { code: this.code }),
         };
     }
 }
@@ -53,8 +58,16 @@ export const problems = {
     forbidden: (detail?: string) => new HttpProblem(403, 'Forbidden', { detail }),
     notFound: (detail?: string) => new HttpProblem(404, 'Not Found', { detail }),
     conflict: (detail?: string) => new HttpProblem(409, 'Conflict', { detail }),
-    invalid: (errors: Record<string, string[]>, detail = 'The request is invalid.') =>
-        new HttpProblem(422, 'Unprocessable Content', { detail, errors }),
+    invalid: (
+        errors: Record<string, string[]>,
+        detail = 'The request is invalid.',
+        code?: string,
+    ) =>
+        new HttpProblem(422, 'Unprocessable Content', {
+            detail,
+            errors,
+            ...(code === undefined ? {} : { code }),
+        }),
     tooManyRequests: (retryAfterSeconds: number, detail?: string) =>
         new HttpProblem(429, 'Too Many Requests', {
             detail,

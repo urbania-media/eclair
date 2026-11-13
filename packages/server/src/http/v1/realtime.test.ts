@@ -529,6 +529,20 @@ describe.skipIf(!RUNS_WITH_REDIS)('webhooks, events and probes', () => {
                 expect(invalid.status).toBe(422);
             });
 
+            it("answers a failed probe with its error's code", async () => {
+                const response = await fetch(`${base}/v1/probe`, {
+                    method: 'POST',
+                    headers: { ...auth(), 'content-type': 'application/json' },
+                    body: JSON.stringify({
+                        input: { storage: 'eclair', path: 'nothing/here.mov' },
+                    }),
+                });
+                expect(response.status).toBe(422);
+                const problem = (await response.json()) as Record<string, unknown>;
+                expect(problem).toMatchObject({ status: 422, code: 'input_unreadable' });
+                expect(validate('Problem', problem).valid).toBe(true);
+            });
+
             it("refuses probes past the project's limit, with Retry-After", async () => {
                 const limited = (
                     await services.projects.create({
