@@ -79,9 +79,12 @@ job_id=$(echo "$job" | sed -n 's/.*"id":"\(job_[0-9A-Z]*\)".*/\1/p')
 attempt=0
 while :; do
     job=$(curl -fsS "$base/v1/jobs/$job_id" -H "Authorization: Bearer $token")
-    case "$job" in
-        *'"status":"completed"'*) break ;;
-        *'"status":"failed"'* | *'"status":"canceled"'*) fail "the job did not complete: $job" ;;
+    # The job's own status, the first one: its tasks have a status too, and the probe's ends first.
+    status=$(echo "$job" | sed -n 's/^{"id":"[^"]*","status":"\([a-z]*\)".*/\1/p')
+    case "$status" in
+        completed) break ;;
+        failed | canceled) fail "the job did not complete: $job" ;;
+        '') fail "no status: $job" ;;
     esac
     attempt=$((attempt + 1))
     [ "$attempt" -lt 60 ] || fail "the job is still running: $job"
