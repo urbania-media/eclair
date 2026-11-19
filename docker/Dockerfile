@@ -11,7 +11,7 @@
 # when one of these versions changes. audiowaveform and whisper.cpp are built from pinned sources,
 # checked against their SHA-256.
 
-FROM node:24.22.0-trixie-slim@sha256:7f486cabe892bff8fef04c0f7da8dba84a560be3e4e2740b7a86afc57ebec315 AS node
+FROM node:24.22.3-trixie-slim@sha256:af02d57b57719b9657a45199a79264a9437940cd55b3c7b3fc99615654f124a0 AS node
 
 FROM node AS build-base
 
