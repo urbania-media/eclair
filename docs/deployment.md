@@ -137,10 +137,10 @@ The models are at `https://huggingface.co/ggerganov/whisper.cpp/resolve/main/<fi
 
 ### `amazon-transcribe`
 
-An external provider: the audio goes to the project's AWS account. A project uses it when its settings say so (`aiProviders: { transcription: ["amazon-transcribe"] }` and `externalAiProviders: true`), with its own credentials (`PUT /admin/v1/projects/{project}/credentials/amazon-transcribe`: `accessKeyId`, `secretAccessKey`, `region`, `bucket`, optionally `prefix`, `languages`, `pricePerMinute`). In the project's account:
+An external provider: the audio goes to the project's AWS account. A project uses it when its settings say so (`aiProviders: { transcription: ["amazon-transcribe"] }` and `externalAiProviders: true`), with its own credentials (`PUT /admin/v1/projects/{project}/credentials/amazon-transcribe`: `accessKeyId`, `secretAccessKey`, `region`, `bucket`, optionally `prefix`, `jobPrefix`, `languages`, `pricePerMinute`). In the project's account:
 
 - A bucket in the same region, private, with a lifecycle rule that expires the prefix (`eclair-transcribe/`) after one day. Eclair deletes its files after each task; the rule catches what a crashed worker or a canceled job leaves.
-- An IAM user for Eclair with only this policy:
+- An IAM user for Eclair with only this policy. Jobs are named `<jobPrefix><task id>` (`jobPrefix` is `eclair-` by default), so the key may only follow and delete its own. Eclair always writes the transcript to the project's bucket (`OutputBucketName`), never to Amazon's, and deletes the job's record after reading it, as Amazon otherwise keeps it 90 days.
 
 ```json
 {
@@ -153,7 +153,7 @@ An external provider: the audio goes to the project's AWS account. A project use
                 "transcribe:GetTranscriptionJob",
                 "transcribe:DeleteTranscriptionJob"
             ],
-            "Resource": "*"
+            "Resource": "arn:aws:transcribe:<region>:<account>:transcription-job/eclair-*"
         },
         {
             "Effect": "Allow",
