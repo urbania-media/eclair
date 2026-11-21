@@ -118,6 +118,52 @@ The `-embed` variant of the image runs yt-dlp for embeds ([decision 0022](decisi
 - **Updates.** Platforms change often, and an old yt-dlp stops working. Its version is pinned with hashes in [`docker/yt-dlp/requirements.txt`](../docker/yt-dlp/requirements.txt), which Dependabot updates. Pull a new image of the variant when a platform starts failing with `provider_failed`.
 - **Blocks.** Platforms often refuse servers in data centers: a task then fails with `provider_refused` ("Sign in to confirm you're not a bot", a 429), and it isn't retried. Eclair never uses the cookies of an account to get around it. Measure from the server before allowing a platform to projects (`embedDownload`).
 
+## Transcription
+
+`ai.transcribe` runs on workers that serve the `ai` queue (`ECLAIR_QUEUES=ai:1`). It answers through the project's transcription provider ([Transcripts](protocol.md#transcripts)).
+
+### `local-whisper`
+
+The image has whisper.cpp but no models. Put them in `ECLAIR_MODELS_DIR` (`/var/lib/eclair/models`, on the data volume) before the worker starts. A task never downloads a model, and a task that asks for a model the worker doesn't have fails with `provider_failed`. They come from whisper.cpp's repository on Hugging Face; check each file's SHA-256 (Hugging Face lists it):
+
+| File                           | Size   | SHA-256                                                            |
+| ------------------------------ | ------ | ------------------------------------------------------------------ |
+| `ggml-large-v3-turbo-q5_0.bin` | 574 MB | `394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2` |
+| `ggml-medium-q5_0.bin`         | 539 MB | `19fea4b380c3a618ec4723c3eef2eb785ffba0d0538cf43f8f235e7b3b34220f` |
+| `ggml-small-q5_1.bin`          | 190 MB | `ae85e4a935d7a567bd102fe55afc16bb595bdb618e11b2fc7591bc08120411bb` |
+| `ggml-silero-v6.2.0.bin` (VAD) | 885 kB | `2aa269b785eeb53a82983a20501ddf7c1d9c48e33ab63a41391ac6c9f7fb6987` |
+
+The models are at `https://huggingface.co/ggerganov/whisper.cpp/resolve/main/<file>`, the VAD model at `https://huggingface.co/ggml-org/whisper-vad/resolve/main/ggml-silero-v6.2.0.bin`. `large-v3-turbo-q5_0` is the default (`ECLAIR_WHISPER_MODEL`). Give a worker one transcription at a time (`ai:1`) and all its CPUs (`ECLAIR_WHISPER_THREADS`). See #119 for speed and memory.
+
+### `amazon-transcribe`
+
+An external provider: the audio goes to the project's AWS account. A project uses it when its settings say so (`aiProviders: { transcription: ["amazon-transcribe"] }` and `externalAiProviders: true`), with its own credentials (`PUT /admin/v1/projects/{project}/credentials/amazon-transcribe`: `accessKeyId`, `secretAccessKey`, `region`, `bucket`, optionally `prefix`, `languages`, `pricePerMinute`). In the project's account:
+
+- A bucket in the same region, private, with a lifecycle rule that expires the prefix (`eclair-transcribe/`) after one day. Eclair deletes its files after each task; the rule catches what a crashed worker or a canceled job leaves.
+- An IAM user for Eclair with only this policy:
+
+```json
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": [
+                "transcribe:StartTranscriptionJob",
+                "transcribe:GetTranscriptionJob",
+                "transcribe:DeleteTranscriptionJob"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Effect": "Allow",
+            "Action": ["s3:PutObject", "s3:GetObject", "s3:DeleteObject"],
+            "Resource": "arn:aws:s3:::<bucket>/eclair-transcribe/*"
+        }
+    ]
+}
+```
+
 ## Running without Docker
 
 Supported but not the default: install Node 24, `npm install -g @eclair-js/server`, the binaries listed above, and run `eclair api` and `eclair worker` as services. `eclair doctor` checks that the binaries are there and recent enough.
