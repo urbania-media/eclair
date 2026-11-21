@@ -97,6 +97,20 @@ const EnvironmentSchema = Type.Object({
     ECLAIR_TASK_TIMEOUT: duration('1h', 'a duration (1h)'),
     ECLAIR_JOB_RETENTION: duration('30d', 'a duration (30d)'),
     ECLAIR_EMBED_MAX_DURATION: duration('2h', 'a duration (2h)'),
+    ECLAIR_MODELS_DIR: Type.String({
+        minLength: 1,
+        default: '/var/lib/eclair/models',
+        description: 'a path',
+    }),
+    ECLAIR_WHISPER_MODEL: Type.String({
+        pattern: '^[a-z0-9][a-z0-9._-]{0,63}$',
+        default: 'large-v3-turbo-q5_0',
+        description: 'a whisper.cpp model name (large-v3-turbo-q5_0)',
+    }),
+    ECLAIR_WHISPER_THREADS: Type.Optional(
+        Type.String({ pattern: '^[1-9][0-9]{0,2}$', description: 'a number of threads' }),
+    ),
+    ECLAIR_TRANSCRIBE_MAX_DURATION: duration('4h', 'a duration (4h)'),
     ECLAIR_LOG_LEVEL: Type.Union(
         LOG_LEVELS.map((level) => Type.Literal(level)),
         { default: 'info', description: LOG_LEVELS.join(', ') },
@@ -142,6 +156,11 @@ export interface Config {
     jobRetention: number;
     /** Milliseconds: the longest embed `embed.download` takes, when the project doesn't set one. */
     embedMaxDuration: number;
+    /**
+     * The operator's settings of the AI providers, by name (decision 0008): `local-whisper` has
+     * the models directory, its default model, threads and longest audio, in seconds.
+     */
+    aiProviders: Record<string, Record<string, unknown>>;
     logLevel: LogLevel;
     binaries: Record<BinaryName, string>;
     /**
@@ -315,6 +334,19 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
         taskTimeout: parseDuration(environment.ECLAIR_TASK_TIMEOUT),
         jobRetention: parseDuration(environment.ECLAIR_JOB_RETENTION),
         embedMaxDuration: parseDuration(environment.ECLAIR_EMBED_MAX_DURATION),
+        aiProviders: {
+            'local-whisper': {
+                modelsDir: environment.ECLAIR_MODELS_DIR,
+                defaultModel: environment.ECLAIR_WHISPER_MODEL,
+                maxDuration: parseDuration(environment.ECLAIR_TRANSCRIBE_MAX_DURATION) / 1000,
+                ...(environment.ECLAIR_WHISPER_THREADS === undefined
+                    ? {}
+                    : { threads: Number(environment.ECLAIR_WHISPER_THREADS) }),
+            },
+            'amazon-transcribe': {
+                maxDuration: parseDuration(environment.ECLAIR_TRANSCRIBE_MAX_DURATION) / 1000,
+            },
+        },
         logLevel: environment.ECLAIR_LOG_LEVEL,
         binaries,
         providerCredentials: providerCredentialsOf(env),

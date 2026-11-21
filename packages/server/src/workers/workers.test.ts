@@ -7,7 +7,12 @@ import { join } from 'node:path';
 import { Type } from 'typebox';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { OperationError, defineEmbedOperation, defineOperation } from '@eclair-js/operation';
+import {
+    OperationError,
+    defineAiProvider,
+    defineEmbedOperation,
+    defineOperation,
+} from '@eclair-js/operation';
 import type { Job } from '@eclair-js/protocol';
 
 import type { JobRecord } from '../jobs/records.ts';
@@ -99,6 +104,26 @@ const operations = [
             context.progress(0.5);
             context.output('copy.txt', path, { mime: 'text/plain', role: 'main', thumbhash: HASH });
             return { metadata: { size: context.input.size, kind: context.input.kind } };
+        },
+    }),
+    defineOperation({
+        name: 'test.listen',
+        version: 1,
+        description: 'Reports the providers of its context and the media seconds it used',
+        accepts: {},
+        capability: 'cpu',
+        binaries: [],
+        options: Type.Object({ provider: Type.Optional(Type.String()) }),
+        providers: 'transcription',
+        outputs: { files: false, metadata: true },
+        run(context) {
+            return Promise.resolve({
+                metadata: {
+                    provider: context.providers?.transcription ?? null,
+                    taskId: context.taskId?.startsWith('tsk_') === true,
+                },
+                usage: { mediaSeconds: 42.5 },
+            });
         },
     }),
     defineOperation({
@@ -277,7 +302,25 @@ describe.skipIf(!RUNS_WITH_REDIS)('workers', () => {
     beforeAll(async () => {
         // Fast retries for the tests.
         services = await createTestServices({
-            operations: new OperationRegistry(operations, [testEmbedProvider]),
+            operations: new OperationRegistry(
+                operations,
+                [testEmbedProvider],
+                [
+                    defineAiProvider({
+                        name: 'local-whisper',
+                        title: 'whisper.cpp',
+                        capability: 'transcription',
+                        external: false,
+                    }),
+                    defineAiProvider({
+                        name: 'hosted',
+                        title: 'Hosted',
+                        capability: 'transcription',
+                        external: true,
+                        credentials: Type.Object({ key: Type.String() }),
+                    }),
+                ],
+            ),
             queues: { attempts: 2, backoff: 50 },
         });
         redis = services.redis as NonNullable<typeof services.redis>;
@@ -305,6 +348,7 @@ describe.skipIf(!RUNS_WITH_REDIS)('workers', () => {
                     tempRetention: 3_600_000,
                     tempMaxRetention: 7_200_000,
                     providerCredentials: { example: { token: 'operator' } },
+                    aiProviders: { 'local-whisper': { modelsDir: '/m' } },
                 },
                 worker: 'test-worker',
                 logger,
@@ -553,6 +597,63 @@ describe.skipIf(!RUNS_WITH_REDIS)('workers', () => {
             { job: job.id, task: 'slow' },
         ]);
         expect(progressSent.filter((sent) => sent.job === other.job.id)).toEqual([]);
+    });
+
+    it('gives operations their AI providers, and records the media seconds they report', async () => {
+        const { job } = await (services.jobs as NonNullable<Services['jobs']>).create(project, {
+            input: await input('speech.txt', 'speech'),
+            tasks: { listen: { op: 'test.listen' } },
+        });
+        const done = await waitForJob(project.id, job.id);
+        expect(done.tasks['listen']?.outputs?.metadata).toEqual({
+            provider: { name: 'local-whisper', settings: { modelsDir: '/m' } },
+            taskId: true,
+        });
+
+        // An external provider gets the project's credentials, when the project allows it.
+        const external = (
+            await services.projects.create({
+                slug: `external-${Date.now()}`,
+                settings: { aiProviders: { transcription: ['hosted'] }, externalAiProviders: true },
+            })
+        ).project;
+        const jobs = services.jobs as NonNullable<Services['jobs']>;
+        const missing = await waitForJob(
+            external.id,
+            (
+                await jobs.create(external, {
+                    input: await input('a.txt', 'a', external),
+                    tasks: { listen: { op: 'test.listen' } },
+                })
+            ).job.id,
+        );
+        expect(missing.tasks['listen']).toMatchObject({
+            status: 'failed',
+            error: {
+                code: 'provider_failed',
+                message: 'The project has no credentials for Hosted.',
+            },
+        });
+        await services.credentials.set(external.id, 'hosted', { key: 'secret' });
+        const hosted = await waitForJob(
+            external.id,
+            (
+                await jobs.create(external, {
+                    input: await input('b.txt', 'b', external),
+                    tasks: { listen: { op: 'test.listen' } },
+                })
+            ).job.id,
+        );
+        expect(hosted.tasks['listen']?.outputs?.metadata).toMatchObject({
+            provider: { name: 'hosted', settings: {}, credentials: { key: 'secret' } },
+        });
+        const usage = await services.database.kysely
+            .selectFrom('usage')
+            .select('media_ms')
+            .where('job_id', '=', job.id)
+            .execute();
+        // PostgreSQL gives 64-bit integers as strings.
+        expect(usage.map(({ media_ms }) => Number(media_ms))).toEqual([42_500]);
     });
 
     it('fails a task with its error, and the tasks after it', async () => {

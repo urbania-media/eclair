@@ -73,7 +73,7 @@ export interface TaskRunnerOptions {
         | 'tempRetention'
         | 'tempMaxRetention'
     > &
-        Partial<Pick<Config, 'providerCredentials' | 'embedMaxDuration'>>;
+        Partial<Pick<Config, 'providerCredentials' | 'embedMaxDuration' | 'aiProviders'>>;
     /** The projects' credentials for embed providers. */
     credentials?: Credentials | undefined;
     /** The caches of operations, in Redis. Nothing is cached without it. */
@@ -426,17 +426,19 @@ export class TaskRunner {
                 }
 
                 stage = 'run';
+                const context = this.#context(
+                    operation,
+                    task,
+                    { ...type, path: input.path, size: input.size, probe },
+                    workdir,
+                    controller.signal,
+                    files,
+                    options,
+                    this.#progressWebhooks(project, job, task),
+                );
+                const providers = await this.#providers(operation, task, project);
                 result = await (operation as FileOperation).run(
-                    this.#context(
-                        operation,
-                        task,
-                        { ...type, path: input.path, size: input.size, probe },
-                        workdir,
-                        controller.signal,
-                        files,
-                        options,
-                        this.#progressWebhooks(project, job, task),
-                    ),
+                    providers === undefined ? context : { ...context, providers },
                     task.options as never,
                 );
             }
@@ -471,7 +473,7 @@ export class TaskRunner {
                 operation,
                 inputSize,
                 written,
-                probe,
+                result.usage?.mediaSeconds ?? probe?.duration,
                 Date.now() - startedAt,
             );
             await scheduler.advance(job.id);
@@ -771,7 +773,49 @@ export class TaskRunner {
             progress: this.#progress(task, options, sendProgress),
             log: this.#log(task, operation),
             output: this.#output(operation, workdir, files),
+            taskId: task.id,
         };
+    }
+
+    /**
+     * The AI provider of an operation that calls one (decision 0008), picked again from the
+     * project's current settings: the operator's settings, and the project's credentials for an
+     * external provider.
+     */
+    async #providers(
+        operation: Operation,
+        task: TaskRecord,
+        project: Project,
+    ): Promise<OperationContext['providers']> {
+        const capability = operation.providers;
+        if (capability === undefined) {
+            return undefined;
+        }
+        let provider;
+        try {
+            provider = this.#options.operations.providerFor(
+                capability,
+                task.options['provider'],
+                project.settings,
+            );
+        } catch (error) {
+            throw new OperationError(
+                'provider_failed',
+                `The ${capability} provider is refused: ${(error as Error).message}.`,
+            );
+        }
+        const settings = this.#options.config.aiProviders?.[provider.name] ?? {};
+        if (!provider.external) {
+            return { [capability]: { name: provider.name, settings } };
+        }
+        const credentials = await this.#options.credentials?.get(project.id, provider.name);
+        if (credentials === undefined) {
+            throw new OperationError(
+                'provider_failed',
+                `The project has no credentials for ${provider.title}.`,
+            );
+        }
+        return { [capability]: { name: provider.name, settings, credentials } };
     }
 
     /** Runs a binary the operation declared, at its configured path, in its work directory. */
@@ -925,7 +969,8 @@ export class TaskRunner {
         operation: Operation,
         bytesIn: number,
         written: { bytes: number; stored: number },
-        probe: ProbeMetadata | undefined,
+        /** Seconds of media: what the operation reports, or the job's probe. */
+        mediaSeconds: number | undefined,
         elapsed: number,
     ): Promise<void> {
         await this.#options.database.kysely
@@ -938,7 +983,7 @@ export class TaskRunner {
                 operation: operation.key,
                 // Wall-clock time of the task: the CPU time of its binaries isn't measured yet.
                 cpu_ms: elapsed,
-                media_ms: Math.round((probe?.duration ?? 0) * 1000),
+                media_ms: Math.round((mediaSeconds ?? 0) * 1000),
                 bytes_in: bytesIn,
                 bytes_out: written.bytes,
                 bytes_stored: written.stored,

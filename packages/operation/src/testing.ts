@@ -25,6 +25,8 @@ import type {
     FileOperation,
     Operation,
     OperationContext,
+    OperationProviders,
+    OperationResult,
     OutputOptions,
 } from './operation.ts';
 
@@ -40,10 +42,14 @@ export interface RunOperationOptions {
     /** Milliseconds for the whole run. */
     timeout?: number;
     probe?: ProbeMetadata;
+    /** The AI providers of the context, by capability. */
+    providers?: OperationProviders;
+    taskId?: string;
 }
 
 export interface RunOperationResult {
     metadata: Record<string, unknown> | undefined;
+    usage: OperationResult['usage'];
     files: ({ name: string; path: string } & OutputOptions)[];
     progress: number[];
     /** The work directory, with the output files. Call `cleanup()` when done. */
@@ -104,12 +110,15 @@ export async function runOperation(
         log: { debug: () => {}, info: () => {}, warn: () => {} },
         signal: controller.signal,
         output: (name, path, outputOptions) => files.push({ name, path, ...outputOptions }),
+        ...(run.providers === undefined ? {} : { providers: run.providers }),
+        ...(run.taskId === undefined ? {} : { taskId: run.taskId }),
     };
 
     try {
         const result = await (operation as FileOperation).run(context, options as never);
         return {
             metadata: result.metadata,
+            usage: result.usage,
             files,
             progress,
             workdir,

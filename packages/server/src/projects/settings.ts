@@ -52,6 +52,29 @@ export const ProjectSettingsSchema = Type.Object(
         ),
         /** Longest embed that `embed.download` takes, in seconds. */
         embedMaxDuration: Type.Optional(Type.Integer({ minimum: 1 })),
+        /**
+         * AI providers the project may use, by capability (decision 0008). The first one answers
+         * unless a task asks for another of the list with its `provider` option. The server's
+         * local providers when not set.
+         */
+        aiProviders: Type.Optional(
+            Type.Object(
+                {
+                    transcription: Type.Optional(
+                        Type.Array(Type.String({ pattern: '^[a-z][a-z0-9-]{0,63}$' }), {
+                            minItems: 1,
+                            uniqueItems: true,
+                        }),
+                    ),
+                },
+                { additionalProperties: false },
+            ),
+        ),
+        /**
+         * Allows the AI providers of `aiProviders` that send media to a third party, such as a
+         * hosted transcription API. Not allowed when not set: media stays on the server.
+         */
+        externalAiProviders: Type.Optional(Type.Boolean()),
     },
     { additionalProperties: false },
 );
