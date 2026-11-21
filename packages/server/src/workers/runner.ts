@@ -73,7 +73,7 @@ export interface TaskRunnerOptions {
         | 'tempRetention'
         | 'tempMaxRetention'
     > &
-        Partial<Pick<Config, 'providerCredentials' | 'embedMaxDuration'>>;
+        Partial<Pick<Config, 'providerCredentials' | 'embedMaxDuration' | 'aiProviders'>>;
     /** The projects' credentials for embed providers. */
     credentials?: Credentials | undefined;
     /** The caches of operations, in Redis. Nothing is cached without it. */
@@ -471,7 +471,7 @@ export class TaskRunner {
                 operation,
                 inputSize,
                 written,
-                probe,
+                result.usage?.mediaSeconds ?? probe?.duration,
                 Date.now() - startedAt,
             );
             await scheduler.advance(job.id);
@@ -771,6 +771,9 @@ export class TaskRunner {
             progress: this.#progress(task, options, sendProgress),
             log: this.#log(task, operation),
             output: this.#output(operation, workdir, files),
+            ...(this.#options.config.aiProviders === undefined
+                ? {}
+                : { providers: this.#options.config.aiProviders }),
         };
     }
 
@@ -925,7 +928,8 @@ export class TaskRunner {
         operation: Operation,
         bytesIn: number,
         written: { bytes: number; stored: number },
-        probe: ProbeMetadata | undefined,
+        /** Seconds of media: what the operation reports, or the job's probe. */
+        mediaSeconds: number | undefined,
         elapsed: number,
     ): Promise<void> {
         await this.#options.database.kysely
@@ -938,7 +942,7 @@ export class TaskRunner {
                 operation: operation.key,
                 // Wall-clock time of the task: the CPU time of its binaries isn't measured yet.
                 cpu_ms: elapsed,
-                media_ms: Math.round((probe?.duration ?? 0) * 1000),
+                media_ms: Math.round((mediaSeconds ?? 0) * 1000),
                 bytes_in: bytesIn,
                 bytes_out: written.bytes,
                 bytes_stored: written.stored,

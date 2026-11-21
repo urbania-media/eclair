@@ -102,6 +102,22 @@ const operations = [
         },
     }),
     defineOperation({
+        name: 'test.listen',
+        version: 1,
+        description: 'Reports the providers of its context and the media seconds it used',
+        accepts: {},
+        capability: 'cpu',
+        binaries: [],
+        options: empty,
+        outputs: { files: false, metadata: true },
+        run(context) {
+            return Promise.resolve({
+                metadata: { transcription: context.providers?.transcription?.name ?? null },
+                usage: { mediaSeconds: 42.5 },
+            });
+        },
+    }),
+    defineOperation({
         name: 'test.shout',
         version: 1,
         description: 'Upper-cases its input with a binary',
@@ -305,6 +321,9 @@ describe.skipIf(!RUNS_WITH_REDIS)('workers', () => {
                     tempRetention: 3_600_000,
                     tempMaxRetention: 7_200_000,
                     providerCredentials: { example: { token: 'operator' } },
+                    aiProviders: {
+                        transcription: { name: 'local-whisper', settings: { modelsDir: '/m' } },
+                    },
                 },
                 worker: 'test-worker',
                 logger,
@@ -553,6 +572,22 @@ describe.skipIf(!RUNS_WITH_REDIS)('workers', () => {
             { job: job.id, task: 'slow' },
         ]);
         expect(progressSent.filter((sent) => sent.job === other.job.id)).toEqual([]);
+    });
+
+    it('gives operations their AI providers, and records the media seconds they report', async () => {
+        const { job } = await (services.jobs as NonNullable<Services['jobs']>).create(project, {
+            input: await input('speech.txt', 'speech'),
+            tasks: { listen: { op: 'test.listen' } },
+        });
+        const done = await waitForJob(project.id, job.id);
+        expect(done.tasks['listen']?.outputs?.metadata).toEqual({ transcription: 'local-whisper' });
+        const usage = await services.database.kysely
+            .selectFrom('usage')
+            .select('media_ms')
+            .where('job_id', '=', job.id)
+            .execute();
+        // PostgreSQL gives 64-bit integers as strings.
+        expect(usage.map(({ media_ms }) => Number(media_ms))).toEqual([42_500]);
     });
 
     it('fails a task with its error, and the tasks after it', async () => {

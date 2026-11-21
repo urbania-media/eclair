@@ -16,6 +16,7 @@ export const BUILT_IN_PLUGINS = [
     '@eclair-js/operations-font',
     '@eclair-js/operations-image',
     '@eclair-js/operations-embed',
+    '@eclair-js/operations-ai',
 ] as const;
 
 /** A plugin can't be loaded, or exports an invalid operation. */

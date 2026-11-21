@@ -42,4 +42,7 @@ export type {
     OperationPlugin,
     OperationResult,
     OutputOptions,
+    OperationProviders,
+    ProviderCapability,
+    ProviderSettings,
 } from './operation.ts';

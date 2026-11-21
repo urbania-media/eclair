@@ -1,0 +1,185 @@
+{
+    "systeminfo": "AVX = 1 | AVX2 = 1 | FMA = 1",
+    "model": {
+        "type": "large v3",
+        "multilingual": true,
+        "vocab": 51866,
+        "ftype": 8
+    },
+    "params": {
+        "model": "models/ggml-large-v3-turbo-q5_0.bin",
+        "language": "auto",
+        "translate": false
+    },
+    "result": {
+        "language": "fr"
+    },
+    "transcription": [
+        {
+            "timestamps": { "from": "00:00:00,000", "to": "00:00:02,400" },
+            "offsets": { "from": 0, "to": 2400 },
+            "text": " Salut tout le monde, c'est Émilie.",
+            "tokens": [
+                {
+                    "text": "[_BEG_]",
+                    "timestamps": { "from": "00:00:00,000", "to": "00:00:00,000" },
+                    "offsets": { "from": 0, "to": 0 },
+                    "id": 50365,
+                    "p": 0.98,
+                    "t_dtw": -1
+                },
+                {
+                    "text": " Salut",
+                    "timestamps": { "from": "00:00:00,000", "to": "00:00:00,420" },
+                    "offsets": { "from": 0, "to": 420 },
+                    "id": 1,
+                    "p": 0.91,
+                    "t_dtw": -1
+                },
+                {
+                    "text": " tout",
+                    "timestamps": { "from": "00:00:00,420", "to": "00:00:00,700" },
+                    "offsets": { "from": 420, "to": 700 },
+                    "id": 2,
+                    "p": 0.97,
+                    "t_dtw": -1
+                },
+                {
+                    "text": " le",
+                    "timestamps": { "from": "00:00:00,700", "to": "00:00:00,820" },
+                    "offsets": { "from": 700, "to": 820 },
+                    "id": 3,
+                    "p": 0.99,
+                    "t_dtw": -1
+                },
+                {
+                    "text": " monde",
+                    "timestamps": { "from": "00:00:00,820", "to": "00:00:01,200" },
+                    "offsets": { "from": 820, "to": 1200 },
+                    "id": 4,
+                    "p": 0.99,
+                    "t_dtw": -1
+                },
+                {
+                    "text": ",",
+                    "timestamps": { "from": "00:00:01,200", "to": "00:00:01,240" },
+                    "offsets": { "from": 1200, "to": 1240 },
+                    "id": 5,
+                    "p": 0.8,
+                    "t_dtw": -1
+                },
+                {
+                    "text": " c",
+                    "timestamps": { "from": "00:00:01,300", "to": "00:00:01,380" },
+                    "offsets": { "from": 1300, "to": 1380 },
+                    "id": 6,
+                    "p": 0.95,
+                    "t_dtw": -1
+                },
+                {
+                    "text": "'est",
+                    "timestamps": { "from": "00:00:01,380", "to": "00:00:01,600" },
+                    "offsets": { "from": 1380, "to": 1600 },
+                    "id": 7,
+                    "p": 0.85,
+                    "t_dtw": -1
+                },
+                {
+                    "text": " Ém",
+                    "timestamps": { "from": "00:00:01,650", "to": "00:00:01,900" },
+                    "offsets": { "from": 1650, "to": 1900 },
+                    "id": 8,
+                    "p": 0.6,
+                    "t_dtw": -1
+                },
+                {
+                    "text": "ilie",
+                    "timestamps": { "from": "00:00:01,900", "to": "00:00:02,300" },
+                    "offsets": { "from": 1900, "to": 2300 },
+                    "id": 9,
+                    "p": 0.7,
+                    "t_dtw": -1
+                },
+                {
+                    "text": ".",
+                    "timestamps": { "from": "00:00:02,300", "to": "00:00:02,400" },
+                    "offsets": { "from": 2300, "to": 2400 },
+                    "id": 10,
+                    "p": 0.9,
+                    "t_dtw": -1
+                },
+                {
+                    "text": "[_TT_120]",
+                    "timestamps": { "from": "00:00:02,400", "to": "00:00:02,400" },
+                    "offsets": { "from": 2400, "to": 2400 },
+                    "id": 50485,
+                    "p": 0.5,
+                    "t_dtw": -1
+                }
+            ]
+        },
+        {
+            "timestamps": { "from": "00:00:02,400", "to": "00:00:04,000" },
+            "offsets": { "from": 2400, "to": 4000 },
+            "text": " On parle de \"pitching\" <aujourd'hui> & demain!",
+            "tokens": [
+                {
+                    "text": " On",
+                    "offsets": { "from": 2400, "to": 2600 },
+                    "id": 11,
+                    "p": 0.99,
+                    "t_dtw": -1
+                },
+                {
+                    "text": " parle",
+                    "offsets": { "from": 2600, "to": 2900 },
+                    "id": 12,
+                    "p": 0.99,
+                    "t_dtw": -1
+                },
+                {
+                    "text": " de",
+                    "offsets": { "from": 2900, "to": 3000 },
+                    "id": 13,
+                    "p": 0.99,
+                    "t_dtw": -1
+                },
+                {
+                    "text": " \"pitching\"",
+                    "offsets": { "from": 3000, "to": 3400 },
+                    "id": 14,
+                    "p": 0.5,
+                    "t_dtw": -1
+                },
+                {
+                    "text": " <aujourd'hui>",
+                    "offsets": { "from": 3400, "to": 3700 },
+                    "id": 15,
+                    "p": 0.9,
+                    "t_dtw": -1
+                },
+                {
+                    "text": " &",
+                    "offsets": { "from": 3700, "to": 3750 },
+                    "id": 16,
+                    "p": 0.9,
+                    "t_dtw": -1
+                },
+                {
+                    "text": " demain",
+                    "offsets": { "from": 3750, "to": 3950 },
+                    "id": 17,
+                    "p": 0.9,
+                    "t_dtw": -1
+                },
+                {
+                    "text": "!",
+                    "offsets": { "from": 3950, "to": 4000 },
+                    "id": 18,
+                    "p": 0.9,
+                    "t_dtw": -1
+                }
+            ]
+        }
+    ]
+}
