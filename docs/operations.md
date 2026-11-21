@@ -201,13 +201,17 @@ An application that holds its user's token for a platform (Vimeo, Instagram's `m
 | `ai.transcribe` | Transcript with timings: WebVTT, SRT, and JSON with words and speakers           | ✓   |
 | `ai.highlights` | Suggested extracts (start, end, title, score) from the transcript and the scenes |     |
 
-`ai.transcribe` reads audio files and the soundtrack of videos, on the `ai` queue. It extracts the first audio stream as 16 kHz mono PCM and asks the `transcription` provider for a transcript.
+`ai.transcribe` reads audio files and the soundtrack of videos, on the `ai` queue. It extracts the first audio stream as 16 kHz mono PCM and asks the project's `transcription` provider for a transcript. The files, metadata, errors, cancel and retries are the same for every provider: see [Transcripts](protocol.md#transcripts).
 
-- Options: `language` (`auto` by default, detected from the first 30 seconds, or an ISO 639-1 code such as `fr`), `model` (the worker's `ECLAIR_WHISPER_MODEL` by default), `formats` (`["json", "vtt", "srt"]`, the first is the main file), `words` (`true`: word timings in the JSON) and `prompt`, names and words likely to be spoken, to help the model spell them.
-- `transcript.json` (role `transcript`): `language`, `duration`, `provider`, `model`, `text` and `segments`, each with `start`, `end` (seconds), `text` and `words` (`start`, `end`, `text`, `probability`). `transcript.vtt` and `transcript.srt` (role `subtitles`): cues of at most two lines of 42 characters and 7 seconds, cut at word boundaries and after sentences.
-- Its metadata: `provider`, `model`, `language`, `duration`, `speech` (`false` when nothing was said), `segments`, `words`. The project's usage gets the seconds of audio transcribed.
-- Silence (a peak below -60 dB) gives an empty transcript without running a model. A file without audio fails with `unsupported_input`, audio longer than `ECLAIR_TRANSCRIBE_MAX_DURATION` with `limit_exceeded`, and a model the worker doesn't have with `provider_failed`.
-- With `local-whisper`, whisper.cpp runs `ggml-<model>.bin` from `ECLAIR_MODELS_DIR`, with Silero voice activity detection when `ggml-silero-v6.2.0.bin` is there, which keeps it from making up text in silences and music. Speakers aren't told apart yet.
+- Options: `language` (`auto` by default, or an ISO 639-1 code such as `fr`, or a locale such as `fr-CA` for the providers that tell them apart), `provider` (one of the project's `aiProviders`), `model` (for `local-whisper`: the worker's `ECLAIR_WHISPER_MODEL` by default), `formats` (`["json", "vtt", "srt"]`, the first is the main file), `words` (`true`: word timings in the JSON) and `prompt`, names and words likely to be spoken, for whisper.cpp.
+- Silence (a peak below -60 dB) gives an empty transcript without calling a provider.
+
+| Provider            | Runs                                                                                                                                                | Languages                                                                                                             |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `local-whisper`     | whisper.cpp on the worker, `ggml-<model>.bin` from `ECLAIR_MODELS_DIR`, with Silero voice activity detection when `ggml-silero-v6.2.0.bin` is there | Detected from the first 30 seconds, or given; locales count as their language                                         |
+| `amazon-transcribe` | A batch job of Amazon Transcribe in the project's AWS account. External: the project must allow it                                                  | Given (`fr` is `fr-CA` unless the project's `languages` say otherwise), or identified among the project's `languages` |
+
+`amazon-transcribe` uploads the audio as FLAC (lossless, about half the size of PCM: 2 MB a minute) to the project's bucket under an unpredictable key below its `prefix`, starts a job named after the task, follows it, reads the transcript from the bucket and converts it, then deletes the audio, the transcript and the job, after a failure or a cancel too. A lifecycle rule that expires the prefix after a day catches what a crashed worker leaves. The project's AWS key needs `transcribe:StartTranscriptionJob`, `GetTranscriptionJob` and `DeleteTranscriptionJob`, and `s3:PutObject`, `GetObject` and `DeleteObject` on the prefix.
 
 `image.focus`, `image.describe` and `video.reframe` also use AI providers.
 

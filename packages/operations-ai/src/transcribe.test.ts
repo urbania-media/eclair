@@ -4,6 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import type { OperationProviders } from '@eclair-js/operation';
 import { missingBinaries, skipWithoutBinaries } from '@eclair-js/operation/testing';
+import { validate } from '@eclair-js/protocol';
 
 import { fakeModels, runOn } from './test-helpers.ts';
 import { transcribe } from './transcribe.ts';
@@ -73,6 +74,9 @@ describe.skipIf(skipWithoutBinaries(FFMPEG))('ai.transcribe, with a fake whisper
                 'Salut tout le monde, c\'est Émilie. On parle de "pitching" <aujourd\'hui> & demain!',
             );
             expect(json.segments[0]?.words).toHaveLength(6);
+            // The file and the metadata are what the protocol says, whatever the provider.
+            expect(validate('Transcript', json)).toMatchObject({ valid: true });
+            expect(validate('TranscribeMetadata', result.metadata)).toMatchObject({ valid: true });
             const vtt = await readFile(result.files[1]?.path ?? '', 'utf8');
             expect(vtt).toContain(
                 "00:00:00.000 --> 00:00:02.400\nSalut tout le monde, c'est Émilie.",
