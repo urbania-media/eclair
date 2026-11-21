@@ -38,7 +38,7 @@ export const AmazonTranscribeCredentials = Type.Object(
         languages: Type.Optional(
             Type.String({ pattern: '^[a-z]{2}-[A-Z]{2}(,[a-z]{2}-[A-Z]{2})*$' }),
         ),
-        /** List price in US dollars per minute, to report the cost of each task: `0.024`. */
+        /** List price in US dollars per minute, to report the cost of each task: `0.006`. */
         pricePerMinute: Type.Optional(Type.String({ pattern: '^[0-9]+(\\.[0-9]+)?$' })),
     },
     { additionalProperties: false },
