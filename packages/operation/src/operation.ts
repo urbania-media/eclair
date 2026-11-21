@@ -28,6 +28,20 @@ export interface OutputOptions {
     thumbhash?: string | undefined;
 }
 
+/** A capability of AI providers (decision 0008). */
+export type ProviderCapability = 'transcription' | 'vision' | 'language';
+
+/**
+ * The provider that answers a capability for a task, and its settings from the operator's
+ * configuration: `local-whisper` with its models directory, for example.
+ */
+export interface ProviderSettings {
+    name: string;
+    settings: Readonly<Record<string, unknown>>;
+}
+
+export type OperationProviders = Partial<Record<ProviderCapability, ProviderSettings>>;
+
 export interface OperationLogger {
     debug(message: string, data?: Record<string, unknown>): void;
     info(message: string, data?: Record<string, unknown>): void;
@@ -62,11 +76,21 @@ export interface OperationContext {
      * (`master.m3u8`, `0.jpg`): the worker uploads it under the task's path.
      */
     output(name: string, path: string, options?: OutputOptions): void;
+    /**
+     * The AI providers the task may use, by capability (decision 0008). An AI operation asks for
+     * a capability here, never for an API or a model of its own.
+     */
+    providers?: OperationProviders;
 }
 
 export interface OperationResult {
     /** Metadata the operation read or computed. */
     metadata?: Record<string, unknown>;
+    /**
+     * What the task used, for the project's usage, when the operation knows better than the
+     * job's probe: the seconds of media a provider transcribed, for example.
+     */
+    usage?: { mediaSeconds?: number };
 }
 
 /** A JSON Schema object, for plugins that don't use TypeBox. Options are then untyped. */

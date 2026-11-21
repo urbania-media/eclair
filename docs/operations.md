@@ -201,6 +201,14 @@ An application that holds its user's token for a platform (Vimeo, Instagram's `m
 | `ai.transcribe` | Transcript with timings: WebVTT, SRT, and JSON with words and speakers           | ✓   |
 | `ai.highlights` | Suggested extracts (start, end, title, score) from the transcript and the scenes |     |
 
+`ai.transcribe` reads audio files and the soundtrack of videos, on the `ai` queue. It extracts the first audio stream as 16 kHz mono PCM and asks the `transcription` provider for a transcript.
+
+- Options: `language` (`auto` by default, detected from the first 30 seconds, or an ISO 639-1 code such as `fr`), `model` (the worker's `ECLAIR_WHISPER_MODEL` by default), `formats` (`["json", "vtt", "srt"]`, the first is the main file), `words` (`true`: word timings in the JSON) and `prompt`, names and words likely to be spoken, to help the model spell them.
+- `transcript.json` (role `transcript`): `language`, `duration`, `provider`, `model`, `text` and `segments`, each with `start`, `end` (seconds), `text` and `words` (`start`, `end`, `text`, `probability`). `transcript.vtt` and `transcript.srt` (role `subtitles`): cues of at most two lines of 42 characters and 7 seconds, cut at word boundaries and after sentences.
+- Its metadata: `provider`, `model`, `language`, `duration`, `speech` (`false` when nothing was said), `segments`, `words`. The project's usage gets the seconds of audio transcribed.
+- Silence (a peak below -60 dB) gives an empty transcript without running a model. A file without audio fails with `unsupported_input`, audio longer than `ECLAIR_TRANSCRIBE_MAX_DURATION` with `limit_exceeded`, and a model the worker doesn't have with `provider_failed`.
+- With `local-whisper`, whisper.cpp runs `ggml-<model>.bin` from `ECLAIR_MODELS_DIR`, with Silero voice activity detection when `ggml-silero-v6.2.0.bin` is there, which keeps it from making up text in silences and music. Speakers aren't told apart yet.
+
 `image.focus`, `image.describe` and `video.reframe` also use AI providers.
 
 ## AI providers
