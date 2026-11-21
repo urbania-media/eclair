@@ -1,3 +1,5 @@
+export { defineAiProvider } from './ai-providers.ts';
+export type { AiProvider, AiProviderDefinition } from './ai-providers.ts';
 export { CAPABILITIES, isCapability } from './capabilities.ts';
 export type { Capability } from './capabilities.ts';
 export { detectType, kindOf, matchesMime } from './detect.ts';

@@ -44,6 +44,7 @@ export interface RunOperationOptions {
     probe?: ProbeMetadata;
     /** The AI providers of the context, by capability. */
     providers?: OperationProviders;
+    taskId?: string;
 }
 
 export interface RunOperationResult {
@@ -110,6 +111,7 @@ export async function runOperation(
         signal: controller.signal,
         output: (name, path, outputOptions) => files.push({ name, path, ...outputOptions }),
         ...(run.providers === undefined ? {} : { providers: run.providers }),
+        ...(run.taskId === undefined ? {} : { taskId: run.taskId }),
     };
 
     try {

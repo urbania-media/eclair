@@ -157,10 +157,10 @@ export interface Config {
     /** Milliseconds: the longest embed `embed.download` takes, when the project doesn't set one. */
     embedMaxDuration: number;
     /**
-     * The AI providers of the workers, by capability (decision 0008): `local-whisper`, with the
-     * models directory, its default model, threads and longest audio, in seconds.
+     * The operator's settings of the AI providers, by name (decision 0008): `local-whisper` has
+     * the models directory, its default model, threads and longest audio, in seconds.
      */
-    aiProviders: { transcription: { name: string; settings: Record<string, unknown> } };
+    aiProviders: Record<string, Record<string, unknown>>;
     logLevel: LogLevel;
     binaries: Record<BinaryName, string>;
     /**
@@ -335,16 +335,16 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
         jobRetention: parseDuration(environment.ECLAIR_JOB_RETENTION),
         embedMaxDuration: parseDuration(environment.ECLAIR_EMBED_MAX_DURATION),
         aiProviders: {
-            transcription: {
-                name: 'local-whisper',
-                settings: {
-                    modelsDir: environment.ECLAIR_MODELS_DIR,
-                    defaultModel: environment.ECLAIR_WHISPER_MODEL,
-                    maxDuration: parseDuration(environment.ECLAIR_TRANSCRIBE_MAX_DURATION) / 1000,
-                    ...(environment.ECLAIR_WHISPER_THREADS === undefined
-                        ? {}
-                        : { threads: Number(environment.ECLAIR_WHISPER_THREADS) }),
-                },
+            'local-whisper': {
+                modelsDir: environment.ECLAIR_MODELS_DIR,
+                defaultModel: environment.ECLAIR_WHISPER_MODEL,
+                maxDuration: parseDuration(environment.ECLAIR_TRANSCRIBE_MAX_DURATION) / 1000,
+                ...(environment.ECLAIR_WHISPER_THREADS === undefined
+                    ? {}
+                    : { threads: Number(environment.ECLAIR_WHISPER_THREADS) }),
+            },
+            'amazon-transcribe': {
+                maxDuration: parseDuration(environment.ECLAIR_TRANSCRIBE_MAX_DURATION) / 1000,
             },
         },
         logLevel: environment.ECLAIR_LOG_LEVEL,

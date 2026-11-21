@@ -1,7 +1,14 @@
 import type { ValidateFunction } from 'ajv/dist/2020.js';
 
 import { isCapability } from '@eclair-js/operation';
-import type { EmbedMatch, EmbedProvider, Operation, OperationPlugin } from '@eclair-js/operation';
+import type {
+    AiProvider,
+    EmbedMatch,
+    EmbedProvider,
+    Operation,
+    OperationPlugin,
+    ProviderCapability,
+} from '@eclair-js/operation';
 import type { Operation as OperationResponse, TaskRequest } from '@eclair-js/protocol';
 
 import type { ProjectSettings } from '../projects/settings.ts';
@@ -30,19 +37,30 @@ export class PluginError extends Error {
 function contentsOf(
     plugin: string,
     module: unknown,
-): { operations: readonly unknown[]; embedProviders: readonly unknown[] } {
+): {
+    operations: readonly unknown[];
+    embedProviders: readonly unknown[];
+    aiProviders: readonly unknown[];
+} {
     const exported = (module as { default?: unknown }).default ?? module;
     if (Array.isArray(exported)) {
-        return { operations: exported, embedProviders: [] };
+        return { operations: exported, embedProviders: [], aiProviders: [] };
     }
-    const { operations, embedProviders } = exported as Partial<
+    const { operations, embedProviders, aiProviders } = exported as Partial<
         Extract<OperationPlugin, { operations: unknown }>
     >;
     if (Array.isArray(operations)) {
         if (embedProviders !== undefined && !Array.isArray(embedProviders)) {
             throw new PluginError(plugin, 'embedProviders must be a list.');
         }
-        return { operations, embedProviders: embedProviders ?? [] };
+        if (aiProviders !== undefined && !Array.isArray(aiProviders)) {
+            throw new PluginError(plugin, 'aiProviders must be a list.');
+        }
+        return {
+            operations,
+            embedProviders: embedProviders ?? [],
+            aiProviders: aiProviders ?? [],
+        };
     }
     throw new PluginError(
         plugin,
@@ -59,6 +77,25 @@ function isEmbedProvider(value: unknown): value is EmbedProvider {
         typeof candidate.title === 'string' &&
         typeof candidate.match === 'function'
     );
+}
+
+function isAiProvider(value: unknown): value is AiProvider {
+    const candidate = value as Partial<AiProvider> | null;
+    return (
+        typeof candidate === 'object' &&
+        candidate !== null &&
+        typeof candidate.name === 'string' &&
+        typeof candidate.capability === 'string' &&
+        typeof candidate.external === 'boolean'
+    );
+}
+
+/** Why a task can't use an AI provider: the message, for its `provider` option. */
+export class ProviderNotAllowedError extends Error {
+    constructor(message: string) {
+        super(message);
+        this.name = 'ProviderNotAllowedError';
+    }
 }
 
 /** An embed that a provider of the server recognized in a page URL. */
@@ -92,8 +129,19 @@ export class OperationRegistry {
     readonly #latest = new Map<string, Operation>();
     readonly #validators = new Map<string, ValidateFunction>();
     readonly #providers = new Map<string, EmbedProvider>();
+    readonly #aiProviders = new Map<string, AiProvider>();
 
-    constructor(operations: readonly Operation[], embedProviders: readonly EmbedProvider[] = []) {
+    constructor(
+        operations: readonly Operation[],
+        embedProviders: readonly EmbedProvider[] = [],
+        aiProviders: readonly AiProvider[] = [],
+    ) {
+        for (const provider of aiProviders) {
+            if (this.#aiProviders.has(provider.name)) {
+                throw new Error(`Two plugins provide the AI provider ${provider.name}.`);
+            }
+            this.#aiProviders.set(provider.name, provider);
+        }
         for (const provider of embedProviders) {
             if (this.#providers.has(provider.name)) {
                 throw new Error(`Two plugins provide the embed provider ${provider.name}.`);
@@ -135,6 +183,7 @@ export class OperationRegistry {
     ): Promise<OperationRegistry> {
         const operations: Operation[] = [];
         const embedProviders: EmbedProvider[] = [];
+        const aiProviders: AiProvider[] = [];
         for (const plugin of new Set(plugins)) {
             let module: unknown;
             try {
@@ -154,6 +203,15 @@ export class OperationRegistry {
                 }
                 embedProviders.push(provider);
             }
+            for (const provider of contents.aiProviders) {
+                if (!isAiProvider(provider)) {
+                    throw new PluginError(
+                        plugin,
+                        'exports an AI provider that defineAiProvider() did not create.',
+                    );
+                }
+                aiProviders.push(provider);
+            }
             for (const operation of contents.operations) {
                 if (!isOperation(operation)) {
                     throw new PluginError(
@@ -165,7 +223,7 @@ export class OperationRegistry {
             }
         }
         try {
-            return new OperationRegistry(operations, embedProviders);
+            return new OperationRegistry(operations, embedProviders, aiProviders);
         } catch (error) {
             throw new PluginError(plugins.join(', '), (error as Error).message, { cause: error });
         }
@@ -182,6 +240,54 @@ export class OperationRegistry {
     /** An embed provider of the server, by name. */
     embedProvider(name: string): EmbedProvider | undefined {
         return this.#providers.get(name);
+    }
+
+    /** An AI provider of the server, by name. */
+    aiProvider(name: string): AiProvider | undefined {
+        return this.#aiProviders.get(name);
+    }
+
+    /** The AI providers of the server, in the order the plugins declare them. */
+    aiProviders(): AiProvider[] {
+        return [...this.#aiProviders.values()];
+    }
+
+    /**
+     * The AI provider a task of an operation uses (decision 0008): the task's `provider` option,
+     * else the first of the project's `aiProviders` for the capability, else the server's first
+     * local provider. Throws a `ProviderNotAllowedError` when the project may not use it.
+     */
+    providerFor(
+        capability: ProviderCapability,
+        requested: unknown,
+        settings: ProjectSettings | undefined,
+    ): AiProvider {
+        const allowed =
+            (settings?.aiProviders as Partial<Record<ProviderCapability, string[]>> | undefined)?.[
+                capability
+            ] ??
+            this.aiProviders()
+                .filter((provider) => provider.capability === capability && !provider.external)
+                .map((provider) => provider.name);
+        const name = typeof requested === 'string' ? requested : allowed[0];
+        if (name === undefined) {
+            throw new ProviderNotAllowedError(`no ${capability} provider is available`);
+        }
+        const provider = this.aiProvider(name);
+        if (provider === undefined || provider.capability !== capability) {
+            throw new ProviderNotAllowedError(
+                `"${name}" is not a ${capability} provider of this server`,
+            );
+        }
+        if (!allowed.includes(name)) {
+            throw new ProviderNotAllowedError(`the project may not use ${name}`);
+        }
+        if (provider.external && settings?.externalAiProviders !== true) {
+            throw new ProviderNotAllowedError(
+                `${name} sends media to a third party: the project must allow external AI providers`,
+            );
+        }
+        return provider;
     }
 
     /** The embed providers of the server, sorted by name. */
@@ -263,6 +369,20 @@ export class OperationRegistry {
                     throw error;
                 }
                 Object.assign(errors, error.errors);
+            }
+            if (operation.providers !== undefined) {
+                try {
+                    this.providerFor(
+                        operation.providers,
+                        (task.options as Record<string, unknown> | undefined)?.['provider'],
+                        settings,
+                    );
+                } catch (error) {
+                    if (!(error instanceof ProviderNotAllowedError)) {
+                        throw error;
+                    }
+                    errors[`${base}/options/provider`] = [error.message];
+                }
             }
         }
         if (Object.keys(errors).length > 0) {
