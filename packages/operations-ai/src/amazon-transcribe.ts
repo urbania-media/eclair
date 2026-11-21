@@ -39,7 +39,8 @@ export const AmazonTranscribeCredentials = Type.Object(
          * AWS key may follow and delete only the jobs that carry it.
          */
         jobPrefix: Type.Optional(Type.String({ pattern: '^[0-9A-Za-z._-]{1,60}$' })),
-        /** Locales to identify the language among, comma-separated: `fr-CA,en-CA`. */
+        /** Locales to identify the language among, comma-separated: `fr-CA,en-US`. Amazon identifies only
+         * some locales: `en-CA`, for one, isn't among them. */
         languages: Type.Optional(
             Type.String({ pattern: '^[a-z]{2}-[A-Z]{2}(,[a-z]{2}-[A-Z]{2})*$' }),
         ),
@@ -370,7 +371,8 @@ export function amazonTranscribe(
             const folder = `${settings.prefix}${randomUUID()}/`;
             const mediaKey = `${folder}audio.flac`;
             const outputKey = `${folder}transcript.json`;
-            const toDelete = new Set<string>([mediaKey]);
+            // Amazon also writes an empty file in the output folder to check its access.
+            const toDelete = new Set<string>([mediaKey, `${folder}.write_access_check_file.temp`]);
             let jobStarted = false;
 
             const locale =

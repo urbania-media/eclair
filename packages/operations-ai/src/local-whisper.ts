@@ -27,7 +27,17 @@ export interface LocalWhisperSettings {
     threads: number;
     /** Seconds of audio a task can transcribe. */
     maxDuration: number;
+    /**
+     * Text tokens of the previous windows that whisper.cpp keeps as context. 0 by default: with
+     * whisper's default, it sometimes repeats a made-up sentence or drops whole sentences (#119).
+     * With a `prompt`, the prompt is repeated on each window, with at most this many tokens, or
+     * `PROMPT_CONTEXT` when it is 0.
+     */
+    maxContext: number;
 }
+
+/** Tokens of context when a task gives a prompt: room for a 500-character prompt. */
+const PROMPT_CONTEXT = 160;
 
 export const LOCAL_WHISPER_DEFAULTS: LocalWhisperSettings = {
     modelsDir: '/var/lib/eclair/models',
@@ -35,6 +45,7 @@ export const LOCAL_WHISPER_DEFAULTS: LocalWhisperSettings = {
     vadModel: 'ggml-silero-v6.2.0.bin',
     threads: availableParallelism(),
     maxDuration: 4 * 3600,
+    maxContext: 0,
 };
 
 /** Reads the settings the context gives, over the defaults. Unknown keys are ignored. */
@@ -56,6 +67,12 @@ export function localWhisperSettings(
                 : (string('vadModel') ?? LOCAL_WHISPER_DEFAULTS.vadModel),
         threads: Math.floor(number('threads') ?? LOCAL_WHISPER_DEFAULTS.threads),
         maxDuration: number('maxDuration') ?? LOCAL_WHISPER_DEFAULTS.maxDuration,
+        maxContext:
+            typeof settings['maxContext'] === 'number' &&
+            Number.isInteger(settings['maxContext']) &&
+            settings['maxContext'] >= 0
+                ? settings['maxContext']
+                : LOCAL_WHISPER_DEFAULTS.maxContext,
     };
 }
 
@@ -209,7 +226,17 @@ export function localWhisper(settings: LocalWhisperSettings): TranscriptionProvi
                 output,
                 '--no-prints',
                 ...(vad && vadPath !== undefined ? ['--vad', '--vad-model', vadPath] : []),
-                ...(request.prompt === undefined ? [] : ['--prompt', request.prompt]),
+                // whisper.cpp ignores a prompt without context: with one, the prompt is repeated
+                // on each window instead of the previous windows' text.
+                ...(request.prompt === undefined
+                    ? ['--max-context', String(settings.maxContext)]
+                    : [
+                          '--max-context',
+                          String(settings.maxContext === 0 ? PROMPT_CONTEXT : settings.maxContext),
+                          '--prompt',
+                          request.prompt,
+                          '--carry-initial-prompt',
+                      ]),
             ]);
             let raw: string;
             try {

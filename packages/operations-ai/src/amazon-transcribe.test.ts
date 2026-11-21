@@ -22,7 +22,7 @@ const CREDENTIALS = {
     secretAccessKey: 'secret',
     region: 'ca-central-1',
     bucket: 'media-transcribe',
-    languages: 'fr-CA,en-CA',
+    languages: 'fr-CA,en-US',
     pricePerMinute: '0.006',
     jobPrefix: 'media-',
 };
@@ -93,7 +93,7 @@ describe('amazonTranscribeSettings', () => {
             bucket: 'media-transcribe',
             prefix: 'eclair-transcribe/',
             jobPrefix: 'media-',
-            languages: ['fr-CA', 'en-CA'],
+            languages: ['fr-CA', 'en-US'],
             pricePerMinute: 0.006,
             maxDuration: 8 * 3600,
         });
@@ -251,8 +251,9 @@ describe.skipIf(skipWithoutBinaries(['ffmpeg']))('amazon-transcribe, with fake A
             },
         });
         const commands = clients.sent.map((entry) => entry.command);
-        expect(commands.slice(-4)).toEqual([
+        expect(commands.slice(-5)).toEqual([
             'DeleteTranscriptionJob',
+            'DeleteObject',
             'DeleteObject',
             'DeleteObject',
             'DeleteObject',
@@ -264,6 +265,7 @@ describe.skipIf(skipWithoutBinaries(['ffmpeg']))('amazon-transcribe, with fake A
         ).toEqual(
             expect.arrayContaining([
                 key,
+                key.replace('audio.flac', '.write_access_check_file.temp'),
                 'eclair-transcribe/old/audio.flac',
                 'eclair-transcribe/old/transcript.json',
             ]),
@@ -285,7 +287,7 @@ describe.skipIf(skipWithoutBinaries(['ffmpeg']))('amazon-transcribe, with fake A
         ).rejects.toBeInstanceOf(OperationError);
         expect(clients.sent[1]?.input).toMatchObject({
             IdentifyLanguage: true,
-            LanguageOptions: ['fr-CA', 'en-CA'],
+            LanguageOptions: ['fr-CA', 'en-US'],
         });
         expect(clients.sent[1]?.input).not.toHaveProperty('LanguageCode');
     });
@@ -369,7 +371,7 @@ describe.skipIf(skipWithoutBinaries(['ffmpeg']))('amazon-transcribe, with fake A
             code: 'provider_refused',
         });
         expect(clients.sent.map((entry) => entry.command)).not.toContain('DeleteTranscriptionJob');
-        expect(warnings).toEqual([{ failures: ['object: AccessDenied'] }]);
+        expect(warnings).toEqual([{ failures: ['object: AccessDenied', 'object: AccessDenied'] }]);
     });
 
     it('refuses audio shorter than half a second and a language without a locale', async () => {

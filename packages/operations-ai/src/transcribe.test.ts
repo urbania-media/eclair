@@ -97,6 +97,8 @@ describe.skipIf(skipWithoutBinaries(FFMPEG))('ai.transcribe, with a fake whisper
                     '2',
                     '--output-json-full',
                     '--vad',
+                    '--max-context',
+                    '0',
                 ]),
             );
             expect(args[args.indexOf('--model') + 1]).toBe(join(models, 'ggml-small.bin'));
@@ -120,8 +122,16 @@ describe.skipIf(skipWithoutBinaries(FFMPEG))('ai.transcribe, with a fake whisper
                 await readFile(join(result.workdir, 'whisper.args.json'), 'utf8'),
             ) as string[];
             expect(args).toEqual(
-                expect.arrayContaining(['--language', 'fr', '--prompt', 'Émilie, TikTok.']),
+                expect.arrayContaining([
+                    '--language',
+                    'fr',
+                    '--prompt',
+                    'Émilie, TikTok.',
+                    '--carry-initial-prompt',
+                ]),
             );
+            // A prompt needs context in whisper.cpp: the prompt alone, repeated on each window.
+            expect(args[args.indexOf('--max-context') + 1]).toBe('160');
         } finally {
             await result.cleanup();
         }
