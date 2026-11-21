@@ -1501,7 +1501,7 @@ export interface components {
         StorageList: {
             data: components["schemas"]["Storage"][];
         };
-        /** @description A provider's credentials for the project, encrypted and never shown again. `youtube`: `apiKey` (YouTube Data API). `vimeo`: `token`. `spotify`: `clientId`, `clientSecret`. `instagram`: `accessToken` (a Meta app token, for oEmbed). `amazon-transcribe`: `accessKeyId`, `secretAccessKey`, `region` and `bucket` (a bucket of the project in that region, where audio and transcripts stay only while a task runs), and optionally `prefix` (`eclair-transcribe/`), `jobPrefix` (`eclair-`, the prefix of its jobs' names), `languages` (locales to identify the language among, `fr-CA,en-CA`) and `pricePerMinute` (US dollars, to report costs). Each provider checks its own. */
+        /** @description A provider's credentials for the project, encrypted and never shown again. `youtube`: `apiKey` (YouTube Data API). `vimeo`: `token`. `spotify`: `clientId`, `clientSecret`. `instagram`: `accessToken` (a Meta app token, for oEmbed). `amazon-transcribe`: `accessKeyId`, `secretAccessKey`, `region` and `bucket` (a bucket of the project in that region, where audio and transcripts stay only while a task runs), and optionally `prefix` (`eclair-transcribe/`), `jobPrefix` (`eclair-`, the prefix of its jobs' names), `languages` (locales to identify the language among, `fr-CA,en-US`, among those Amazon identifies) and `pricePerMinute` (US dollars, to report costs). Each provider checks its own. */
         CredentialsRequest: {
             config: {
                 [key: string]: unknown;
