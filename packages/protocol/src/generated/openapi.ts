@@ -1389,6 +1389,12 @@ export interface components {
             embedDownload?: components["schemas"]["EmbedProvider"][];
             /** @description Longest embed that `embed.download` takes, in seconds. `ECLAIR_EMBED_MAX_DURATION` when not set. */
             embedMaxDuration?: number;
+            /** @description AI providers the project may use, by capability. The first one of a list answers, unless a task asks for another one of the list with its `provider` option. The server's local providers when not set: media stays on the server. */
+            aiProviders?: {
+                transcription?: components["schemas"]["AiProviderName"][];
+            };
+            /** @description Allows the providers of `aiProviders` that send media to a third party (`amazon-transcribe`). Not allowed when not set: a project must say so explicitly. Their credentials are the project's, set with `PUT /admin/v1/projects/{project}/credentials/{provider}`. */
+            externalAiProviders?: boolean;
         };
         AdminProject: {
             id: string;
@@ -1495,7 +1501,7 @@ export interface components {
         StorageList: {
             data: components["schemas"]["Storage"][];
         };
-        /** @description A provider's credentials for the project, encrypted and never shown again. `youtube`: `apiKey` (YouTube Data API). `vimeo`: `token`. `spotify`: `clientId`, `clientSecret`. `instagram`: `accessToken` (a Meta app token, for oEmbed). Each provider checks its own. */
+        /** @description A provider's credentials for the project, encrypted and never shown again. `youtube`: `apiKey` (YouTube Data API). `vimeo`: `token`. `spotify`: `clientId`, `clientSecret`. `instagram`: `accessToken` (a Meta app token, for oEmbed). `amazon-transcribe`: `accessKeyId`, `secretAccessKey`, `region` and `bucket` (a bucket of the project in that region, where audio and transcripts stay only while a task runs), and optionally `prefix` (`eclair-transcribe/`), `languages` (locales to identify the language among, `fr-CA,en-CA`) and `pricePerMinute` (US dollars, to report costs). Each provider checks its own. */
         CredentialsRequest: {
             config: {
                 [key: string]: unknown;
@@ -1659,6 +1665,65 @@ export interface components {
             durationMs: number;
             /** @description Why a step failed, without credentials. */
             message?: string;
+        };
+        /** @description A word of a transcript, with its punctuation, without the space before it. */
+        TranscriptWord: {
+            /** @description Seconds from the start of the media, to the millisecond. */
+            start: number;
+            /** @description Seconds from the start of the media, to the millisecond. Never before `start`. */
+            end: number;
+            text: string;
+            /** @description How sure the provider is of the word, from 0 to 1, when it says. */
+            probability?: number;
+        };
+        /** @description A part of the speech, a sentence or a part of one, as the provider splits it. */
+        TranscriptSegment: {
+            start: number;
+            end: number;
+            /** @description The segment's text, trimmed. */
+            text: string;
+            /** @description The speaker's label, when the provider tells speakers apart. Labels are only comparable within one transcript. */
+            speaker?: string;
+            /** @description The segment's words in order. Left out with `words: false`; empty when the provider gives no word timings. */
+            words?: components["schemas"]["TranscriptWord"][];
+        };
+        /** @description `transcript.json`, the file `ai.transcribe` writes. The same shape whatever the provider: clients don't depend on the provider. Version 1 only gains optional fields. */
+        Transcript: {
+            /** @constant */
+            version: 1;
+            /** @description ISO 639-1 code of the language: the one the task gave, or the one the provider detected. `null` when nothing was said. */
+            language: string | null;
+            /** @description Seconds of audio transcribed. */
+            duration: number;
+            provider: components["schemas"]["AiProviderName"];
+            /** @description The provider's model, when it has several (`large-v3-turbo-q5_0`). */
+            model: string | null;
+            /** @description The whole text: the segments' texts joined by spaces. */
+            text: string;
+            segments: components["schemas"]["TranscriptSegment"][];
+        };
+        /** @description An AI provider of the server: `local-whisper` (whisper.cpp on the workers), `amazon-transcribe`. */
+        AiProviderName: string;
+        /** @description The metadata of an `ai.transcribe` task. */
+        TranscribeMetadata: {
+            provider: components["schemas"]["AiProviderName"];
+            model: string | null;
+            language: string | null;
+            /** @description Seconds of audio. */
+            duration: number;
+            /** @description `false` when nothing was said: silence (no model ran) or no words found. */
+            speech: boolean;
+            segments: number;
+            words: number;
+            /** @description What the provider used. The seconds also go into the project's usage (`mediaSeconds`). */
+            usage: {
+                mediaSeconds: number;
+                /** @description The provider's cost, when it's known (an external provider with a configured price). */
+                cost?: {
+                    amount: number;
+                    currency: string;
+                };
+            };
         };
     };
     responses: {

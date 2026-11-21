@@ -3800,6 +3800,25 @@
                         "description": "Longest embed that `embed.download` takes, in seconds. `ECLAIR_EMBED_MAX_DURATION` when not set.",
                         "type": "integer",
                         "minimum": 1
+                    },
+                    "aiProviders": {
+                        "description": "AI providers the project may use, by capability. The first one of a list answers, unless a task asks for another one of the list with its `provider` option. The server's local providers when not set: media stays on the server.",
+                        "type": "object",
+                        "additionalProperties": false,
+                        "properties": {
+                            "transcription": {
+                                "type": "array",
+                                "minItems": 1,
+                                "uniqueItems": true,
+                                "items": {
+                                    "$ref": "#/components/schemas/AiProviderName"
+                                }
+                            }
+                        }
+                    },
+                    "externalAiProviders": {
+                        "description": "Allows the providers of `aiProviders` that send media to a third party (`amazon-transcribe`). Not allowed when not set: a project must say so explicitly. Their credentials are the project's, set with `PUT /admin/v1/projects/{project}/credentials/{provider}`.",
+                        "type": "boolean"
                     }
                 }
             },
@@ -4105,7 +4124,7 @@
                 }
             },
             "CredentialsRequest": {
-                "description": "A provider's credentials for the project, encrypted and never shown again. `youtube`: `apiKey` (YouTube Data API). `vimeo`: `token`. `spotify`: `clientId`, `clientSecret`. `instagram`: `accessToken` (a Meta app token, for oEmbed). Each provider checks its own.",
+                "description": "A provider's credentials for the project, encrypted and never shown again. `youtube`: `apiKey` (YouTube Data API). `vimeo`: `token`. `spotify`: `clientId`, `clientSecret`. `instagram`: `accessToken` (a Meta app token, for oEmbed). `amazon-transcribe`: `accessKeyId`, `secretAccessKey`, `region` and `bucket` (a bucket of the project in that region, where audio and transcripts stay only while a task runs), and optionally `prefix` (`eclair-transcribe/`), `languages` (locales to identify the language among, `fr-CA,en-CA`) and `pricePerMinute` (US dollars, to report costs). Each provider checks its own.",
                 "type": "object",
                 "required": ["config"],
                 "additionalProperties": false,
@@ -4560,6 +4579,184 @@
                     "message": {
                         "description": "Why a step failed, without credentials.",
                         "type": "string"
+                    }
+                }
+            },
+            "TranscriptWord": {
+                "description": "A word of a transcript, with its punctuation, without the space before it.",
+                "type": "object",
+                "required": ["start", "end", "text"],
+                "additionalProperties": false,
+                "properties": {
+                    "start": {
+                        "description": "Seconds from the start of the media, to the millisecond.",
+                        "type": "number",
+                        "minimum": 0
+                    },
+                    "end": {
+                        "description": "Seconds from the start of the media, to the millisecond. Never before `start`.",
+                        "type": "number",
+                        "minimum": 0
+                    },
+                    "text": {
+                        "type": "string",
+                        "minLength": 1
+                    },
+                    "probability": {
+                        "description": "How sure the provider is of the word, from 0 to 1, when it says.",
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1
+                    }
+                }
+            },
+            "TranscriptSegment": {
+                "description": "A part of the speech, a sentence or a part of one, as the provider splits it.",
+                "type": "object",
+                "required": ["start", "end", "text"],
+                "additionalProperties": false,
+                "properties": {
+                    "start": {
+                        "type": "number",
+                        "minimum": 0
+                    },
+                    "end": {
+                        "type": "number",
+                        "minimum": 0
+                    },
+                    "text": {
+                        "description": "The segment's text, trimmed.",
+                        "type": "string"
+                    },
+                    "speaker": {
+                        "description": "The speaker's label, when the provider tells speakers apart. Labels are only comparable within one transcript.",
+                        "type": "string"
+                    },
+                    "words": {
+                        "description": "The segment's words in order. Left out with `words: false`; empty when the provider gives no word timings.",
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/TranscriptWord"
+                        }
+                    }
+                }
+            },
+            "Transcript": {
+                "description": "`transcript.json`, the file `ai.transcribe` writes. The same shape whatever the provider: clients don't depend on the provider. Version 1 only gains optional fields.",
+                "type": "object",
+                "required": [
+                    "version",
+                    "language",
+                    "duration",
+                    "provider",
+                    "model",
+                    "text",
+                    "segments"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                    "version": {
+                        "const": 1
+                    },
+                    "language": {
+                        "description": "ISO 639-1 code of the language: the one the task gave, or the one the provider detected. `null` when nothing was said.",
+                        "type": ["string", "null"],
+                        "pattern": "^[a-z]{2,3}$"
+                    },
+                    "duration": {
+                        "description": "Seconds of audio transcribed.",
+                        "type": "number",
+                        "minimum": 0
+                    },
+                    "provider": {
+                        "$ref": "#/components/schemas/AiProviderName"
+                    },
+                    "model": {
+                        "description": "The provider's model, when it has several (`large-v3-turbo-q5_0`).",
+                        "type": ["string", "null"]
+                    },
+                    "text": {
+                        "description": "The whole text: the segments' texts joined by spaces.",
+                        "type": "string"
+                    },
+                    "segments": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/TranscriptSegment"
+                        }
+                    }
+                }
+            },
+            "AiProviderName": {
+                "description": "An AI provider of the server: `local-whisper` (whisper.cpp on the workers), `amazon-transcribe`.",
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9-]{0,63}$"
+            },
+            "TranscribeMetadata": {
+                "description": "The metadata of an `ai.transcribe` task.",
+                "type": "object",
+                "required": [
+                    "provider",
+                    "model",
+                    "language",
+                    "duration",
+                    "speech",
+                    "segments",
+                    "words",
+                    "usage"
+                ],
+                "properties": {
+                    "provider": {
+                        "$ref": "#/components/schemas/AiProviderName"
+                    },
+                    "model": {
+                        "type": ["string", "null"]
+                    },
+                    "language": {
+                        "type": ["string", "null"]
+                    },
+                    "duration": {
+                        "description": "Seconds of audio.",
+                        "type": "number",
+                        "minimum": 0
+                    },
+                    "speech": {
+                        "description": "`false` when nothing was said: silence (no model ran) or no words found.",
+                        "type": "boolean"
+                    },
+                    "segments": {
+                        "type": "integer",
+                        "minimum": 0
+                    },
+                    "words": {
+                        "type": "integer",
+                        "minimum": 0
+                    },
+                    "usage": {
+                        "description": "What the provider used. The seconds also go into the project's usage (`mediaSeconds`).",
+                        "type": "object",
+                        "required": ["mediaSeconds"],
+                        "properties": {
+                            "mediaSeconds": {
+                                "type": "number",
+                                "minimum": 0
+                            },
+                            "cost": {
+                                "description": "The provider's cost, when it's known (an external provider with a configured price).",
+                                "type": "object",
+                                "required": ["amount", "currency"],
+                                "properties": {
+                                    "amount": {
+                                        "type": "number",
+                                        "minimum": 0
+                                    },
+                                    "currency": {
+                                        "type": "string",
+                                        "pattern": "^[A-Z]{3}$"
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }

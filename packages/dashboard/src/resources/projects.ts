@@ -41,6 +41,9 @@ export const SETTINGS = {
     embedProviders: { unit: null },
     embedDownload: { unit: null },
     embedMaxDuration: { unit: 1 },
+    // Kept as they are when a project is saved, until the dashboard has fields for them.
+    aiProviders: { unit: null },
+    externalAiProviders: { unit: null },
 } as const satisfies Record<keyof ProjectSettings, { unit: number | null }>;
 
 type SettingName = keyof typeof SETTINGS;
