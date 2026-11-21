@@ -23,7 +23,7 @@ const CREDENTIALS = {
     region: 'ca-central-1',
     bucket: 'media-transcribe',
     languages: 'fr-CA,en-CA',
-    pricePerMinute: '0.024',
+    pricePerMinute: '0.006',
 };
 
 describe('parseAmazonTranscript', () => {
@@ -92,7 +92,7 @@ describe('amazonTranscribeSettings', () => {
             bucket: 'media-transcribe',
             prefix: 'eclair-transcribe/',
             languages: ['fr-CA', 'en-CA'],
-            pricePerMinute: 0.024,
+            pricePerMinute: 0.006,
             maxDuration: 8 * 3600,
         });
         expect(() => amazonTranscribeSettings({ accessKeyId: 'a', secretAccessKey: 'b' })).toThrow(
@@ -228,7 +228,7 @@ describe.skipIf(skipWithoutBinaries(['ffmpeg']))('amazon-transcribe, with fake A
 
         expect(result.transcript.language).toBe('fr');
         expect(result.transcript.segments).toHaveLength(2);
-        expect(result.usage).toEqual({ mediaSeconds: 2, cost: 0.0008 });
+        expect(result.usage).toEqual({ mediaSeconds: 2, cost: 0.0002 });
 
         const put = clients.sent[0];
         expect(put?.command).toBe('PutObject');
