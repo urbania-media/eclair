@@ -24,6 +24,7 @@ const CREDENTIALS = {
     bucket: 'media-transcribe',
     languages: 'fr-CA,en-CA',
     pricePerMinute: '0.006',
+    jobPrefix: 'media-',
 };
 
 describe('parseAmazonTranscript', () => {
@@ -91,6 +92,7 @@ describe('amazonTranscribeSettings', () => {
             region: 'ca-central-1',
             bucket: 'media-transcribe',
             prefix: 'eclair-transcribe/',
+            jobPrefix: 'media-',
             languages: ['fr-CA', 'en-CA'],
             pricePerMinute: 0.006,
             maxDuration: 8 * 3600,
@@ -193,7 +195,7 @@ describe.skipIf(skipWithoutBinaries(['ffmpeg']))('amazon-transcribe, with fake A
     function completedJob(status = 'COMPLETED', extra: Record<string, unknown> = {}) {
         return {
             TranscriptionJob: {
-                TranscriptionJobName: 'eclair-tsk_01TEST',
+                TranscriptionJobName: 'media-tsk_01TEST',
                 TranscriptionJobStatus: status,
                 LanguageCode: 'fr-CA',
                 Media: { MediaFileUri: 's3://media-transcribe/eclair-transcribe/old/audio.flac' },
@@ -240,7 +242,7 @@ describe.skipIf(skipWithoutBinaries(['ffmpeg']))('amazon-transcribe, with fake A
         expect(clients.sent[1]).toEqual({
             command: 'StartTranscriptionJob',
             input: {
-                TranscriptionJobName: 'eclair-tsk_01TEST',
+                TranscriptionJobName: 'media-tsk_01TEST',
                 Media: { MediaFileUri: `s3://media-transcribe/${key}` },
                 MediaFormat: 'flac',
                 OutputBucketName: 'media-transcribe',

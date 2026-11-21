@@ -34,6 +34,11 @@ export const AmazonTranscribeCredentials = Type.Object(
         bucket: Type.String({ pattern: '^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$' }),
         /** Key prefix in the bucket, `eclair-transcribe/` by default. Give it a lifecycle rule. */
         prefix: Type.Optional(Type.String({ pattern: '^[a-zA-Z0-9!_.*()/-]{0,200}$' })),
+        /**
+         * Prefix of the names of the project's transcription jobs, `eclair-` by default, so that its
+         * AWS key may follow and delete only the jobs that carry it.
+         */
+        jobPrefix: Type.Optional(Type.String({ pattern: '^[0-9A-Za-z._-]{1,60}$' })),
         /** Locales to identify the language among, comma-separated: `fr-CA,en-CA`. */
         languages: Type.Optional(
             Type.String({ pattern: '^[a-z]{2}-[A-Z]{2}(,[a-z]{2}-[A-Z]{2})*$' }),
@@ -77,6 +82,7 @@ export interface AmazonTranscribeSettings {
     region: string;
     bucket: string;
     prefix: string;
+    jobPrefix: string;
     languages: string[];
     pricePerMinute: number | undefined;
     /** Seconds of audio a task can transcribe, at most Amazon's 8 hours. */
@@ -117,6 +123,7 @@ export function amazonTranscribeSettings(
         region,
         bucket,
         prefix,
+        jobPrefix: credentials?.['jobPrefix'] ?? 'eclair-',
         languages: (credentials?.['languages'] ?? '').split(',').filter((locale) => locale !== ''),
         pricePerMinute:
             Number.isFinite(price) && credentials?.['pricePerMinute'] !== undefined
@@ -354,8 +361,9 @@ export function amazonTranscribe(
             }
 
             // A name per task, so that an attempt after a crash finds the job of the first one.
+            // Its prefix is the project's, the only jobs its AWS key may follow and delete.
             const name =
-                `eclair-${(context.taskId ?? randomUUID()).replace(/[^0-9A-Za-z._-]/g, '-')}`.slice(
+                `${settings.jobPrefix}${(context.taskId ?? randomUUID()).replace(/[^0-9A-Za-z._-]/g, '-')}`.slice(
                     0,
                     200,
                 );
