@@ -5,6 +5,7 @@ import { Type } from 'typebox';
 import { OperationError, defineOperation } from '@eclair-js/operation';
 import type { OperationContext } from '@eclair-js/operation';
 
+import { amazonTranscribe, amazonTranscribeSettings } from './amazon-transcribe.ts';
 import { SILENCE_THRESHOLD, extractAudio, probeAudio } from './audio.ts';
 import { toJson, toSrt, toWebVtt } from './formats.ts';
 import { localWhisper, localWhisperSettings } from './local-whisper.ts';
@@ -22,11 +23,18 @@ const FORMATS: Record<Format, { file: string; mime: string; role: string }> = {
 const TranscribeOptions = Type.Object(
     {
         language: Type.String({
-            pattern: '^(auto|[a-z]{2,3})$',
+            pattern: '^(auto|[a-z]{2,3}(-[A-Z]{2})?)$',
             default: 'auto',
             description:
-                'ISO 639-1 code of the spoken language (`fr`), or `auto` to detect it from the first 30 seconds.',
+                'The spoken language: an ISO 639-1 code (`fr`), a locale for the providers that tell them apart (`fr-CA`), or `auto` to detect it.',
         }),
+        provider: Type.Optional(
+            Type.String({
+                pattern: '^[a-z][a-z0-9-]{0,63}$',
+                description:
+                    "The transcription provider, among the project's (`aiProviders`). The project's first one by default.",
+            }),
+        ),
         model: Type.Optional(
             Type.String({
                 pattern: '^[a-z0-9][a-z0-9._-]{0,63}$',
@@ -62,13 +70,19 @@ const TranscribeOptions = Type.Object(
 function providerOf(context: OperationContext): TranscriptionProvider {
     const configured = context.providers?.transcription;
     const name = configured?.name ?? 'local-whisper';
-    if (name === 'local-whisper') {
-        return localWhisper(localWhisperSettings(configured?.settings));
+    switch (name) {
+        case 'local-whisper':
+            return localWhisper(localWhisperSettings(configured?.settings));
+        case 'amazon-transcribe':
+            return amazonTranscribe(
+                amazonTranscribeSettings(configured?.credentials, configured?.settings),
+            );
+        default:
+            throw new OperationError(
+                'provider_failed',
+                `The transcription provider "${name}" isn't available.`,
+            );
     }
-    throw new OperationError(
-        'provider_failed',
-        `The transcription provider "${name}" isn't available.`,
-    );
 }
 
 /** Transcribes the speech of an audio file or a video. */
@@ -81,6 +95,7 @@ export const transcribe = defineOperation({
     capability: 'ai',
     binaries: ['ffprobe', 'ffmpeg', 'whisper-cli'],
     options: TranscribeOptions,
+    providers: 'transcription',
     outputs: { files: true, metadata: true },
 
     async run(context, options) {
@@ -100,6 +115,7 @@ export const transcribe = defineOperation({
             );
         }
         const language = options.language === 'auto' ? undefined : options.language;
+        const baseLanguage = language?.split('-')[0];
         const silent =
             audio.duration < 0.1 || (audio.peak !== undefined && audio.peak < SILENCE_THRESHOLD);
 
@@ -107,7 +123,7 @@ export const transcribe = defineOperation({
         if (silent) {
             context.log.info('The audio is silent: nothing to transcribe.', { peak: audio.peak });
             result = {
-                transcript: { language, segments: [] },
+                transcript: { language: baseLanguage, segments: [] },
                 model: options.model,
                 usage: { mediaSeconds: audio.duration },
             };
@@ -154,6 +170,13 @@ export const transcribe = defineOperation({
                 speech: transcript.segments.length > 0,
                 segments: transcript.segments.length,
                 words,
+                // What the provider used: the seconds of audio, and the cost when it's known.
+                usage: {
+                    mediaSeconds: roundTime(result.usage.mediaSeconds),
+                    ...(result.usage.cost === undefined
+                        ? {}
+                        : { cost: { amount: result.usage.cost, currency: 'USD' } }),
+                },
             },
             usage: { mediaSeconds: result.usage.mediaSeconds },
         };

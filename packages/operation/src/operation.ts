@@ -2,6 +2,7 @@ import type { Static, TSchema } from 'typebox';
 
 import type { Kind, ProbeMetadata } from '@eclair-js/protocol';
 
+import type { AiProvider } from './ai-providers.ts';
 import type { Capability } from './capabilities.ts';
 import { matchesMime } from './detect.ts';
 import type { EmbedOperationContext, EmbedProvider } from './embeds.ts';
@@ -38,6 +39,8 @@ export type ProviderCapability = 'transcription' | 'vision' | 'language';
 export interface ProviderSettings {
     name: string;
     settings: Readonly<Record<string, unknown>>;
+    /** The project's credentials for the provider, decrypted, for external providers. */
+    credentials?: Readonly<Record<string, string>>;
 }
 
 export type OperationProviders = Partial<Record<ProviderCapability, ProviderSettings>>;
@@ -77,10 +80,15 @@ export interface OperationContext {
      */
     output(name: string, path: string, options?: OutputOptions): void;
     /**
-     * The AI providers the task may use, by capability (decision 0008). An AI operation asks for
-     * a capability here, never for an API or a model of its own.
+     * The AI provider of each capability the operation declares in `providers`, as the server
+     * picked it from the project's settings and the task's `provider` option (decision 0008).
      */
     providers?: OperationProviders;
+    /**
+     * The task's id, the same when the task runs again: for names that must not change between
+     * attempts, such as a job at an external provider (rule 5).
+     */
+    taskId?: string;
 }
 
 export interface OperationResult {
@@ -123,6 +131,12 @@ interface OperationBase<S extends TSchema | JsonSchemaObject> {
     optionalBinaries?: string[];
     /** JSON Schema of the options, written with TypeBox or by hand. Objects refuse unknown properties. */
     options: S;
+    /**
+     * The capability of AI providers it calls (decision 0008). The server then picks the provider
+     * of each task from the project's settings, or the task's `provider` option when the project
+     * allows it, and gives it in `context.providers`.
+     */
+    providers?: ProviderCapability;
     outputs: { files: boolean; metadata: boolean };
 }
 
@@ -234,4 +248,8 @@ export function acceptsInput(
  */
 export type OperationPlugin =
     | readonly Operation[]
-    | { operations: readonly Operation[]; embedProviders?: readonly EmbedProvider[] };
+    | {
+          operations: readonly Operation[];
+          embedProviders?: readonly EmbedProvider[];
+          aiProviders?: readonly AiProvider[];
+      };

@@ -2,10 +2,18 @@ import { access, readFile } from 'node:fs/promises';
 import { availableParallelism } from 'node:os';
 import { join } from 'node:path';
 
-import { OperationError } from '@eclair-js/operation';
+import { OperationError, defineAiProvider } from '@eclair-js/operation';
 
 import type { TranscriptionProvider } from './provider.ts';
 import type { Transcript, TranscriptSegment, TranscriptWord } from './transcript.ts';
+
+/** Declares the provider for the server: local, the default of every project. */
+export const localWhisperProvider = defineAiProvider({
+    name: 'local-whisper',
+    title: 'whisper.cpp',
+    capability: 'transcription',
+    external: false,
+});
 
 /** The operator's settings of `local-whisper`, from the server's configuration. */
 export interface LocalWhisperSettings {
@@ -192,7 +200,8 @@ export function localWhisper(settings: LocalWhisperSettings): TranscriptionProvi
                 '--file',
                 request.audio,
                 '--language',
-                request.language ?? 'auto',
+                // whisper.cpp knows languages, not locales: `fr-CA` is `fr`.
+                request.language?.split('-')[0] ?? 'auto',
                 '--threads',
                 String(settings.threads),
                 '--output-json-full',
@@ -212,7 +221,10 @@ export function localWhisper(settings: LocalWhisperSettings): TranscriptionProvi
             }
             const transcript = parseWhisperJson(raw);
             return {
-                transcript: { ...transcript, language: transcript.language ?? request.language },
+                transcript: {
+                    ...transcript,
+                    language: transcript.language ?? request.language?.split('-')[0],
+                },
                 model,
                 usage: { mediaSeconds: request.duration },
             };

@@ -1,5 +1,7 @@
-import type { Operation } from '@eclair-js/operation';
+import type { OperationPlugin } from '@eclair-js/operation';
 
+import { amazonTranscribeProvider } from './amazon-transcribe.ts';
+import { localWhisperProvider } from './local-whisper.ts';
 import { transcribe } from './transcribe.ts';
 
 export { transcribe };
@@ -18,7 +20,20 @@ export type {
 } from './provider.ts';
 export type { Transcript, TranscriptSegment, TranscriptWord } from './transcript.ts';
 
-/** The operations of this package, as the server loads them. */
-const operations: readonly Operation[] = [transcribe];
+export {
+    AmazonTranscribeCredentials,
+    amazonTranscribe,
+    amazonTranscribeProvider,
+    amazonTranscribeSettings,
+    parseAmazonTranscript,
+} from './amazon-transcribe.ts';
+export type { AmazonTranscribeSettings, AwsClients } from './amazon-transcribe.ts';
+export { localWhisperProvider } from './local-whisper.ts';
 
-export default operations;
+/** The operations and AI providers of this package, as the server loads them. */
+const plugin: OperationPlugin = {
+    operations: [transcribe],
+    aiProviders: [localWhisperProvider, amazonTranscribeProvider],
+};
+
+export default plugin;

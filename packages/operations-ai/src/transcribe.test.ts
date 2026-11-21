@@ -60,6 +60,7 @@ describe.skipIf(skipWithoutBinaries(FFMPEG))('ai.transcribe, with a fake whisper
                 speech: true,
                 segments: 2,
                 words: 13,
+                usage: { mediaSeconds: expect.closeTo(2, 1) },
             });
             expect(result.usage?.mediaSeconds).toBeCloseTo(2, 1);
             expect(result.progress.at(-1)).toBe(0.95);
@@ -197,6 +198,22 @@ describe.skipIf(skipWithoutBinaries(FFMPEG))('ai.transcribe, with a fake whisper
                 },
             ),
         ).rejects.toMatchObject({ code: 'limit_exceeded' });
+    });
+
+    it('fails with Amazon Transcribe when the project has no credentials for it', async () => {
+        await expect(
+            runOn(
+                transcribe,
+                'audio.m4a',
+                {},
+                {
+                    providers: { transcription: { name: 'amazon-transcribe', settings: {} } },
+                },
+            ),
+        ).rejects.toMatchObject({
+            code: 'provider_failed',
+            message: 'The project has no credentials, region and bucket for Amazon Transcribe.',
+        });
     });
 
     it('fails on a provider that does not exist', async () => {
