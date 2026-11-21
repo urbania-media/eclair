@@ -25,14 +25,23 @@ const job = {
 
 describe('the examples of the docs', () => {
     it('validate in docs/protocol.md', () => {
-        const [jobRequest, taskRequest, jobResponse, probeRequest, embedProbe, upload, ...others] =
-            readJsonExamples('docs/protocol.md');
+        const [
+            jobRequest,
+            taskRequest,
+            jobResponse,
+            probeRequest,
+            embedProbe,
+            transcribeTask,
+            upload,
+            ...others
+        ] = readJsonExamples('docs/protocol.md');
         expect(others).toEqual([]);
         expect(validate('JobRequest', jobRequest)).toMatchObject({ valid: true });
         expect(validate('TaskRequest', taskRequest)).toMatchObject({ valid: true });
         expect(validate('Job', jobResponse)).toMatchObject({ valid: true });
         expect(validate('ProbeRequest', probeRequest)).toMatchObject({ valid: true });
         expect(validate('ProbeResult', embedProbe)).toMatchObject({ valid: true });
+        expect(validate('TaskRequest', transcribeTask)).toMatchObject({ valid: true });
         expect(validate('Upload', upload)).toMatchObject({ valid: true });
     });
 
@@ -339,5 +348,83 @@ describe('toProblemErrors', () => {
         expect(validate('Problem', { title: 'Invalid', status: 422, errors })).toMatchObject({
             valid: true,
         });
+    });
+});
+
+describe('transcripts', () => {
+    const transcript = {
+        version: 1,
+        language: 'fr',
+        duration: 4,
+        provider: 'local-whisper',
+        model: 'large-v3-turbo-q5_0',
+        text: 'Salut tout le monde.',
+        segments: [
+            {
+                start: 0,
+                end: 1.2,
+                text: 'Salut tout le monde.',
+                words: [{ start: 0, end: 0.42, text: 'Salut', probability: 0.91 }],
+            },
+        ],
+    };
+
+    it('have the same shape whatever the provider', () => {
+        expect(pointers('Transcript', transcript)).toEqual([]);
+        expect(
+            pointers('Transcript', {
+                ...transcript,
+                provider: 'amazon-transcribe',
+                model: null,
+                segments: [{ start: 0, end: 1, text: 'Salut.', speaker: 'spk_0' }],
+            }),
+        ).toEqual([]);
+        expect(
+            pointers('Transcript', { ...transcript, language: null, text: '', segments: [] }),
+        ).toEqual([]);
+        expect(pointers('Transcript', { ...transcript, version: 2, language: 'fr-CA' })).toEqual([
+            '/version',
+            '/language',
+        ]);
+        expect(
+            pointers('Transcript', {
+                ...transcript,
+                segments: [
+                    {
+                        start: 0,
+                        end: 1,
+                        text: 'a',
+                        words: [{ start: 0, end: 1, text: '', probability: 2 }],
+                    },
+                ],
+            }),
+        ).toEqual(['/segments/0/words/0/text', '/segments/0/words/0/probability']);
+    });
+
+    it('report what the provider used', () => {
+        expect(
+            pointers('TranscribeMetadata', {
+                provider: 'amazon-transcribe',
+                model: null,
+                language: 'fr',
+                duration: 61.5,
+                speech: true,
+                segments: 12,
+                words: 180,
+                usage: { mediaSeconds: 61.5, cost: { amount: 0.0246, currency: 'USD' } },
+            }),
+        ).toEqual([]);
+    });
+
+    it('come from the providers a project allows', () => {
+        expect(
+            pointers('ProjectSettings', {
+                aiProviders: { transcription: ['amazon-transcribe', 'local-whisper'] },
+                externalAiProviders: true,
+            }),
+        ).toEqual([]);
+        expect(
+            pointers('ProjectSettings', { aiProviders: { transcription: [], vision: ['x'] } }),
+        ).not.toEqual([]);
     });
 });
