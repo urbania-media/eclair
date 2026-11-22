@@ -107,7 +107,7 @@ The task graph must be acyclic. The API answers `202` with the job.
 }
 ```
 
-Job statuses: `pending`, `running`, `completed`, `failed`, `canceled`. Task statuses add `queued` and `skipped`. A failed task has an `error` with a stable `code` (`input_unreadable`, `unsupported_input`, `timeout`, `limit_exceeded`, `operation_failed`, `storage_failed`, `provider_failed`, and `dependency_failed` when a task it depends on failed) and a human `message`. New codes can be added: clients treat unknown ones as `operation_failed`.
+Job statuses: `pending`, `running`, `completed`, `failed`, `canceled`. Task statuses add `queued` and `skipped`. A failed task has an `error` with a stable `code` (`input_unreadable`, `unsupported_input`, `timeout`, `limit_exceeded`, `operation_failed`, `storage_failed`, `provider_failed`, `provider_unavailable`, `provider_refused`, and `dependency_failed` when a task it depends on failed) and a human `message`. New codes can be added: clients treat unknown ones as `operation_failed`.
 
 Files with many parts (HLS segments, thumbnail series) report their main files and a `count` of the others, not every segment.
 
@@ -199,6 +199,25 @@ Two task error codes are specific to embeds:
 - `provider_refused`: the platform refused the server, with a rate limit or a bot check.
 
 A project's provider credentials (a YouTube Data API key, a Vimeo token…) are set through the [admin API](#admin-api). Without them, a provider uses the operator's, when the server has them (`ECLAIR_PROVIDER_<PROVIDER>_<KEY>`, such as `ECLAIR_PROVIDER_YOUTUBE_API_KEY` for `apiKey`), or what it can read without a key.
+
+## Transcripts
+
+`ai.transcribe` answers through a **transcription provider** chosen per project ([decision 0008](decisions/0008-ai-providers.md)): `local-whisper`, whisper.cpp on Eclair's workers, or `amazon-transcribe`. The task, its files and its metadata are the same whatever the provider, so an application changes providers without changing its code.
+
+```json
+{
+    "op": "ai.transcribe",
+    "options": { "language": "fr", "formats": ["json", "vtt"], "provider": "amazon-transcribe" }
+}
+```
+
+- **Provider.** The project's settings list the providers it may use (`aiProviders.transcription`, the first answers by default) and must allow external ones explicitly (`externalAiProviders: true`), because they send the audio to a third party. Without settings, a project uses the local provider only. `provider` asks for another one of the list. An external provider uses the project's own credentials (`PUT /admin/v1/projects/{project}/credentials/{provider}`), stored encrypted. A task is refused when its job is created (422, at `/tasks/<name>/options/provider`), and never moved to another provider, when the project may not use its provider, when that provider is external and the project doesn't allow external providers (even when it's the first of `aiProviders.transcription`), or when the project has no credentials for it.
+- **Options** ([`TranscribeOptions`](../packages/protocol/schema/openapi.json), also in `GET /v1/operations`): `language` (`auto` by default, an ISO 639 code such as `fr`, or a locale such as `fr-CA` for the providers that tell them apart), `provider`, `model` (the worker's default otherwise; Amazon has none), `formats` (`json`, `vtt`, `srt`, all three by default, the first is the main file), `words` (word timings in `transcript.json`, `true` by default) and `prompt` (names and words likely to be spoken, `local-whisper` only). A language the provider doesn't transcribe, such as `en-CA` at Amazon, is refused when the job is created, at `/tasks/<name>/options/language`.
+- **Files.** `transcript.json` ([`Transcript`](../packages/protocol/schema/openapi.json)): `version` (1), `language` (an ISO 639 code: two letters when there is one, three otherwise, such as `haw`; the given language without its region, `fr` for `fr-CA`, or the detected one; `null` without speech), `duration`, `provider`, `model`, `text` (the segments joined by a space, or without one in languages written without spaces, such as `ja` and `zh`), and `segments`, in the order of the speech, each with `start` and `end` in seconds (to the millisecond), `text`, `words` (`start`, `end`, `text` with its punctuation, `probability` from 0 to 1 when the provider gives one) and `speaker` when the provider tells speakers apart (an opaque label, only comparable within the transcript). `transcript.vtt` and `transcript.srt`: cues of at most two lines of 42 characters and 7 seconds, cut at word boundaries and after sentences. Version 1 only gains optional fields: clients ignore the fields they don't know.
+- **Metadata** ([`TranscribeMetadata`](../packages/protocol/schema/openapi.json)): `provider`, `model`, `language`, `duration`, `speech` (`false` when nothing was said), `segments`, `words`, and `usage`: `mediaSeconds`, and `cost` (`amount`, `currency`), an estimate when the provider's price is configured, with its minimum (15 seconds a job at Amazon). The seconds also go into the project's usage report.
+- **Errors.** No audio stream: `unsupported_input`. Longer than the provider takes (`ECLAIR_TRANSCRIBE_MAX_DURATION`, at most 8 hours with Amazon) or larger than 2 GB of audio at Amazon: `limit_exceeded`. A recording that couldn't finish within the longest time limit of the server (`ECLAIR_TASK_MAX_TIMEOUT`, the task asks for the time its provider needs before it starts): `limit_exceeded`. A model the worker doesn't have, credentials deleted after the job was created or a provider's error: `provider_failed`. A provider's rate limit: `provider_refused`. Silence isn't an error: the transcript is empty and `speech` is `false`.
+- **Cancel.** `POST /v1/jobs/{id}/cancel` stops a running transcription: whisper.cpp is killed; with Amazon, which can neither stop nor delete a running job, Eclair waits for the job to end (10 minutes at most), then deletes it with the uploaded audio and the transcript, as after a success or a failure. What it couldn't delete is left to the bucket's lifecycle rule. Amazon bills a job it started, canceled or not.
+- **Retries.** A task that runs again (a crash, `POST /v1/jobs/{id}/retry`) writes the same files and sends no second webhook. With Amazon, its job's name comes from the task, so an attempt after a crash follows the job the first one started instead of paying for a second one.
 
 ## Uploads
 
