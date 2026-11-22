@@ -989,7 +989,7 @@ export interface components {
         /** @enum {string} */
         TaskStatus: "pending" | "queued" | "running" | "completed" | "failed" | "canceled" | "skipped";
         /**
-         * @description Stable error code: `input_unreadable`, `unsupported_input`, `timeout`, `limit_exceeded`, `operation_failed`, `storage_failed`, `provider_failed`, `dependency_failed` when a task it depends on failed, `provider_unavailable` when an embed is private, deleted or blocked where the server is, and `provider_refused` when a platform refuses the server (rate limit, bot check). New codes can be added: treat unknown ones as `operation_failed`.
+         * @description Stable error code: `input_unreadable`, `unsupported_input`, `timeout`, `limit_exceeded`, `operation_failed`, `storage_failed`, `provider_failed`, `dependency_failed` when a task it depends on failed, `provider_unavailable` when an embed is private, deleted or blocked where the server is, and `provider_refused` when a provider refuses the server (a rate limit or a quota of an embed platform or an AI provider, a bot check). New codes can be added: treat unknown ones as `operation_failed`.
          * @example input_unreadable
          * @example unsupported_input
          * @example timeout
@@ -1358,7 +1358,7 @@ export interface components {
              * @default 104857600
              */
             maxDirectUpload?: number;
-            /** @description Longest a task may run, in milliseconds. `ECLAIR_TASK_TIMEOUT` when not set. */
+            /** @description Longest a task may run, in milliseconds. `ECLAIR_TASK_TIMEOUT` when not set. An operation that knows it needs longer, such as a transcription of a long recording, may extend it up to `ECLAIR_TASK_MAX_TIMEOUT`, or fails with `limit_exceeded` before it starts. */
             taskTimeout?: number;
             /** @description How long temporary files are kept, in milliseconds, at most `ECLAIR_TEMP_MAX_RETENTION`. */
             tempRetention?: number;
@@ -1389,7 +1389,7 @@ export interface components {
             embedDownload?: components["schemas"]["EmbedProvider"][];
             /** @description Longest embed that `embed.download` takes, in seconds. `ECLAIR_EMBED_MAX_DURATION` when not set. */
             embedMaxDuration?: number;
-            /** @description AI providers the project may use, by capability. The first one of a list answers, unless a task asks for another one of the list with its `provider` option. The server's local providers when not set: media stays on the server. */
+            /** @description AI providers the project may use, by capability. The first one of a list answers, unless a task asks for another one of the list with its `provider` option. The server's local providers when not set: media stays on the server. A task is refused when its job is created (422, at `/tasks/<name>/options/provider`), never moved to another provider, when its provider isn't a provider of that capability on this server, is external without `externalAiProviders`, or has no credentials for the project. */
             aiProviders?: {
                 transcription?: components["schemas"]["AiProviderName"][];
             };
@@ -1501,7 +1501,7 @@ export interface components {
         StorageList: {
             data: components["schemas"]["Storage"][];
         };
-        /** @description A provider's credentials for the project, encrypted and never shown again. `youtube`: `apiKey` (YouTube Data API). `vimeo`: `token`. `spotify`: `clientId`, `clientSecret`. `instagram`: `accessToken` (a Meta app token, for oEmbed). `amazon-transcribe`: `accessKeyId`, `secretAccessKey`, `region` and `bucket` (a bucket of the project in that region, where audio and transcripts stay only while a task runs), and optionally `prefix` (`eclair-transcribe/`), `jobPrefix` (`eclair-`, the prefix of its jobs' names), `languages` (locales to identify the language among, `fr-CA,en-US`, among those Amazon identifies) and `pricePerMinute` (US dollars, to report costs). Each provider checks its own. */
+        /** @description A provider's credentials for the project, encrypted and never shown again. `youtube`: `apiKey` (YouTube Data API). `vimeo`: `token`. `spotify`: `clientId`, `clientSecret`. `instagram`: `accessToken` (a Meta app token, for oEmbed). `amazon-transcribe`: `accessKeyId`, `secretAccessKey`, `region` and `bucket` (a bucket of the project in that region, where audio and transcripts stay only while a task runs), and optionally `prefix` (`eclair-transcribe/`), `jobPrefix` (`eclair-`, the prefix of its jobs' names), `languages` (locales to identify the language among, `fr-CA,en-US`, among those Amazon identifies) and `pricePerMinute` (US dollars, to report costs). Give the key only what Eclair does: read and write objects under the prefix, and start, read and delete the transcription jobs of its prefix (see the deployment guide). Each provider checks its own. */
         CredentialsRequest: {
             config: {
                 [key: string]: unknown;
@@ -1666,7 +1666,7 @@ export interface components {
             /** @description Why a step failed, without credentials. */
             message?: string;
         };
-        /** @description A word of a transcript, with its punctuation, without the space before it. */
+        /** @description A word of a transcript, with its punctuation, without the space before it. Clients ignore the fields they don't know: version 1 only gains optional fields. */
         TranscriptWord: {
             /** @description Seconds from the start of the media, to the millisecond. */
             start: number;
@@ -1676,31 +1676,61 @@ export interface components {
             /** @description How sure the provider is of the word, from 0 to 1, when it says. */
             probability?: number;
         };
-        /** @description A part of the speech, a sentence or a part of one, as the provider splits it. */
+        /** @description A part of the speech, a sentence or a part of one, as the provider splits it. Segments come in the order of the speech, by `start`. Clients ignore the fields they don't know: version 1 only gains optional fields. */
         TranscriptSegment: {
+            /** @description Seconds from the start of the media, to the millisecond. */
             start: number;
+            /** @description Seconds from the start of the media, to the millisecond. Never before `start`. */
             end: number;
             /** @description The segment's text, trimmed. */
             text: string;
-            /** @description The speaker's label, when the provider tells speakers apart. Labels are only comparable within one transcript. */
+            /** @description The speaker's label, when the provider tells speakers apart: an opaque string (`spk_0`) to compare with the other labels of the same transcript, never a name. */
             speaker?: string;
-            /** @description The segment's words in order. Left out with `words: false`; empty when the provider gives no word timings. */
+            /** @description The segment's words in order. Left out when the task's `words` option is `false`; empty when the provider gives no word timings. */
             words?: components["schemas"]["TranscriptWord"][];
         };
-        /** @description `transcript.json`, the file `ai.transcribe` writes. The same shape whatever the provider: clients don't depend on the provider. Version 1 only gains optional fields. */
+        /** @description `transcript.json`, the file `ai.transcribe` writes. The same shape whatever the provider: clients don't depend on the provider. Clients ignore the fields they don't know: version 1 only gains optional fields. */
         Transcript: {
             /** @constant */
             version: 1;
-            /** @description ISO 639-1 code of the language: the one the task gave, or the one the provider detected. `null` when nothing was said. */
+            /** @description ISO 639 code of the language: two letters when ISO 639-1 has one (`fr`), three otherwise (`haw`, `yue`). The task's language, without its region (`fr` for `fr-CA`), or the one the provider detected. `null` when nothing was said. */
             language: string | null;
             /** @description Seconds of audio transcribed. */
             duration: number;
             provider: components["schemas"]["AiProviderName"];
             /** @description The provider's model, when it has several (`large-v3-turbo-q5_0`). */
             model: string | null;
-            /** @description The whole text: the segments' texts joined by spaces. */
+            /** @description The whole text: the segments' texts joined by a space, or without one in the languages written without spaces (`ja`, `zh`, `yue`, `th`, `lo`, `km`, `my`, `bo`). */
             text: string;
             segments: components["schemas"]["TranscriptSegment"][];
+        };
+        /** @description The options of `ai.transcribe`. `GET /v1/operations` gives every operation's options schema, this one included. */
+        TranscribeOptions: {
+            /**
+             * @description The spoken language: an ISO 639 code (`fr`), a locale for the providers that tell them apart (`fr-CA`), or `auto` to detect it. A language the project's provider doesn't transcribe (`en-CA` at Amazon) is refused when the job is created.
+             * @default auto
+             */
+            language?: string;
+            /** @description The transcription provider, among the project's (`aiProviders.transcription`). The project's first one by default. */
+            provider?: components["schemas"]["AiProviderName"];
+            /** @description The provider's model (`large-v3-turbo-q5_0`, `medium-q5_0`…). The worker's default otherwise. Amazon has none. */
+            model?: string;
+            /**
+             * @description Files to write: `json` (`transcript.json`), `vtt`, `srt`. The first one is the main file.
+             * @default [
+             *       "json",
+             *       "vtt",
+             *       "srt"
+             *     ]
+             */
+            formats?: ("json" | "vtt" | "srt")[];
+            /**
+             * @description Word timings in `transcript.json`. With `false`, segments have no `words`.
+             * @default true
+             */
+            words?: boolean;
+            /** @description Names and words likely to be spoken, and the style of the text, to help the model spell them. `local-whisper` only; a prompt longer than about 220 tokens loses its beginning. */
+            prompt?: string;
         };
         /** @description An AI provider of the server: `local-whisper` (whisper.cpp on the workers), `amazon-transcribe`. */
         AiProviderName: string;
@@ -1708,6 +1738,7 @@ export interface components {
         TranscribeMetadata: {
             provider: components["schemas"]["AiProviderName"];
             model: string | null;
+            /** @description The transcript's `language`. */
             language: string | null;
             /** @description Seconds of audio. */
             duration: number;
@@ -1718,7 +1749,7 @@ export interface components {
             /** @description What the provider used. The seconds also go into the project's usage (`mediaSeconds`). */
             usage: {
                 mediaSeconds: number;
-                /** @description The provider's cost, when it's known (an external provider with a configured price). */
+                /** @description An estimate of the provider's cost, when its price is configured: the price times the seconds of audio, with the provider's minimum (15 seconds a job at Amazon). The provider's bill is the reference. */
                 cost?: {
                     amount: number;
                     currency: string;

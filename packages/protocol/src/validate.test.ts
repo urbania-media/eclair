@@ -399,6 +399,32 @@ describe('transcripts', () => {
                 ],
             }),
         ).toEqual(['/segments/0/words/0/text', '/segments/0/words/0/probability']);
+        // A later version 1 can add fields: a client that validates still reads the file.
+        expect(
+            pointers('Transcript', {
+                ...transcript,
+                locale: 'fr-CA',
+                segments: [{ start: 0, end: 1, text: 'a', channel: 0 }],
+            }),
+        ).toEqual([]);
+    });
+
+    it('take the options of ai.transcribe', () => {
+        expect(pointers('TranscribeOptions', {})).toEqual([]);
+        // Unknown options are refused.
+        expect(pointers('TranscribeOptions', { speakers: true })).not.toEqual([]);
+        expect(
+            pointers('TranscribeOptions', {
+                language: 'fr-CA',
+                provider: 'amazon-transcribe',
+                formats: ['vtt'],
+                words: false,
+                prompt: 'Berri-UQAM, Côte-Vertu',
+            }),
+        ).toEqual([]);
+        expect(
+            pointers('TranscribeOptions', { language: 'fr_CA', formats: [], speakers: true }),
+        ).toEqual(expect.arrayContaining(['/language', '/formats']));
     });
 
     it('report what the provider used', () => {
