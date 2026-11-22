@@ -37,7 +37,7 @@ All processes come from one package (`@eclair-js/server`) and one Docker image. 
     - It downloads the task's input (the job input, or the output of the task named in `from`) to a temporary directory. It keeps a small local cache, so tasks of the same job on the same worker don't download the original twice.
     - It detects the input's real type from its content.
     - It runs the operation with a timeout, an abort signal and resource limits, and reports progress.
-    - It uploads each output file to the project's storage under the job's prefix, at a deterministic path, then records the outputs and the usage (CPU seconds, media duration, bytes in and out).
+    - It uploads each output file to the project's storage under the job's prefix, at a deterministic path, then records the outputs and the usage (CPU seconds, media duration, bytes in and out). A task that fails or is canceled after a paid provider billed it records what the operation reported too.
     - It deletes the temporary directory.
 4. When a task ends, the scheduler enqueues the tasks that were waiting for it. A failed task fails the tasks that depend on it. Independent tasks continue unless the job asks to stop on the first failure.
 5. When every task has ended, the job is `completed` (or `failed`). The scheduler sends the webhook with the outputs and metadata, and retries it with backoff until the application answers `2xx`.

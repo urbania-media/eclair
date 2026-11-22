@@ -19,9 +19,10 @@ import type {
     OperationContext,
     OperationEmbed,
     OperationResult,
+    OperationUsage,
     OutputOptions,
 } from '@eclair-js/operation';
-import type { ProbeMetadata, TaskCondition, TaskError } from '@eclair-js/protocol';
+import type { ProbeMetadata, TaskCondition, TaskError, TaskUsage } from '@eclair-js/protocol';
 
 import { isAvailable } from '../binaries.ts';
 import type { BinaryName, Config } from '../config/config.ts';
@@ -123,6 +124,36 @@ function inWorkdir(operation: Operation, workdir: string, path: string, what: st
         );
     }
     return full;
+}
+
+/**
+ * What a task shows as its `usage`: what its attempts of this run reported, added up. An attempt
+ * that runs again after an error has used its provider too.
+ */
+function addUsage(
+    previous: TaskUsage | undefined,
+    usage: OperationUsage | undefined,
+): TaskUsage | undefined {
+    if (usage?.mediaSeconds === undefined && usage?.cost === undefined) {
+        return previous;
+    }
+    const mediaSeconds =
+        previous?.mediaSeconds === undefined && usage.mediaSeconds === undefined
+            ? undefined
+            : Math.round(((previous?.mediaSeconds ?? 0) + (usage.mediaSeconds ?? 0)) * 1000) / 1000;
+    const cost =
+        previous?.cost !== undefined &&
+        usage.cost !== undefined &&
+        previous.cost.currency === usage.cost.currency
+            ? {
+                  amount: Math.round((previous.cost.amount + usage.cost.amount) * 1e6) / 1e6,
+                  currency: usage.cost.currency,
+              }
+            : (usage.cost ?? previous?.cost);
+    return {
+        ...(mediaSeconds === undefined ? {} : { mediaSeconds }),
+        ...(cost === undefined ? {} : { cost }),
+    };
 }
 
 /** Errors that may pass if the task runs again: storage and the unexpected. */
@@ -256,6 +287,7 @@ export class TaskRunner {
         task: TaskRecord,
         status: 'completed' | 'failed' | 'skipped' | 'canceled',
         error?: TaskError,
+        usage?: TaskUsage,
     ): Promise<boolean> {
         const now = new Date();
         const result = await this.#options.database.kysely
@@ -263,6 +295,7 @@ export class TaskRunner {
             .set({
                 status,
                 error: error === undefined ? null : toJson(error),
+                ...(usage === undefined ? {} : { usage: toJson(usage) }),
                 progress: status === 'completed' ? 1 : null,
                 ended_at: now,
                 updated_at: now,
@@ -311,6 +344,11 @@ export class TaskRunner {
             return 'ignored';
         }
         const job = await scheduler.loadJob(task.jobId);
+        if (job?.status === 'canceled' && job.endedAt === undefined && task.status === 'running') {
+            // Its worker stopped before it could end the task: the task ends canceled, and the job.
+            await this.#endStalled(task);
+            return 'canceled';
+        }
         if (job === undefined || job.status === 'canceled' || job.endedAt !== undefined) {
             return 'ignored';
         }
@@ -390,12 +428,17 @@ export class TaskRunner {
         options.signal?.addEventListener('abort', onCancel, { once: true });
         const startedAt = Date.now();
         let stage: 'input' | 'run' | 'output' = 'input';
+        let inputSize = 0;
+        // What the operation reported it used at a provider, before its result or without one.
+        let reported: OperationUsage | undefined;
+        const reportUsage = (usage: OperationUsage) => {
+            reported = usage;
+        };
 
         try {
             const files: DeclaredFile[] = [];
             let result: OperationResult;
             let probe: ProbeMetadata | undefined;
-            let inputSize = 0;
             if (operation.accepts.embeds === true) {
                 // An embed is never fetched: the operation reads it from its provider (decision 0022).
                 const embed = this.#embedOf(task, job.input, project, operation as EmbedOperation);
@@ -462,11 +505,13 @@ export class TaskRunner {
                     {
                         ...context,
                         extendTimeout,
+                        reportUsage,
                         ...(providers === undefined ? {} : { providers }),
                     },
                     task.options as never,
                 );
             }
+            reported = result.usage ?? reported;
             if (controller.signal.aborted) {
                 throw new OperationError(
                     controller.signal.reason === 'timeout' ? 'timeout' : 'operation_failed',
@@ -486,7 +531,7 @@ export class TaskRunner {
                 files,
                 result.metadata,
             );
-            if (!(await this.#end(task, 'completed'))) {
+            if (!(await this.#end(task, 'completed', undefined, addUsage(task.usage, reported)))) {
                 return 'canceled';
             }
             if (project.settings.taskWebhooks) {
@@ -498,19 +543,35 @@ export class TaskRunner {
                 operation,
                 inputSize,
                 written,
-                result.usage?.mediaSeconds ?? probe?.duration,
+                reported?.mediaSeconds ?? probe?.duration,
+                reported?.cost,
                 Date.now() - startedAt,
             );
             await scheduler.advance(job.id);
             return 'completed';
         } catch (caught) {
             let error = caught;
+            // What a provider billed before the task failed or was canceled: a job it started.
+            const usage = reported;
+            const total = addUsage(task.usage, usage);
+            if (usage?.mediaSeconds !== undefined || usage?.cost !== undefined) {
+                await this.#recordUsage(
+                    task,
+                    project,
+                    operation,
+                    inputSize,
+                    { bytes: 0, stored: 0 },
+                    usage.mediaSeconds,
+                    usage.cost,
+                    Date.now() - startedAt,
+                );
+            }
             if (
                 controller.signal.aborted &&
                 !(caught instanceof OperationError && caught.code === 'timeout')
             ) {
                 if (controller.signal.reason === 'canceled') {
-                    if (await this.#end(task, 'canceled')) {
+                    if (await this.#end(task, 'canceled', undefined, total)) {
                         await scheduler.advance(job.id);
                     }
                     return 'canceled';
@@ -528,7 +589,12 @@ export class TaskRunner {
                 // Back to the queue: BullMQ runs it again after a delay.
                 await database.kysely
                     .updateTable('tasks')
-                    .set({ status: 'queued', error: toJson(taskError), updated_at: new Date() })
+                    .set({
+                        status: 'queued',
+                        error: toJson(taskError),
+                        ...(total === undefined ? {} : { usage: toJson(total) }),
+                        updated_at: new Date(),
+                    })
                     .where('id', '=', task.id)
                     .where('status', '=', 'running')
                     .execute();
@@ -540,7 +606,7 @@ export class TaskRunner {
                 });
                 return 'retry';
             }
-            return this.#fail(task, taskError);
+            return this.#fail(task, taskError, total);
         } finally {
             clearTimeout(timer);
             options.signal?.removeEventListener('abort', onCancel);
@@ -548,11 +614,17 @@ export class TaskRunner {
         }
     }
 
-    async #fail(task: TaskRecord, error: TaskError): Promise<RunOutcome> {
+    async #fail(task: TaskRecord, error: TaskError, usage?: TaskUsage): Promise<RunOutcome> {
         const now = new Date();
         const result = await this.#options.database.kysely
             .updateTable('tasks')
-            .set({ status: 'failed', error: toJson(error), ended_at: now, updated_at: now })
+            .set({
+                status: 'failed',
+                error: toJson(error),
+                ...(usage === undefined ? {} : { usage: toJson(usage) }),
+                ended_at: now,
+                updated_at: now,
+            })
             .where('id', '=', task.id)
             .where('status', 'in', ['queued', 'running'])
             .executeTakeFirst();
@@ -566,6 +638,26 @@ export class TaskRunner {
             await this.#options.scheduler.advance(task.jobId);
         }
         return 'failed';
+    }
+
+    /** Ends as canceled a running task of a canceled job whose worker stopped, then the job. */
+    async #endStalled(task: TaskRecord): Promise<void> {
+        const now = new Date();
+        const result = await this.#options.database.kysely
+            .updateTable('tasks')
+            .set({ status: 'canceled', progress: null, ended_at: now, updated_at: now })
+            .where('id', '=', task.id)
+            .where('status', '=', 'running')
+            .executeTakeFirst();
+        if (result.numUpdatedRows > 0n) {
+            await this.#options.scheduler.emit({
+                type: 'task.status',
+                job: task.jobId,
+                task: task.name,
+                status: 'canceled',
+            });
+        }
+        await this.#options.scheduler.advance(task.jobId);
     }
 
     /** The task's input on disk: the job's input, or a file of the task it reads from. */
@@ -1002,6 +1094,8 @@ export class TaskRunner {
         written: { bytes: number; stored: number },
         /** Seconds of media: what the operation reports, or the job's probe. */
         mediaSeconds: number | undefined,
+        /** The provider's cost the operation estimated. */
+        cost: { amount: number; currency: string } | undefined,
         elapsed: number,
     ): Promise<void> {
         await this.#options.database.kysely
@@ -1015,6 +1109,8 @@ export class TaskRunner {
                 // Wall-clock time of the task: the CPU time of its binaries isn't measured yet.
                 cpu_ms: elapsed,
                 media_ms: Math.round((mediaSeconds ?? 0) * 1000),
+                // In US dollars, the only currency providers report yet.
+                cost: cost?.currency === 'USD' ? cost.amount : null,
                 bytes_in: bytesIn,
                 bytes_out: written.bytes,
                 bytes_stored: written.stored,

@@ -27,6 +27,7 @@ import type {
     OperationContext,
     OperationProviders,
     OperationResult,
+    OperationUsage,
     OutputOptions,
 } from './operation.ts';
 
@@ -55,6 +56,11 @@ export interface RunOperationOptions {
      * or on `PATH`.
      */
     available?: Record<string, boolean>;
+    /**
+     * Receives what the operation reports with `context.reportUsage()`, a failure or a cancel
+     * included.
+     */
+    reportUsage?(usage: OperationUsage): void;
 }
 
 export interface RunOperationResult {
@@ -128,6 +134,7 @@ export async function runOperation(
         output: (name, path, outputOptions) => files.push({ name, path, ...outputOptions }),
         ...(run.providers === undefined ? {} : { providers: run.providers }),
         ...(run.taskId === undefined ? {} : { taskId: run.taskId }),
+        reportUsage: (usage) => run.reportUsage?.(usage),
         extendTimeout: (ms) => {
             timeouts.push(ms);
             return ms <= (run.maxTimeout ?? Number.POSITIVE_INFINITY);

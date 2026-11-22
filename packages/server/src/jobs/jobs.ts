@@ -134,6 +134,7 @@ function toTask(task: TaskRecord, outputs: OutputRecord[]): Task {
                   },
               }),
         ...(task.error === undefined ? {} : { error: task.error }),
+        ...(task.usage === undefined ? {} : { usage: task.usage }),
     };
 }
 
@@ -697,7 +698,9 @@ export class Jobs {
         const job = await this.#record(projectId, id);
         if (!(await this.#scheduler.retry(job.id))) {
             throw new ConflictError(
-                `The job is ${job.status}: only a failed or canceled job can be retried.`,
+                job.status === 'canceled'
+                    ? 'The job is canceled and its tasks are still stopping: retry it once it has ended.'
+                    : `The job is ${job.status}: only a failed or canceled job can be retried.`,
             );
         }
         return this.get(projectId, job.id);

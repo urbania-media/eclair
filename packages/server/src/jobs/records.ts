@@ -9,6 +9,7 @@ import type {
     TaskCondition,
     TaskError,
     TaskStatus,
+    TaskUsage,
 } from '@eclair-js/protocol';
 
 import type { JobsTable, OutputsTable, TasksTable } from '../database/tables.ts';
@@ -58,6 +59,8 @@ export interface TaskRecord {
     attempts: number;
     progress: number | undefined;
     error: TaskError | undefined;
+    /** What the task used at a paid provider in its current run, as the operation reported it. */
+    usage: TaskUsage | undefined;
     worker: string | undefined;
     queuedAt: Date | undefined;
     startedAt: Date | undefined;
@@ -140,6 +143,7 @@ export function toTaskRecord(row: Selectable<TasksTable>): TaskRecord {
         attempts: row.attempts,
         progress: readOptionalNumber(row.progress),
         error: readOptionalJson<TaskError>(row.error),
+        usage: readOptionalJson<TaskUsage>(row.usage),
         worker: row.worker ?? undefined,
         queuedAt: readOptionalDate(row.queued_at),
         startedAt: readOptionalDate(row.started_at),

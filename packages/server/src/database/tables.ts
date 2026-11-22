@@ -123,6 +123,8 @@ export interface TasksTable {
     attempts: number;
     progress: Nullable<number>;
     error: NullableJson;
+    /** What the task used at a paid provider in its current run (`TaskUsage`). */
+    usage: NullableJson;
     worker: Nullable<string>;
     created_at: Timestamp;
     updated_at: Timestamp;
@@ -314,6 +316,7 @@ export const COLUMNS = {
         'queued_at',
         'started_at',
         'ended_at',
+        'usage',
     ],
     outputs: [
         'id',

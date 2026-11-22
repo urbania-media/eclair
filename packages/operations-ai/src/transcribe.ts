@@ -200,7 +200,12 @@ export const transcribe = defineOperation({
                         : { cost: { amount: result.usage.cost, currency: 'USD' } }),
                 },
             },
-            usage: { mediaSeconds: result.usage.mediaSeconds },
+            usage: {
+                mediaSeconds: result.usage.mediaSeconds,
+                ...(result.usage.cost === undefined
+                    ? {}
+                    : { cost: { amount: result.usage.cost, currency: 'USD' } }),
+            },
         };
     },
 });

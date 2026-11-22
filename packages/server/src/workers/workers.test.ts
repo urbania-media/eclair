@@ -23,6 +23,7 @@ import type { Project } from '../projects/projects.ts';
 import { createRedis } from '../redis.ts';
 import type { Services } from '../services.ts';
 import { RUNS_WITH_REDIS, createTestServices, testRedisUrl } from '../testing.ts';
+import { usageReport } from '../usage/usage.ts';
 import type { Webhooks } from '../webhooks/webhooks.ts';
 import { CancelBus } from './cancel.ts';
 import { TaskRunner } from './runner.ts';
@@ -239,6 +240,44 @@ const operations = [
         },
     }),
     defineOperation({
+        name: 'test.bill',
+        description: 'Starts a paid job at a provider, then fails, or waits to be canceled',
+        version: 1,
+        accepts: {},
+        capability: 'cpu',
+        binaries: [],
+        options: Type.Object(
+            {
+                end: Type.Union([
+                    Type.Literal('refused'),
+                    Type.Literal('fail'),
+                    Type.Literal('cancel'),
+                ]),
+            },
+            { additionalProperties: false },
+        ),
+        outputs: { files: false, metadata: true },
+        async run(context, options) {
+            if (options.end === 'refused') {
+                // Before the provider started anything.
+                throw new OperationError('provider_refused', 'The provider refused the job.');
+            }
+            context.reportUsage?.({
+                mediaSeconds: 30,
+                cost: { amount: 0.003, currency: 'USD' },
+            });
+            if (options.end === 'fail') {
+                throw new OperationError('provider_failed', 'The provider failed.');
+            }
+            await new Promise<void>((resolve) => {
+                context.signal.addEventListener('abort', () => resolve());
+            });
+            // Like a provider that waits for its job to end before it deletes it.
+            await new Promise((resolve) => setTimeout(resolve, 500));
+            throw new OperationError('operation_failed', 'The task was canceled.');
+        },
+    }),
+    defineOperation({
         name: 'test.slow',
         version: 1,
         description: 'Reports its progress for a few seconds',
@@ -259,6 +298,7 @@ const operations = [
 
 let services: Awaited<ReturnType<typeof createTestServices>>;
 let workers: TaskWorkers;
+let runner: TaskRunner;
 let project: Project;
 let redis: NonNullable<Awaited<ReturnType<typeof createTestServices>>['redis']>;
 
@@ -335,41 +375,42 @@ describe.skipIf(!RUNS_WITH_REDIS)('workers', () => {
             throw new Error('No scheduler.');
         }
         const logger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
+        runner = new TaskRunner({
+            database: services.database,
+            scheduler: services.scheduler,
+            operations: services.operations,
+            projects: services.projects,
+            resolver: services.resolver,
+            uploads: services.uploads,
+            config: {
+                binaries: { node: process.execPath } as never,
+                tmpDir: services.limits.tmpDir,
+                taskTimeout: 60_000,
+                taskMaxTimeout: 5_000,
+                maxInputSize: 1024 ** 2,
+                tempRetention: 3_600_000,
+                tempMaxRetention: 7_200_000,
+                providerCredentials: { example: { token: 'operator' } },
+                aiProviders: { 'local-whisper': { modelsDir: '/m' } },
+            },
+            worker: 'test-worker',
+            logger,
+            credentials: services.credentials,
+            cache: redisOperationCache(redis),
+            // The provider of the embed tests is a local server.
+            guard: { allowHttp: true, allowPrivateAddresses: true },
+            // Records the progress webhooks the runner asks for.
+            webhooks: {
+                sendProgress: (job: JobRecord, task: string) => {
+                    progressSent.push({ job: job.id, task });
+                    return Promise.resolve();
+                },
+            } as unknown as Webhooks,
+        });
         workers = new TaskWorkers({
             connection: redis,
             queues: [{ name: 'cpu', concurrency: 4 }],
-            runner: new TaskRunner({
-                database: services.database,
-                scheduler: services.scheduler,
-                operations: services.operations,
-                projects: services.projects,
-                resolver: services.resolver,
-                uploads: services.uploads,
-                config: {
-                    binaries: { node: process.execPath } as never,
-                    tmpDir: services.limits.tmpDir,
-                    taskTimeout: 60_000,
-                    taskMaxTimeout: 5_000,
-                    maxInputSize: 1024 ** 2,
-                    tempRetention: 3_600_000,
-                    tempMaxRetention: 7_200_000,
-                    providerCredentials: { example: { token: 'operator' } },
-                    aiProviders: { 'local-whisper': { modelsDir: '/m' } },
-                },
-                worker: 'test-worker',
-                logger,
-                credentials: services.credentials,
-                cache: redisOperationCache(redis),
-                // The provider of the embed tests is a local server.
-                guard: { allowHttp: true, allowPrivateAddresses: true },
-                // Records the progress webhooks the runner asks for.
-                webhooks: {
-                    sendProgress: (job: JobRecord, task: string) => {
-                        progressSent.push({ job: job.id, task });
-                        return Promise.resolve();
-                    },
-                } as unknown as Webhooks,
-            }),
+            runner,
             slots: new ProjectSlots(redis),
             cancel,
             projects: services.projects,
@@ -739,6 +780,139 @@ describe.skipIf(!RUNS_WITH_REDIS)('workers', () => {
             await new Promise((resolve) => setTimeout(resolve, 25));
         }
         expect((await services.jobs?.get(project.id, job.id))?.status).toBe('canceled');
+    });
+
+    it('counts what a failed task used at its provider, and nothing for one refused before', async () => {
+        const jobs = services.jobs as NonNullable<Services['jobs']>;
+        const { job } = await jobs.create(project, {
+            input: await input('bill.txt', 'bill'),
+            tasks: {
+                failed: { op: 'test.bill', options: { end: 'fail' } },
+                refused: { op: 'test.bill', options: { end: 'refused' } },
+            },
+        });
+        const done = await waitForJob(project.id, job.id);
+        expect(done.tasks['failed']).toMatchObject({
+            status: 'failed',
+            error: { code: 'provider_failed' },
+            usage: { mediaSeconds: 30, cost: { amount: 0.003, currency: 'USD' } },
+        });
+        expect(done.tasks['refused']).toMatchObject({
+            status: 'failed',
+            error: { code: 'provider_refused' },
+        });
+        expect(done.tasks['refused']).not.toHaveProperty('usage');
+
+        const usage = await services.database.kysely
+            .selectFrom('usage')
+            .select(['operation', 'media_ms', 'cost'])
+            .where('job_id', '=', job.id)
+            .execute();
+        expect(
+            usage.map(({ operation, media_ms, cost }) => [
+                operation,
+                Number(media_ms),
+                Number(cost),
+            ]),
+        ).toEqual([['test.bill@1', 30_000, 0.003]]);
+        const report = await usageReport(services.database, {
+            since: new Date(Date.now() - 60_000),
+            projectId: project.id,
+        });
+        expect(report[0]?.mediaSeconds).toBeGreaterThanOrEqual(30);
+    });
+
+    it('shows what a canceled task used, and ends its job once the task has stopped', async () => {
+        const jobs = services.jobs as NonNullable<Services['jobs']>;
+        const { job } = await jobs.create(project, {
+            input: await input('cancel.txt', 'cancel'),
+            tasks: { bill: { op: 'test.bill', options: { end: 'cancel' } } },
+            webhook: 'https://example.com/eclair',
+        });
+        await waitForTask(project.id, job.id, 'bill', 'running');
+        const canceled = await jobs.cancel(project.id, job.id);
+        // Canceled at once, but it ends when its running task has stopped.
+        expect(canceled.status).toBe('canceled');
+        expect(canceled).not.toHaveProperty('endedAt');
+        await expect(jobs.retry(project.id, job.id)).rejects.toMatchObject({
+            message:
+                'The job is canceled and its tasks are still stopping: retry it once it has ended.',
+        });
+        const deliveries = () =>
+            services.database.kysely
+                .selectFrom('webhook_deliveries')
+                .select('event')
+                .where('job_id', '=', job.id)
+                .execute();
+        expect(await deliveries()).toEqual([]);
+
+        const deadline = Date.now() + 5000;
+        let ended = await jobs.get(project.id, job.id);
+        while (ended.endedAt === undefined) {
+            expect(Date.now()).toBeLessThan(deadline);
+            await new Promise((resolve) => setTimeout(resolve, 25));
+            ended = await jobs.get(project.id, job.id);
+        }
+        // The job and its `job.canceled` webhook, sent now, carry what the task used.
+        expect(ended).toMatchObject({
+            status: 'canceled',
+            tasks: {
+                bill: {
+                    status: 'canceled',
+                    usage: { mediaSeconds: 30, cost: { amount: 0.003, currency: 'USD' } },
+                },
+            },
+        });
+        expect(await deliveries()).toEqual([{ event: 'job.canceled' }]);
+        const usage = await services.database.kysely
+            .selectFrom('usage')
+            .select('media_ms')
+            .where('job_id', '=', job.id)
+            .execute();
+        expect(usage.map(({ media_ms }) => Number(media_ms))).toEqual([30_000]);
+
+        // Retried, the task starts a new run: its usage starts again.
+        const retried = await jobs.retry(project.id, job.id);
+        expect(retried.tasks['bill']).not.toHaveProperty('usage');
+        await waitForTask(project.id, job.id, 'bill', 'running');
+        await jobs.cancel(project.id, job.id);
+        while ((await jobs.get(project.id, job.id)).endedAt === undefined) {
+            expect(Date.now()).toBeLessThan(deadline + 5000);
+            await new Promise((resolve) => setTimeout(resolve, 25));
+        }
+    });
+
+    it('ends a running task of a canceled job whose worker stopped, and the job', async () => {
+        const jobs = services.jobs as NonNullable<Services['jobs']>;
+        const { job } = await jobs.create(project, {
+            input: await input('gone.txt', 'gone'),
+            tasks: { wait: { op: 'test.wait', options: { milliseconds: 1500 } } },
+        });
+        await waitForTask(project.id, job.id, 'wait', 'running');
+        // Its worker is gone, and the cancel never reached it.
+        await services.database.kysely
+            .updateTable('tasks')
+            .set({ worker: 'gone' })
+            .where('job_id', '=', job.id)
+            .execute();
+        await services.database.kysely
+            .updateTable('jobs')
+            .set({ status: 'canceled' })
+            .where('id', '=', job.id)
+            .execute();
+        const task = await services.database.kysely
+            .selectFrom('tasks')
+            .select('id')
+            .where('job_id', '=', job.id)
+            .executeTakeFirstOrThrow();
+        // The queue gives the task back to a worker.
+        expect(await runner.run(task.id, { canRetry: false })).toBe('canceled');
+        const ended = await jobs.get(project.id, job.id);
+        expect(ended).toMatchObject({
+            status: 'canceled',
+            tasks: { wait: { status: 'canceled' } },
+        });
+        expect(ended.endedAt).toBeDefined();
     });
 
     it("stops a task at the project's time limit", async () => {

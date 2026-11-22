@@ -489,6 +489,24 @@ export function amazonTranscribe(
                         DEFAULT_LOCALES[request.language] ??
                         AMAZON_LOCALES.find((option) => option.startsWith(`${request.language}-`)));
 
+            // What Amazon bills a job it started, canceled or failed: the audio, at least 15 s.
+            const billed = Math.max(MIN_BILLED, request.duration);
+            const cost =
+                settings.pricePerMinute === undefined
+                    ? undefined
+                    : Math.round((billed / 60) * settings.pricePerMinute * 1e6) / 1e6;
+            let reported = false;
+            // Once the job exists, the task reports its usage whatever its end.
+            const jobStarted = () => {
+                if (!reported) {
+                    reported = true;
+                    context.reportUsage?.({
+                        mediaSeconds: request.duration,
+                        ...(cost === undefined ? {} : { cost: { amount: cost, currency: 'USD' } }),
+                    });
+                }
+            };
+
             const follow = (current: TranscriptionJob | undefined) => {
                 for (const key of [
                     keyOf(current?.Media?.MediaFileUri, settings.bucket),
@@ -545,6 +563,7 @@ export function amazonTranscribe(
                         { abortSignal: context.signal },
                     );
                     job = result.TranscriptionJob;
+                    jobStarted();
                 } catch (error) {
                     if (context.signal.aborted) {
                         // The job may have started before the request was cut: the cleanup looks.
@@ -557,6 +576,8 @@ export function amazonTranscribe(
                     }
                     // The job of an earlier attempt of this task: follow it, and delete what it left.
                     context.log.info('Following the job of an earlier attempt.', { job: name });
+                    // That attempt stopped before it could report it.
+                    jobStarted();
                 }
 
                 const started = Date.now();
@@ -621,19 +642,12 @@ export function amazonTranscribe(
                     keyOf(job.Transcript?.TranscriptFileUri, settings.bucket) ?? outputKey;
                 toDelete.add(transcriptKey);
                 const raw = await readTranscript(context, clients, settings, transcriptKey);
-                const billed = Math.max(MIN_BILLED, request.duration);
                 return {
                     transcript: parseAmazonTranscript(raw, job.LanguageCode ?? locale),
                     model: undefined,
                     usage: {
                         mediaSeconds: request.duration,
-                        ...(settings.pricePerMinute === undefined
-                            ? {}
-                            : {
-                                  cost:
-                                      Math.round((billed / 60) * settings.pricePerMinute * 1e6) /
-                                      1e6,
-                              }),
+                        ...(cost === undefined ? {} : { cost }),
                     },
                 };
             } finally {
@@ -643,7 +657,7 @@ export function amazonTranscribe(
                         toDelete.add(key);
                     }
                 }
-                await cleanup(
+                const existed = await cleanup(
                     context,
                     clients,
                     settings,
@@ -651,6 +665,10 @@ export function amazonTranscribe(
                     jobMayExist ? name : undefined,
                     job?.TranscriptionJobStatus,
                 );
+                // A job whose start got no answer, or was cut by a cancel, but started.
+                if (existed) {
+                    jobStarted();
+                }
             }
         },
     };
@@ -690,6 +708,7 @@ async function readTranscript(
  * Deletes the job and the files. Amazon can neither stop nor delete a running job, and writes the
  * transcript when it ends: the cleanup waits for it to end, up to `cleanupWait`, then deletes the
  * job and every file of its folders. What it can't delete, the bucket's lifecycle rule does.
+ * Returns whether the job exists, as Amazon told it.
  */
 async function cleanup(
     context: OperationContext,
@@ -698,9 +717,10 @@ async function cleanup(
     keys: string[],
     job: string | undefined,
     lastStatus: string | undefined,
-): Promise<void> {
+): Promise<boolean> {
     const failures: string[] = [];
     let deleteJob = job !== undefined;
+    let existed = lastStatus !== undefined;
     if (job !== undefined && lastStatus !== 'COMPLETED' && lastStatus !== 'FAILED') {
         const deadline = Date.now() + settings.cleanupWait;
         let interval = settings.pollInterval;
@@ -718,6 +738,9 @@ async function cleanup(
                     deleteJob = false;
                     break;
                 }
+            }
+            if (status !== undefined) {
+                existed = true;
             }
             if (status === 'COMPLETED' || status === 'FAILED') {
                 break;
@@ -755,4 +778,5 @@ async function cleanup(
             ...(job === undefined ? {} : { job }),
         });
     }
+    return existed;
 }

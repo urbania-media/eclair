@@ -16,6 +16,7 @@ export type JobEvent = Schemas['JobEvent'];
 export type Task = Schemas['Task'];
 export type TaskStatus = Schemas['TaskStatus'];
 export type TaskError = Schemas['TaskError'];
+export type TaskUsage = Schemas['TaskUsage'];
 export type TaskOutputs = Schemas['TaskOutputs'];
 export type OutputFile = Schemas['OutputFile'];
 export type PresetRequest = Schemas['PresetRequest'];

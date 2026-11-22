@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { OperationError, execBinary } from '@eclair-js/operation';
-import type { OperationContext } from '@eclair-js/operation';
+import type { OperationContext, OperationUsage } from '@eclair-js/operation';
 import { skipWithoutBinaries } from '@eclair-js/operation/testing';
 
 import {
@@ -179,6 +179,9 @@ describe.skipIf(skipWithoutBinaries(['ffmpeg']))('amazon-transcribe, with fake A
     let request: TranscriptionRequest;
     const progress: number[] = [];
     const warnings: unknown[] = [];
+    const usages: OperationUsage[] = [];
+    // What Amazon bills 2 seconds of audio: its 15-second minimum, at $0.006 a minute.
+    const BILLED = { mediaSeconds: 2, cost: { amount: 0.0015, currency: 'USD' } };
 
     beforeEach(async () => {
         workdir = await mkdtemp(join(tmpdir(), 'eclair-amazon-'));
@@ -214,10 +217,12 @@ describe.skipIf(skipWithoutBinaries(['ffmpeg']))('amazon-transcribe, with fake A
             signal: controller.signal,
             output: () => {},
             taskId: 'tsk_01TEST',
+            reportUsage: (usage) => usages.push(usage),
         };
         request = { audio, duration: 2, language: 'fr', model: undefined, prompt: undefined };
         progress.length = 0;
         warnings.length = 0;
+        usages.length = 0;
     });
 
     afterEach(async () => {
@@ -271,6 +276,8 @@ describe.skipIf(skipWithoutBinaries(['ffmpeg']))('amazon-transcribe, with fake A
         expect(result.transcript.segments).toHaveLength(2);
         // Amazon bills 15 seconds at least.
         expect(result.usage).toEqual({ mediaSeconds: 2, cost: 0.0015 });
+        // Reported as soon as the job started, for an end that wouldn't be a success.
+        expect(usages).toEqual([BILLED]);
 
         const put = clients.sent[0];
         expect(put?.command).toBe('PutObject');
@@ -353,6 +360,8 @@ describe.skipIf(skipWithoutBinaries(['ffmpeg']))('amazon-transcribe, with fake A
         });
         const result = await amazonTranscribe(settings(), clients).transcribe(context, request);
         expect(result.transcript.segments).toHaveLength(2);
+        // The earlier attempt stopped before it could report its job.
+        expect(usages).toEqual([BILLED]);
         expect(clients.sent.find((entry) => entry.command === 'GetObject')?.input).toEqual({
             Bucket: 'media-transcribe',
             Key: 'eclair-transcribe/old/transcript.json',
@@ -386,6 +395,50 @@ describe.skipIf(skipWithoutBinaries(['ffmpeg']))('amazon-transcribe, with fake A
             message: 'Amazon Transcribe failed: The media file is too long.',
         });
         expect(clients.sent.map((entry) => entry.command)).toContain('DeleteTranscriptionJob');
+        // Amazon bills a job that started, failed or not.
+        expect(usages).toEqual([BILLED]);
+    });
+
+    it('reports its usage when the transcript cannot be read, after the job started', async () => {
+        const clients = fakeClients((command) => {
+            if (command === 'GetObject') {
+                throw awsError('AccessDenied', 403);
+            }
+            return command === 'StartTranscriptionJob' ? completedJob() : {};
+        });
+        await expect(
+            amazonTranscribe(settings(), clients).transcribe(context, request),
+        ).rejects.toBeInstanceOf(OperationError);
+        expect(usages).toEqual([BILLED]);
+    });
+
+    it('reports no cost without a price, only the seconds', async () => {
+        const clients = fakeClients((command) =>
+            command === 'StartTranscriptionJob'
+                ? completedJob('FAILED', { FailureReason: 'x' })
+                : {},
+        );
+        await expect(
+            amazonTranscribe(settings({ pricePerMinute: undefined }), clients).transcribe(
+                context,
+                request,
+            ),
+        ).rejects.toMatchObject({ code: 'provider_failed' });
+        expect(usages).toEqual([{ mediaSeconds: 2 }]);
+    });
+
+    it('reports nothing when the audio never reached the bucket', async () => {
+        const clients = fakeClients((command) => {
+            if (command === 'PutObject') {
+                throw awsError('AccessDenied', 403);
+            }
+            return {};
+        });
+        await expect(
+            amazonTranscribe(settings(), clients).transcribe(context, request),
+        ).rejects.toBeInstanceOf(OperationError);
+        expect(clients.sent.map((entry) => entry.command)).not.toContain('StartTranscriptionJob');
+        expect(usages).toEqual([]);
     });
 
     it("keeps the project's bucket and keys out of a failure reason", async () => {
@@ -435,6 +488,8 @@ describe.skipIf(skipWithoutBinaries(['ffmpeg']))('amazon-transcribe, with fake A
                 .map((entry) => entry.input['Key']),
         ).toEqual(expect.arrayContaining([key, key.replace('audio.flac', 'transcript.json')]));
         expect(warnings).toEqual([]);
+        // Amazon bills a job it started, canceled or not.
+        expect(usages).toEqual([BILLED]);
     });
 
     it('leaves a job that is still running after a timeout, and says so', async () => {
@@ -458,6 +513,7 @@ describe.skipIf(skipWithoutBinaries(['ffmpeg']))('amazon-transcribe, with fake A
         expect(warnings).toEqual([
             { failures: ['job: still IN_PROGRESS'], job: 'media-tsk_01TEST' },
         ]);
+        expect(usages).toEqual([BILLED]);
     });
 
     it('cleans up a job whose start was cut by a cancel', async () => {
@@ -473,6 +529,26 @@ describe.skipIf(skipWithoutBinaries(['ffmpeg']))('amazon-transcribe, with fake A
             amazonTranscribe(settings(), clients).transcribe(context, request),
         ).rejects.toMatchObject({ message: 'The task was canceled.' });
         expect(clients.sent.map((entry) => entry.command)).toContain('DeleteTranscriptionJob');
+        // The cleanup found the job: it started.
+        expect(usages).toEqual([BILLED]);
+    });
+
+    it('reports nothing for a start cut by a cancel when the job never started', async () => {
+        const clients = fakeClients((command) => {
+            if (command === 'StartTranscriptionJob') {
+                controller.abort();
+                throw awsError('AbortError', undefined);
+            }
+            if (command === 'GetTranscriptionJob') {
+                throw awsError('NotFoundException');
+            }
+            return {};
+        });
+        await expect(
+            amazonTranscribe(settings(), clients).transcribe(context, request),
+        ).rejects.toMatchObject({ message: 'The task was canceled.' });
+        expect(clients.sent.map((entry) => entry.command)).not.toContain('DeleteTranscriptionJob');
+        expect(usages).toEqual([]);
     });
 
     it('asks again when a status request fails, and gives up after five in a row', async () => {
@@ -553,6 +629,8 @@ describe.skipIf(skipWithoutBinaries(['ffmpeg']))('amazon-transcribe, with fake A
         });
         expect(clients.sent.map((entry) => entry.command)).not.toContain('DeleteTranscriptionJob');
         expect(warnings).toEqual([{ failures: Array<string>(3).fill('object: AccessDenied') }]);
+        // Refused before it started: nothing to bill.
+        expect(usages).toEqual([]);
     });
 
     it('pads audio shorter than half a second with silence, as Amazon needs', async () => {
