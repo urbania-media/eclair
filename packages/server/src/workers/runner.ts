@@ -73,7 +73,12 @@ export interface TaskRunnerOptions {
         | 'tempRetention'
         | 'tempMaxRetention'
     > &
-        Partial<Pick<Config, 'providerCredentials' | 'embedMaxDuration'>>;
+        Partial<
+            Pick<
+                Config,
+                'providerCredentials' | 'embedMaxDuration' | 'aiProviders' | 'taskMaxTimeout'
+            >
+        >;
     /** The projects' credentials for embed providers. */
     credentials?: Credentials | undefined;
     /** The caches of operations, in Redis. Nothing is cached without it. */
@@ -362,9 +367,25 @@ export class TaskRunner {
         const project = await this.#options.projects.get(job.projectId);
         await mkdir(this.#options.config.tmpDir, { recursive: true });
         const workdir = await mkdtemp(join(this.#options.config.tmpDir, `${task.name}-`));
-        const timeout = project.settings.taskTimeout ?? this.#options.config.taskTimeout;
+        let timeout = project.settings.taskTimeout ?? this.#options.config.taskTimeout;
         const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort('timeout'), timeout);
+        let timer = setTimeout(() => controller.abort('timeout'), timeout);
+        const runStarted = Date.now();
+        // An operation that knows how long it needs extends the limit, up to the operator's maximum.
+        const maxTimeout = Math.max(timeout, this.#options.config.taskMaxTimeout ?? timeout);
+        const extendTimeout = (ms: number): boolean => {
+            const wanted = Date.now() - runStarted + ms;
+            const granted = Math.min(Math.max(timeout, wanted), maxTimeout);
+            if (granted > timeout && !controller.signal.aborted) {
+                clearTimeout(timer);
+                timeout = granted;
+                timer = setTimeout(
+                    () => controller.abort('timeout'),
+                    runStarted + timeout - Date.now(),
+                );
+            }
+            return wanted <= maxTimeout;
+        };
         const onCancel = () => controller.abort('canceled');
         options.signal?.addEventListener('abort', onCancel, { once: true });
         const startedAt = Date.now();
@@ -426,17 +447,23 @@ export class TaskRunner {
                 }
 
                 stage = 'run';
+                const context = this.#context(
+                    operation,
+                    task,
+                    { ...type, path: input.path, size: input.size, probe },
+                    workdir,
+                    controller.signal,
+                    files,
+                    options,
+                    this.#progressWebhooks(project, job, task),
+                );
+                const providers = await this.#providers(operation, task, project);
                 result = await (operation as FileOperation).run(
-                    this.#context(
-                        operation,
-                        task,
-                        { ...type, path: input.path, size: input.size, probe },
-                        workdir,
-                        controller.signal,
-                        files,
-                        options,
-                        this.#progressWebhooks(project, job, task),
-                    ),
+                    {
+                        ...context,
+                        extendTimeout,
+                        ...(providers === undefined ? {} : { providers }),
+                    },
                     task.options as never,
                 );
             }
@@ -471,7 +498,7 @@ export class TaskRunner {
                 operation,
                 inputSize,
                 written,
-                probe,
+                result.usage?.mediaSeconds ?? probe?.duration,
                 Date.now() - startedAt,
             );
             await scheduler.advance(job.id);
@@ -771,7 +798,55 @@ export class TaskRunner {
             progress: this.#progress(task, options, sendProgress),
             log: this.#log(task, operation),
             output: this.#output(operation, workdir, files),
+            taskId: task.id,
+            available: (binary) => {
+                const path = (this.#options.config.binaries as Record<string, string>)[binary];
+                return path === undefined
+                    ? Promise.resolve(false)
+                    : isAvailable(binary as BinaryName, path);
+            },
         };
+    }
+
+    /**
+     * The AI provider of an operation that calls one (decision 0008), picked again from the
+     * project's current settings: the operator's settings, and the project's credentials for an
+     * external provider.
+     */
+    async #providers(
+        operation: Operation,
+        task: TaskRecord,
+        project: Project,
+    ): Promise<OperationContext['providers']> {
+        const capability = operation.providers;
+        if (capability === undefined) {
+            return undefined;
+        }
+        let provider;
+        try {
+            provider = this.#options.operations.providerFor(
+                capability,
+                task.options['provider'],
+                project.settings,
+            );
+        } catch (error) {
+            throw new OperationError(
+                'provider_failed',
+                `The ${capability} provider is refused: ${(error as Error).message}.`,
+            );
+        }
+        const settings = this.#options.config.aiProviders?.[provider.name] ?? {};
+        if (!provider.external) {
+            return { [capability]: { name: provider.name, settings } };
+        }
+        const credentials = await this.#options.credentials?.get(project.id, provider.name);
+        if (credentials === undefined) {
+            throw new OperationError(
+                'provider_failed',
+                `The project has no credentials for ${provider.title}.`,
+            );
+        }
+        return { [capability]: { name: provider.name, settings, credentials } };
     }
 
     /** Runs a binary the operation declared, at its configured path, in its work directory. */
@@ -925,7 +1000,8 @@ export class TaskRunner {
         operation: Operation,
         bytesIn: number,
         written: { bytes: number; stored: number },
-        probe: ProbeMetadata | undefined,
+        /** Seconds of media: what the operation reports, or the job's probe. */
+        mediaSeconds: number | undefined,
         elapsed: number,
     ): Promise<void> {
         await this.#options.database.kysely
@@ -938,7 +1014,7 @@ export class TaskRunner {
                 operation: operation.key,
                 // Wall-clock time of the task: the CPU time of its binaries isn't measured yet.
                 cpu_ms: elapsed,
-                media_ms: Math.round((probe?.duration ?? 0) * 1000),
+                media_ms: Math.round((mediaSeconds ?? 0) * 1000),
                 bytes_in: bytesIn,
                 bytes_out: written.bytes,
                 bytes_stored: written.stored,

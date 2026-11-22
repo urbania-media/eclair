@@ -2,6 +2,7 @@ import type { Static, TSchema } from 'typebox';
 
 import type { Kind, ProbeMetadata } from '@eclair-js/protocol';
 
+import type { AiProvider } from './ai-providers.ts';
 import type { Capability } from './capabilities.ts';
 import { matchesMime } from './detect.ts';
 import type { EmbedOperationContext, EmbedProvider } from './embeds.ts';
@@ -27,6 +28,22 @@ export interface OutputOptions {
     /** The ThumbHash placeholder of an image file, in base64, from `thumbhash()`. */
     thumbhash?: string | undefined;
 }
+
+/** A capability of AI providers (decision 0008). */
+export type ProviderCapability = 'transcription' | 'vision' | 'language';
+
+/**
+ * The provider that answers a capability for a task, and its settings from the operator's
+ * configuration: `local-whisper` with its models directory, for example.
+ */
+export interface ProviderSettings {
+    name: string;
+    settings: Readonly<Record<string, unknown>>;
+    /** The project's credentials for the provider, decrypted, for external providers. */
+    credentials?: Readonly<Record<string, string>>;
+}
+
+export type OperationProviders = Partial<Record<ProviderCapability, ProviderSettings>>;
 
 export interface OperationLogger {
     debug(message: string, data?: Record<string, unknown>): void;
@@ -62,11 +79,35 @@ export interface OperationContext {
      * (`master.m3u8`, `0.jpg`): the worker uploads it under the task's path.
      */
     output(name: string, path: string, options?: OutputOptions): void;
+    /**
+     * The AI provider of each capability the operation declares in `providers`, as the server
+     * picked it from the project's settings and the task's `provider` option (decision 0008).
+     */
+    providers?: OperationProviders;
+    /**
+     * The task's id, the same when the task runs again: for names that must not change between
+     * attempts, such as a job at an external provider (rule 5).
+     */
+    taskId?: string;
+    /**
+     * Asks for the task to run at least `ms` more milliseconds from now, when the operation knows
+     * how long it needs (the duration of the audio, the provider). It never shortens the task's
+     * time limit, and never extends it past the operator's maximum: it returns `false` when it
+     * can't give that much, so that the operation can refuse before it starts a paid job.
+     */
+    extendTimeout?(ms: number): boolean;
+    /** Whether this worker has one of the operation's `optionalBinaries`. */
+    available?(binary: string): Promise<boolean>;
 }
 
 export interface OperationResult {
     /** Metadata the operation read or computed. */
     metadata?: Record<string, unknown>;
+    /**
+     * What the task used, for the project's usage, when the operation knows better than the
+     * job's probe: the seconds of media a provider transcribed, for example.
+     */
+    usage?: { mediaSeconds?: number };
 }
 
 /** A JSON Schema object, for plugins that don't use TypeBox. Options are then untyped. */
@@ -99,6 +140,17 @@ interface OperationBase<S extends TSchema | JsonSchemaObject> {
     optionalBinaries?: string[];
     /** JSON Schema of the options, written with TypeBox or by hand. Objects refuse unknown properties. */
     options: S;
+    /**
+     * The capability of AI providers it calls (decision 0008). The server then picks the provider
+     * of each task from the project's settings, or the task's `provider` option when the project
+     * allows it, and gives it in `context.providers`.
+     */
+    providers?: ProviderCapability;
+    /**
+     * The queue of its tasks whose AI provider is external, when it isn't `capability`: a task
+     * that only waits on a hosted API (`network`) doesn't hold a slot of the `ai` queue.
+     */
+    externalQueue?: Capability;
     outputs: { files: boolean; metadata: boolean };
 }
 
@@ -210,4 +262,8 @@ export function acceptsInput(
  */
 export type OperationPlugin =
     | readonly Operation[]
-    | { operations: readonly Operation[]; embedProviders?: readonly EmbedProvider[] };
+    | {
+          operations: readonly Operation[];
+          embedProviders?: readonly EmbedProvider[];
+          aiProviders?: readonly AiProvider[];
+      };

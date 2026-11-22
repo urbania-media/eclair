@@ -29,7 +29,8 @@ export interface CredentialsSummary {
 }
 
 /**
- * The credentials of the projects for embed providers (decision 0022), encrypted with
+ * The credentials of the projects for embed providers (decision 0022) and external AI providers
+ * (decision 0008), encrypted with
  * `ECLAIR_SECRET_KEY` like storages. Their values are never shown again.
  */
 export class Credentials {
@@ -75,10 +76,11 @@ export class Credentials {
         }
         let valid = validateStrings(config, '/config');
         if (this.#operations !== undefined) {
-            const definition = this.#operations.embedProvider(provider);
+            const definition =
+                this.#operations.embedProvider(provider) ?? this.#operations.aiProvider(provider);
             if (definition === undefined) {
                 throw new InvalidValueError(
-                    { '/provider': ['is not an embed provider of this server'] },
+                    { '/provider': ['is not an embed or AI provider of this server'] },
                     `This server has no embed provider "${provider}".`,
                 );
             }
@@ -127,6 +129,17 @@ export class Credentials {
             .where('provider', '=', provider)
             .executeTakeFirstOrThrow();
         return this.#summary(row);
+    }
+
+    /** Whether a project has credentials for a provider, without decrypting them. */
+    async has(projectId: string, provider: string): Promise<boolean> {
+        const row = await this.#database.kysely
+            .selectFrom('credentials')
+            .select('provider')
+            .where('project_id', '=', projectId)
+            .where('provider', '=', provider)
+            .executeTakeFirst();
+        return row !== undefined;
     }
 
     /** A provider's decrypted credentials of a project, for the workers. */

@@ -80,9 +80,14 @@ Environment variables, with defaults in [`docker/.env.example`](../docker/.env.e
 | `ECLAIR_TEMP_RETENTION`                                            | Default retention of temporary files (`24h`), and `ECLAIR_TEMP_MAX_RETENTION` for the per-project maximum                                                                                                                                                                                                                                                                                                                              |
 | `ECLAIR_PLUGINS`                                                   | Extra operation packages to load                                                                                                                                                                                                                                                                                                                                                                                                       |
 | `ECLAIR_MAX_INPUT_SIZE`                                            | Default input size limit (`2GB`; KB, MB, GB and TB are multiples of 1024), overridable per project                                                                                                                                                                                                                                                                                                                                     |
-| `ECLAIR_TASK_TIMEOUT`                                              | Default task timeout, overridable per operation and per project                                                                                                                                                                                                                                                                                                                                                                        |
+| `ECLAIR_TASK_TIMEOUT`                                              | Default task timeout, overridable per project                                                                                                                                                                                                                                                                                                                                                                                          |
+| `ECLAIR_TASK_MAX_TIMEOUT`                                          | Longest time limit an operation may ask for when it knows it needs more than `ECLAIR_TASK_TIMEOUT` (a long transcription): `12h`                                                                                                                                                                                                                                                                                                       |
 | `ECLAIR_JOB_RETENTION`                                             | How long ended jobs are kept                                                                                                                                                                                                                                                                                                                                                                                                           |
 | `ECLAIR_EMBED_MAX_DURATION`                                        | The longest embed that `embed.download` takes (`2h`), overridable per project (`embedMaxDuration`)                                                                                                                                                                                                                                                                                                                                     |
+| `ECLAIR_MODELS_DIR`                                                | Directory of the AI models of the workers (`/var/lib/eclair/models`): whisper.cpp's `ggml-<model>.bin` and the Silero VAD model `ggml-silero-v6.2.0.bin`. Models are never downloaded at task time                                                                                                                                                                                                                                     |
+| `ECLAIR_WHISPER_MODEL`                                             | The whisper.cpp model of `ai.transcribe` when a task gives none (`large-v3-turbo-q5_0`)                                                                                                                                                                                                                                                                                                                                                |
+| `ECLAIR_WHISPER_THREADS`                                           | Threads of whisper.cpp. All the CPUs of the worker by default                                                                                                                                                                                                                                                                                                                                                                          |
+| `ECLAIR_TRANSCRIBE_MAX_DURATION`                                   | The longest audio `ai.transcribe` takes (`4h`): longer fails with `limit_exceeded`                                                                                                                                                                                                                                                                                                                                                     |
 | `ECLAIR_PROVIDER_<PROVIDER>_<KEY>`                                 | The operator's credentials for an embed provider, used by projects that have none of their own ([decision 0022](decisions/0022-embeds.md)): `ECLAIR_PROVIDER_YOUTUBE_API_KEY` (a YouTube Data API key), `ECLAIR_PROVIDER_VIMEO_TOKEN`, `ECLAIR_PROVIDER_SPOTIFY_CLIENT_ID` and `ECLAIR_PROVIDER_SPOTIFY_CLIENT_SECRET`, `ECLAIR_PROVIDER_INSTAGRAM_ACCESS_TOKEN`. The key is the credential's name in capitals (`apiKey` is `API_KEY`) |
 | `FFMPEG_BIN`, `MAGICK_BIN`…                                        | Binary paths, when not on `PATH`: `FFMPEG_BIN`, `FFPROBE_BIN`, `MAGICK_BIN`, `VIPS_BIN`, `GS_BIN`, `PDFINFO_BIN`, `PDFTOPPM_BIN`, `AUDIOWAVEFORM_BIN`, `FONTTOOLS_BIN`, `WHISPER_BIN`, `YTDLP_BIN`                                                                                                                                                                                                                                     |
 
@@ -113,6 +118,55 @@ The `-embed` variant of the image runs yt-dlp for embeds ([decision 0022](decisi
 - **Its network.** yt-dlp makes its own requests, outside Eclair's SSRF guard. To restrict them, run an egress proxy that only allows public addresses, and set `HTTPS_PROXY` (and `HTTP_PROXY`) in the workers' environment: Eclair passes these variables, and `NO_PROXY`, to the binaries it runs, and to them only. A firewall on the host that refuses private ranges to the container does the same.
 - **Updates.** Platforms change often, and an old yt-dlp stops working. Its version is pinned with hashes in [`docker/yt-dlp/requirements.txt`](../docker/yt-dlp/requirements.txt), which Dependabot updates. Pull a new image of the variant when a platform starts failing with `provider_failed`.
 - **Blocks.** Platforms often refuse servers in data centers: a task then fails with `provider_refused` ("Sign in to confirm you're not a bot", a 429), and it isn't retried. Eclair never uses the cookies of an account to get around it. Measure from the server before allowing a platform to projects (`embedDownload`).
+
+## Transcription
+
+`ai.transcribe` answers through the project's transcription provider ([Transcripts](protocol.md#transcripts)). Its `local-whisper` tasks run on workers that serve the `ai` queue (`ECLAIR_QUEUES=ai:1`); its tasks with an external provider, which only wait on it, run on the `network` queue, so that they never hold the slot of a local transcription. A worker that only serves `network` needs ffmpeg but not whisper-cli; without whisper-cli, `eclair doctor` reports the operation without it.
+
+A transcription asks for the time its provider needs before it starts, beyond `ECLAIR_TASK_TIMEOUT` when the recording is long: ten minutes plus twice the duration with `local-whisper` (its `timeFactor`), ten minutes plus the duration and the cleanup's wait with Amazon. `ECLAIR_TASK_MAX_TIMEOUT` (12 hours) caps it: a recording that couldn't finish within it fails with `limit_exceeded` before any paid job starts.
+
+### `local-whisper`
+
+The image has whisper.cpp but no models. Put them in `ECLAIR_MODELS_DIR` (`/var/lib/eclair/models`, on the data volume) before the worker starts. A task never downloads a model, and a task that asks for a model the worker doesn't have fails with `provider_failed`. They come from whisper.cpp's repository on Hugging Face; check each file's SHA-256 (Hugging Face lists it):
+
+| File                           | Size   | SHA-256                                                            |
+| ------------------------------ | ------ | ------------------------------------------------------------------ |
+| `ggml-large-v3-turbo-q5_0.bin` | 574 MB | `394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2` |
+| `ggml-medium-q5_0.bin`         | 539 MB | `19fea4b380c3a618ec4723c3eef2eb785ffba0d0538cf43f8f235e7b3b34220f` |
+| `ggml-small-q5_1.bin`          | 190 MB | `ae85e4a935d7a567bd102fe55afc16bb595bdb618e11b2fc7591bc08120411bb` |
+| `ggml-silero-v6.2.0.bin` (VAD) | 885 kB | `2aa269b785eeb53a82983a20501ddf7c1d9c48e33ab63a41391ac6c9f7fb6987` |
+
+The models are at `https://huggingface.co/ggerganov/whisper.cpp/resolve/main/<file>`, the VAD model at `https://huggingface.co/ggml-org/whisper-vad/resolve/main/ggml-silero-v6.2.0.bin`. `large-v3-turbo-q5_0` is the default (`ECLAIR_WHISPER_MODEL`). Give a worker one transcription at a time (`ai:1`) and all its CPUs (`ECLAIR_WHISPER_THREADS`). See #119 for speed and memory. A task's `prompt` is repeated on each 30-second window; whisper.cpp keeps 223 of its tokens at most, and drops the beginning of a longer one.
+
+### `amazon-transcribe`
+
+An external provider: the audio goes to the project's AWS account. A project uses it when its settings say so (`aiProviders: { transcription: ["amazon-transcribe"] }` and `externalAiProviders: true`), with its own credentials (`PUT /admin/v1/projects/{project}/credentials/amazon-transcribe`: `accessKeyId`, `secretAccessKey`, `region`, `bucket`, optionally `prefix`, `jobPrefix`, `languages`, `pricePerMinute`). In the project's account:
+
+- A bucket in the same region, private, with a lifecycle rule that expires the prefix (`eclair-transcribe/`) after one day. Eclair deletes its files after each task, Amazon's empty `.write_access_check_file.temp` included; the rule catches what a crashed worker leaves. Amazon can neither stop nor delete a running job: after a cancel or a failure, Eclair waits up to 10 minutes for the job to end before it deletes it and its transcript, and logs a warning with the job's name when it couldn't.
+- Locales Amazon transcribes in batch: `fr-CA` and `fr-FR`, `en-US`, `en-GB`… but not `en-CA` (see `AMAZON_LOCALES` in `@eclair-js/operations-ai`). A task that asks for another one is refused when its job is created; a project's `languages` keeps only the ones Amazon knows.
+- An IAM user for Eclair with only this policy. Jobs are named `<jobPrefix><task id>` (`jobPrefix` is `eclair-` by default), so the key may only follow and delete its own. Eclair always writes the transcript to the project's bucket (`OutputBucketName`), never to Amazon's, and deletes the job's record after reading it, as Amazon otherwise keeps it 90 days.
+
+```json
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": [
+                "transcribe:StartTranscriptionJob",
+                "transcribe:GetTranscriptionJob",
+                "transcribe:DeleteTranscriptionJob"
+            ],
+            "Resource": "arn:aws:transcribe:<region>:<account>:transcription-job/eclair-*"
+        },
+        {
+            "Effect": "Allow",
+            "Action": ["s3:PutObject", "s3:GetObject", "s3:DeleteObject"],
+            "Resource": "arn:aws:s3:::<bucket>/eclair-transcribe/*"
+        }
+    ]
+}
+```
 
 ## Running without Docker
 

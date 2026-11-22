@@ -1,7 +1,7 @@
 import { Type } from 'typebox';
 import { describe, expect, it } from 'vitest';
 
-import { defineEmbedProvider, defineOperation } from '@eclair-js/operation';
+import { defineAiProvider, defineEmbedProvider, defineOperation } from '@eclair-js/operation';
 
 import { testEmbedProbe, testEmbedProvider } from '../jobs/testing.ts';
 import { InvalidValueError } from '../validation.ts';
@@ -221,5 +221,153 @@ describe('OperationRegistry', () => {
                 operations: ['image.blurhash'],
             }),
         ).toHaveLength(1);
+    });
+});
+
+describe('OperationRegistry, AI providers', () => {
+    const transcribe = defineOperation({
+        name: 'ai.transcribe',
+        version: 1,
+        description: 'Transcribes',
+        accepts: { kinds: ['audio'] },
+        capability: 'ai',
+        binaries: [],
+        options: Type.Object({
+            provider: Type.Optional(Type.String()),
+            language: Type.Optional(Type.String()),
+        }),
+        providers: 'transcription',
+        externalQueue: 'network',
+        outputs: { files: true, metadata: true },
+        run: async () => ({}),
+    });
+    const registry = new OperationRegistry(
+        [transcribe],
+        [],
+        [
+            defineAiProvider({
+                name: 'local-whisper',
+                title: 'whisper.cpp',
+                capability: 'transcription',
+                external: false,
+            }),
+            defineAiProvider({
+                name: 'amazon-transcribe',
+                title: 'Amazon Transcribe',
+                capability: 'transcription',
+                external: true,
+                checkOptions: (options) =>
+                    options['language'] === 'en-CA'
+                        ? { language: "Amazon Transcribe doesn't transcribe en-CA" }
+                        : undefined,
+            }),
+            defineAiProvider({
+                name: 'faces',
+                title: 'Faces',
+                capability: 'vision',
+                external: false,
+            }),
+        ],
+    );
+    const base = {
+        concurrency: 4,
+        maxDirectUpload: 1,
+        probesPerMinute: 1,
+        taskWebhooks: false,
+        progressWebhooks: false,
+        progressWebhookInterval: 5000,
+    };
+
+    it('uses a local provider by default, never an external one', () => {
+        expect(registry.providerFor('transcription', undefined, undefined).name).toBe(
+            'local-whisper',
+        );
+        expect(() => registry.providerFor('transcription', 'amazon-transcribe', base)).toThrow(
+            'the project may not use amazon-transcribe',
+        );
+    });
+
+    it('uses the first provider of the project, or the one a task asks for among them', () => {
+        const settings = {
+            ...base,
+            aiProviders: { transcription: ['amazon-transcribe', 'local-whisper'] },
+            externalAiProviders: true,
+        };
+        expect(registry.providerFor('transcription', undefined, settings).name).toBe(
+            'amazon-transcribe',
+        );
+        expect(registry.providerFor('transcription', 'local-whisper', settings).name).toBe(
+            'local-whisper',
+        );
+        expect(() => registry.providerFor('transcription', 'faces', settings)).toThrow(
+            '"faces" is not a transcription provider of this server',
+        );
+    });
+
+    it('refuses an external provider unless the project allows them explicitly', () => {
+        const settings = { ...base, aiProviders: { transcription: ['amazon-transcribe'] } };
+        expect(() => registry.providerFor('transcription', undefined, settings)).toThrow(
+            'amazon-transcribe sends media to a third party',
+        );
+    });
+
+    it('checks the provider of each task with the other options', () => {
+        let error: unknown;
+        try {
+            registry.checkTasks(
+                { transcript: { op: 'ai.transcribe', options: { provider: 'amazon-transcribe' } } },
+                '/tasks',
+                base,
+            );
+        } catch (caught) {
+            error = caught;
+        }
+        expect(error).toBeInstanceOf(InvalidValueError);
+        expect((error as InvalidValueError).errors).toEqual({
+            '/tasks/transcript/options/provider': ['the project may not use amazon-transcribe'],
+        });
+    });
+
+    const external = {
+        ...base,
+        aiProviders: { transcription: ['amazon-transcribe', 'local-whisper'] },
+        externalAiProviders: true,
+    };
+
+    it("checks the options against the provider's own limits when the job is created", () => {
+        expect(() =>
+            registry.checkTasks(
+                { transcript: { op: 'ai.transcribe', options: { language: 'en-CA' } } },
+                '/tasks',
+                external,
+            ),
+        ).toThrow(
+            expect.objectContaining({
+                errors: {
+                    '/tasks/transcript/options/language': [
+                        "Amazon Transcribe doesn't transcribe en-CA",
+                    ],
+                },
+            }),
+        );
+        // The same locale is fine for a provider that doesn't check it.
+        expect(() =>
+            registry.checkTasks(
+                {
+                    transcript: {
+                        op: 'ai.transcribe',
+                        options: { language: 'en-CA', provider: 'local-whisper' },
+                    },
+                },
+                '/tasks',
+                external,
+            ),
+        ).not.toThrow();
+    });
+
+    it('queues the tasks of an external provider apart', () => {
+        expect(registry.queueOf(transcribe, {}, external)).toBe('network');
+        expect(registry.queueOf(transcribe, { provider: 'local-whisper' }, external)).toBe('ai');
+        expect(registry.queueOf(transcribe, {}, base)).toBe('ai');
     });
 });

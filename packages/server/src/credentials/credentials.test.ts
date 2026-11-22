@@ -48,7 +48,7 @@ describe('Credentials', () => {
         await expect(
             services.credentials.set('niche', 'youtube', { apiKey: 'a' }),
         ).rejects.toMatchObject({
-            errors: { '/provider': ['is not an embed provider of this server'] },
+            errors: { '/provider': ['is not an embed or AI provider of this server'] },
         });
         await expect(
             services.credentials.set('niche', 'Not A Name', { token: 'a' }),
