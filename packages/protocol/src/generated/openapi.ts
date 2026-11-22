@@ -1007,6 +1007,16 @@ export interface components {
             /** @description For humans. Can change. */
             message: string;
         };
+        /** @description What a task used at a paid provider, as the operation reports it: on any end of the task, completed, failed or canceled, once the provider may bill. Absent when the operation reports nothing, as most operations, and when the task ended before it reached the provider. The same seconds go into the project's usage. */
+        TaskUsage: {
+            /** @description Seconds of media the provider received. */
+            mediaSeconds?: number;
+            /** @description An estimate of the provider's cost, when its price is configured. The provider's bill is the reference. */
+            cost?: {
+                amount: number;
+                currency: string;
+            };
+        };
         OutputFile: {
             /** @description Name of the file within the task's outputs. */
             name: string;
@@ -1058,6 +1068,7 @@ export interface components {
             endedAt?: string;
             outputs?: components["schemas"]["TaskOutputs"];
             error?: components["schemas"]["TaskError"];
+            usage?: components["schemas"]["TaskUsage"];
         };
         Job: {
             id: components["schemas"]["JobId"];

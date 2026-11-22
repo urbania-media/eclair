@@ -43,6 +43,7 @@ export type {
     OperationLogger,
     OperationPlugin,
     OperationResult,
+    OperationUsage,
     OutputOptions,
     OperationProviders,
     ProviderCapability,

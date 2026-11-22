@@ -113,6 +113,14 @@ export class Scheduler {
      */
     async advance(jobId: string): Promise<void> {
         const job = await this.loadJob(jobId);
+        if (job?.status === 'canceled' && job.endedAt === undefined) {
+            // A canceled job ends once the tasks that ran when it was canceled have stopped.
+            const tasks = await this.loadTasks(jobId);
+            if (tasks.every(({ status }) => ENDED_TASK_STATUSES.includes(status))) {
+                await this.#endJob(job, 'canceled');
+            }
+            return;
+        }
         if (job === undefined || ENDED_JOB_STATUSES.includes(job.status)) {
             return;
         }
@@ -239,19 +247,41 @@ export class Scheduler {
             .where('ended_at', 'is', null)
             .executeTakeFirst();
         if (result.numUpdatedRows > 0n) {
-            await this.emit({ type: 'job.status', job: job.id, status });
+            if (job.status !== status) {
+                await this.emit({ type: 'job.status', job: job.id, status });
+            }
             await this.#onJobEnded?.({ ...job, status, endedAt: now });
         }
     }
 
-    /** Cancels a job: its tasks that haven't ended, then the job itself. */
+    /**
+     * Cancels a job: its tasks that haven't ended, then the job itself. A job with running tasks
+     * is `canceled` at once, and ends, with its `job.canceled` webhook, once their workers have
+     * stopped them: a task can report what it used at a provider while it stops.
+     */
     async cancel(jobId: string): Promise<void> {
         const job = await this.loadJob(jobId);
         if (job === undefined || ENDED_JOB_STATUSES.includes(job.status)) {
             return;
         }
-        await this.#cancelTasks(await this.loadTasks(jobId));
-        await this.#endJob(job, 'canceled');
+        const tasks = await this.loadTasks(jobId);
+        await this.#cancelTasks(tasks);
+        if (!tasks.some(({ status }) => status === 'running')) {
+            await this.#endJob(job, 'canceled');
+            return;
+        }
+        const now = new Date();
+        const result = await this.#database.kysely
+            .updateTable('jobs')
+            .set({ status: 'canceled', updated_at: now })
+            .where('id', '=', job.id)
+            .where('ended_at', 'is', null)
+            .executeTakeFirst();
+        if (result.numUpdatedRows > 0n) {
+            await this.emit({ type: 'job.status', job: job.id, status: 'canceled' });
+        }
+        // A task may have stopped meanwhile.
+        await this.advance(jobId);
     }
 
     /**
@@ -260,7 +290,12 @@ export class Scheduler {
      */
     async retry(jobId: string): Promise<boolean> {
         const job = await this.loadJob(jobId);
-        if (job === undefined || (job.status !== 'failed' && job.status !== 'canceled')) {
+        if (
+            job === undefined ||
+            (job.status !== 'failed' && job.status !== 'canceled') ||
+            // A canceled job whose tasks are still stopping.
+            job.endedAt === undefined
+        ) {
             return false;
         }
         const tasks = await this.loadTasks(jobId);
@@ -273,6 +308,8 @@ export class Scheduler {
                     .set({
                         status: 'pending',
                         error: null,
+                        // A new run: its usage starts again.
+                        usage: null,
                         progress: null,
                         worker: null,
                         queued_at: null,

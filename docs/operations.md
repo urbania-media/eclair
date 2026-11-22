@@ -48,6 +48,7 @@ The **context** gives the operation:
 - `exec(binary, args, limits)`: runs a configured binary with argument arrays, a timeout and the abort signal;
 - `progress(ratio)`, `log`, `signal` (an `AbortSignal` for cancel and timeout);
 - `providers`: the AI providers configured for the project;
+- `reportUsage({ mediaSeconds, cost })`: what the task used at a paid provider, as soon as the provider bills it (a job it started). The worker counts it in the project's usage and shows it as the task's `usage` whatever the end of the task, a failure, a timeout or a cancel included. The result's `usage` replaces it on success;
 - `output(name, path, { mime, role, thumbhash })`: declares an output file, which the worker uploads. `thumbhash` is the file's placeholder, from `thumbhash(context, path)` of `@eclair-js/operation`, and the job reports it on the file.
 
 An operation never reads environment variables, the database or another project's data, and never uploads files itself. Operations are tested with `@eclair-js/operation/testing`, which runs `run()` on a fixture with a real context.
@@ -228,7 +229,7 @@ An AI operation asks for a provider by capability (`transcription`, `vision`, `l
 
 - Local providers run on workers with the `ai` or `gpu` capability. Models are downloaded at startup or baked into the image, never at task time.
 - External providers are enabled per project, with the project's own API key stored encrypted. They send media to a third party: the project's configuration has to say so explicitly.
-- Each provider reports its usage (media seconds, tokens, cost when known), which goes into the project's usage.
+- Each provider reports its usage (media seconds, tokens, cost when known), which goes into the project's usage. A provider that bills a job it started, failed or canceled, reports it once the job has started, so that the task carries it on any end.
 
 ## Presets
 

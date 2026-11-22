@@ -98,6 +98,22 @@ export interface OperationContext {
     extendTimeout?(ms: number): boolean;
     /** Whether this worker has one of the operation's `optionalBinaries`. */
     available?(binary: string): Promise<boolean>;
+    /**
+     * Reports what the task has used at a paid provider, as soon as the provider bills it: a job
+     * it started, for example. The server counts it in the project's usage and shows it as the
+     * task's `usage` whatever the end of the task, a failure, a timeout or a cancel included. A
+     * later call replaces it, and so does the result's `usage` when the task succeeds.
+     */
+    reportUsage?(usage: OperationUsage): void;
+}
+
+/**
+ * What a task used, for the project's usage and the task's `usage` in the protocol (`TaskUsage`):
+ * the seconds of media a paid provider received, and an estimate of its cost.
+ */
+export interface OperationUsage {
+    mediaSeconds?: number;
+    cost?: { amount: number; currency: string };
 }
 
 export interface OperationResult {
@@ -105,9 +121,11 @@ export interface OperationResult {
     metadata?: Record<string, unknown>;
     /**
      * What the task used, for the project's usage, when the operation knows better than the
-     * job's probe: the seconds of media a provider transcribed, for example.
+     * job's probe: the seconds of media a provider transcribed, for example. The task shows it as
+     * its `usage`. A task that may fail after a provider billed it reports it with
+     * `context.reportUsage()` too.
      */
-    usage?: { mediaSeconds?: number };
+    usage?: OperationUsage;
 }
 
 /** A JSON Schema object, for plugins that don't use TypeBox. Options are then untyped. */

@@ -6,6 +6,7 @@ import { uploadParts } from './0002-upload-parts.ts';
 import { previousWebhookSecret } from './0003-previous-webhook-secret.ts';
 import { adminDashboard } from './0004-admin-dashboard.ts';
 import { credentials } from './0005-credentials.ts';
+import { taskUsage } from './0006-task-usage.ts';
 
 /**
  * Every migration, in order. A migration is never changed once released: changes to the schema
@@ -18,5 +19,6 @@ export function migrations(dialect: Dialect): Record<string, Migration> {
         '0003-previous-webhook-secret': previousWebhookSecret(dialect),
         '0004-admin-dashboard': adminDashboard(),
         '0005-credentials': credentials(dialect),
+        '0006-task-usage': taskUsage(dialect),
     };
 }

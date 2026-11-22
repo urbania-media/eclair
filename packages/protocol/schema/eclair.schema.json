@@ -377,6 +377,35 @@
                 }
             }
         },
+        "TaskUsage": {
+            "description": "What a task used at a paid provider, as the operation reports it: on any end of the task, completed, failed or canceled, once the provider may bill. Absent when the operation reports nothing, as most operations, and when the task ended before it reached the provider. The same seconds go into the project's usage.",
+            "type": "object",
+            "properties": {
+                "mediaSeconds": {
+                    "description": "Seconds of media the provider received.",
+                    "type": "number",
+                    "minimum": 0
+                },
+                "cost": {
+                    "description": "An estimate of the provider's cost, when its price is configured. The provider's bill is the reference.",
+                    "type": "object",
+                    "required": [
+                        "amount",
+                        "currency"
+                    ],
+                    "properties": {
+                        "amount": {
+                            "type": "number",
+                            "minimum": 0
+                        },
+                        "currency": {
+                            "type": "string",
+                            "pattern": "^[A-Z]{3}$"
+                        }
+                    }
+                }
+            }
+        },
         "OutputFile": {
             "type": "object",
             "required": [
@@ -500,6 +529,9 @@
                 },
                 "error": {
                     "$ref": "#/$defs/TaskError"
+                },
+                "usage": {
+                    "$ref": "#/$defs/TaskUsage"
                 }
             }
         },
