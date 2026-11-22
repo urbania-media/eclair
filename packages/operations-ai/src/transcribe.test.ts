@@ -4,12 +4,27 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import type { OperationProviders } from '@eclair-js/operation';
 import { missingBinaries, skipWithoutBinaries } from '@eclair-js/operation/testing';
-import { validate } from '@eclair-js/protocol';
+import { openapi, validate } from '@eclair-js/protocol';
 
 import { fakeModels, runOn } from './test-helpers.ts';
 import { transcribe } from './transcribe.ts';
 
 const FFMPEG = ['ffprobe', 'ffmpeg'];
+
+describe('ai.transcribe options', () => {
+    it('are the ones of the protocol', () => {
+        const ours = transcribe.options as { properties: Record<string, { default?: unknown }> };
+        const protocol = openapi.components.schemas.TranscribeOptions as unknown as {
+            properties: Record<string, { default?: unknown }>;
+        };
+        expect(Object.keys(ours.properties).sort()).toEqual(
+            Object.keys(protocol.properties).sort(),
+        );
+        for (const [name, property] of Object.entries(protocol.properties)) {
+            expect(ours.properties[name]?.default, name).toEqual(property.default);
+        }
+    });
+});
 
 describe.skipIf(skipWithoutBinaries(FFMPEG))('ai.transcribe, with a fake whisper.cpp', () => {
     let models: string;
@@ -131,7 +146,7 @@ describe.skipIf(skipWithoutBinaries(FFMPEG))('ai.transcribe, with a fake whisper
                 ]),
             );
             // A prompt needs context in whisper.cpp: the prompt alone, repeated on each window.
-            expect(args[args.indexOf('--max-context') + 1]).toBe('160');
+            expect(args[args.indexOf('--max-context') + 1]).toBe('224');
         } finally {
             await result.cleanup();
         }
@@ -227,6 +242,31 @@ describe.skipIf(skipWithoutBinaries(FFMPEG))('ai.transcribe, with a fake whisper
         ).rejects.toMatchObject({
             code: 'provider_failed',
             message: 'The project has no credentials, region and bucket for Amazon Transcribe.',
+        });
+    });
+
+    it('asks for the time the provider needs, and refuses audio that would not finish in time', async () => {
+        const result = await runOn(transcribe, 'audio.m4a', {}, { providers });
+        try {
+            // Ten minutes, and twice the duration of the audio.
+            expect(result.timeouts.at(-1)).toBeCloseTo(600_000 + 4_000, -3);
+        } finally {
+            await result.cleanup();
+        }
+        await expect(
+            runOn(transcribe, 'audio.m4a', {}, { providers, maxTimeout: 60_000 }),
+        ).rejects.toMatchObject({
+            code: 'limit_exceeded',
+            message: expect.stringContaining('more than a task may run on this server') as string,
+        });
+    });
+
+    it('fails cleanly on a worker without whisper-cli', async () => {
+        await expect(
+            runOn(transcribe, 'audio.m4a', {}, { providers, available: { 'whisper-cli': false } }),
+        ).rejects.toMatchObject({
+            code: 'provider_failed',
+            message: "whisper-cli isn't installed on this worker.",
         });
     });
 

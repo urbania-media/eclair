@@ -158,6 +158,11 @@ export class OperationRegistry {
                     `${operation.key}: "${String(operation.capability)}" is not a capability.`,
                 );
             }
+            if (operation.externalQueue !== undefined && !isCapability(operation.externalQueue)) {
+                throw new Error(
+                    `${operation.key}: "${String(operation.externalQueue)}" is not a capability.`,
+                );
+            }
             try {
                 this.#validators.set(operation.key, ajv.compile(operation.options));
             } catch (error) {
@@ -371,8 +376,9 @@ export class OperationRegistry {
                 Object.assign(errors, error.errors);
             }
             if (operation.providers !== undefined) {
+                let provider: AiProvider;
                 try {
-                    this.providerFor(
+                    provider = this.providerFor(
                         operation.providers,
                         (task.options as Record<string, unknown> | undefined)?.['provider'],
                         settings,
@@ -382,12 +388,36 @@ export class OperationRegistry {
                         throw error;
                     }
                     errors[`${base}/options/provider`] = [error.message];
+                    continue;
+                }
+                // What the provider supports, such as its locales: refused now, not when it runs.
+                const problems = provider.checkOptions?.(
+                    (task.options as Record<string, unknown> | undefined) ?? {},
+                );
+                for (const [option, message] of Object.entries(problems ?? {})) {
+                    errors[`${base}/options/${option}`] = [message];
                 }
             }
         }
         if (Object.keys(errors).length > 0) {
             throw new InvalidValueError(errors, 'Some tasks are invalid.');
         }
+    }
+
+    /**
+     * The queue of a task: its operation's capability, or its `externalQueue` when the task's AI
+     * provider is external and only waits on a hosted API. Call it on checked tasks.
+     */
+    queueOf(
+        operation: Operation,
+        options: Record<string, unknown>,
+        settings: ProjectSettings | undefined,
+    ): string {
+        if (operation.providers === undefined || operation.externalQueue === undefined) {
+            return operation.capability;
+        }
+        const provider = this.providerFor(operation.providers, options['provider'], settings);
+        return provider.external ? operation.externalQueue : operation.capability;
     }
 
     /** The operations a project may use, as the protocol describes them. */

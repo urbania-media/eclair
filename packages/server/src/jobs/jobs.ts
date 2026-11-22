@@ -10,6 +10,7 @@ import type {
     Task,
 } from '@eclair-js/protocol';
 
+import type { Credentials } from '../credentials/credentials.ts';
 import { sha256 } from '../crypto.ts';
 import type { Database } from '../database/connection.ts';
 import { isUniqueViolation } from '../database/errors.ts';
@@ -41,6 +42,8 @@ export interface JobsOptions {
     uploads: Uploads;
     operations: OperationRegistry;
     scheduler: Scheduler;
+    /** The projects' credentials: a task whose AI provider is external needs the project's. */
+    credentials?: Credentials | undefined;
     /** Signs the download URLs of files in the temporary storage. */
     links?: FileLinks | undefined;
     metrics?: Metrics | undefined;
@@ -170,8 +173,10 @@ export class Jobs {
     readonly #scheduler: Scheduler;
     readonly #links: FileLinks | undefined;
     readonly #metrics: Metrics | undefined;
+    readonly #credentials: Credentials | undefined;
 
     constructor(options: JobsOptions) {
+        this.#credentials = options.credentials;
         this.#links = options.links;
         this.#metrics = options.metrics;
         this.#database = options.database;
@@ -180,6 +185,36 @@ export class Jobs {
         this.#uploads = options.uploads;
         this.#operations = options.operations;
         this.#scheduler = options.scheduler;
+    }
+
+    /**
+     * Checks that the project has the credentials of each external AI provider its tasks use, so
+     * that a job is refused now rather than failing when a worker runs it.
+     */
+    async #checkProviders(
+        project: Project,
+        tasks: ResolvedTask[],
+        errors: Record<string, string[]>,
+    ): Promise<void> {
+        if (this.#credentials === undefined) {
+            return;
+        }
+        for (const task of tasks) {
+            if (task.operation.providers === undefined) {
+                continue;
+            }
+            const provider = this.#operations.providerFor(
+                task.operation.providers,
+                task.options['provider'],
+                project.settings,
+            );
+            if (provider.external && !(await this.#credentials.has(project.id, provider.name))) {
+                const name = task.name.replaceAll('~', '~0').replaceAll('/', '~1');
+                (errors[`/tasks/${name}/options/provider`] ??= []).push(
+                    `the project has no credentials for ${provider.title}`,
+                );
+            }
+        }
     }
 
     /** Checks the input and output target of a job. Adds errors by JSON pointer. */
@@ -344,6 +379,7 @@ export class Jobs {
             }
         }
         await this.#checkTargets(project, request, tasks, errors);
+        await this.#checkProviders(project, tasks, errors);
         if (Object.keys(errors).length > 0) {
             throw new InvalidValueError(errors, 'The job is invalid.');
         }
@@ -382,7 +418,7 @@ export class Jobs {
                             name: task.name,
                             operation: task.operation.name,
                             operation_version: task.operation.version,
-                            queue: task.operation.capability,
+                            queue: task.queue,
                             options: toJson(task.options),
                             source:
                                 task.source === undefined

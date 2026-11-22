@@ -10,6 +10,7 @@ import { skipWithoutBinaries } from '@eclair-js/operation/testing';
 
 import {
     amazonTranscribe,
+    amazonTranscribeProvider,
     amazonTranscribeSettings,
     parseAmazonTranscript,
 } from './amazon-transcribe.ts';
@@ -101,6 +102,33 @@ describe('amazonTranscribeSettings', () => {
             OperationError,
         );
     });
+
+    it('keeps the polling interval above 100 ms, and only the locales Amazon identifies', () => {
+        const read = amazonTranscribeSettings(
+            { ...CREDENTIALS, languages: 'fr-CA,en-CA,en-US' },
+            { pollInterval: 0, cleanupWait: -5 },
+        );
+        expect(read.pollInterval).toBe(100);
+        expect(read.cleanupWait).toBe(0);
+        expect(read.languages).toEqual(['fr-CA', 'en-US']);
+    });
+});
+
+describe('amazonTranscribeProvider.checkOptions', () => {
+    const check = (language: string) => amazonTranscribeProvider.checkOptions?.({ language });
+
+    it('accepts the languages Amazon transcribes, and refuses the others when the job is created', () => {
+        expect(check('auto')).toBeUndefined();
+        expect(check('fr')).toBeUndefined();
+        expect(check('fr-CA')).toBeUndefined();
+        expect(check('nl')).toBeUndefined();
+        expect(check('en-CA')).toEqual({
+            language: expect.stringContaining(
+                "doesn't transcribe en-CA: use en or one of en-AB",
+            ) as string,
+        });
+        expect(check('tlh')).toEqual({ language: 'Amazon Transcribe doesn\'t transcribe "tlh"' });
+    });
 });
 
 interface Sent {
@@ -128,10 +156,20 @@ function fakeClients(
     return { sent, transcribe: { send } as never, s3: { send } as never };
 }
 
-function awsError(name: string): Error {
+/** An error of AWS: answered by Amazon with a status, or without one (the request never arrived). */
+function awsError(name: string, status: number | undefined = 400): Error {
     const error = new Error(name);
     error.name = name;
+    if (status !== undefined) {
+        Object.assign(error, { $metadata: { httpStatusCode: status } });
+    }
     return error;
+}
+
+/** The bytes the fake S3 received: the provider streams the file. */
+async function uploaded(clients: { sent: Sent[] }): Promise<Buffer> {
+    const body = clients.sent.find((entry) => entry.command === 'PutObject')?.input['Body'];
+    return readFile(String((body as { path: string }).path));
 }
 
 describe.skipIf(skipWithoutBinaries(['ffmpeg']))('amazon-transcribe, with fake AWS clients', () => {
@@ -189,6 +227,7 @@ describe.skipIf(skipWithoutBinaries(['ffmpeg']))('amazon-transcribe, with fake A
     const settings = (extra: Record<string, unknown> = {}) => ({
         ...amazonTranscribeSettings(CREDENTIALS),
         pollInterval: 1,
+        cleanupWait: 50,
         ...extra,
     });
 
@@ -230,14 +269,17 @@ describe.skipIf(skipWithoutBinaries(['ffmpeg']))('amazon-transcribe, with fake A
 
         expect(result.transcript.language).toBe('fr');
         expect(result.transcript.segments).toHaveLength(2);
-        expect(result.usage).toEqual({ mediaSeconds: 2, cost: 0.0002 });
+        // Amazon bills 15 seconds at least.
+        expect(result.usage).toEqual({ mediaSeconds: 2, cost: 0.0015 });
 
         const put = clients.sent[0];
         expect(put?.command).toBe('PutObject');
         expect(put?.input).toMatchObject({ Bucket: 'media-transcribe', ContentType: 'audio/flac' });
         const key = String(put?.input['Key']);
         expect(key).toMatch(/^eclair-transcribe\/[0-9a-f-]{36}\/audio\.flac$/);
-        expect((put?.input['Body'] as Buffer).subarray(0, 4).toString()).toBe('fLaC');
+        const bytes = await uploaded(clients);
+        expect(bytes.subarray(0, 4).toString()).toBe('fLaC');
+        expect(put?.input['ContentLength']).toBe(bytes.length);
 
         expect(clients.sent[1]).toEqual({
             command: 'StartTranscriptionJob',
@@ -251,12 +293,9 @@ describe.skipIf(skipWithoutBinaries(['ffmpeg']))('amazon-transcribe, with fake A
             },
         });
         const commands = clients.sent.map((entry) => entry.command);
-        expect(commands.slice(-5)).toEqual([
+        expect(commands.slice(-7)).toEqual([
             'DeleteTranscriptionJob',
-            'DeleteObject',
-            'DeleteObject',
-            'DeleteObject',
-            'DeleteObject',
+            ...Array<string>(6).fill('DeleteObject'),
         ]);
         expect(
             clients.sent
@@ -266,8 +305,10 @@ describe.skipIf(skipWithoutBinaries(['ffmpeg']))('amazon-transcribe, with fake A
             expect.arrayContaining([
                 key,
                 key.replace('audio.flac', '.write_access_check_file.temp'),
+                key.replace('audio.flac', 'transcript.json'),
                 'eclair-transcribe/old/audio.flac',
                 'eclair-transcribe/old/transcript.json',
+                'eclair-transcribe/old/.write_access_check_file.temp',
             ]),
         );
         expect(progress.at(-1)).toBeLessThanOrEqual(0.9);
@@ -319,6 +360,17 @@ describe.skipIf(skipWithoutBinaries(['ffmpeg']))('amazon-transcribe, with fake A
         expect(
             clients.sent.filter((entry) => entry.command === 'DeleteTranscriptionJob'),
         ).toHaveLength(1);
+        // What the earlier attempt left in its own folder, Amazon's access check included.
+        expect(
+            clients.sent
+                .filter((entry) => entry.command === 'DeleteObject')
+                .map((entry) => entry.input['Key']),
+        ).toEqual(
+            expect.arrayContaining([
+                'eclair-transcribe/old/audio.flac',
+                'eclair-transcribe/old/.write_access_check_file.temp',
+            ]),
+        );
     });
 
     it('fails with the reason of a failed job, after deleting it', async () => {
@@ -336,12 +388,33 @@ describe.skipIf(skipWithoutBinaries(['ffmpeg']))('amazon-transcribe, with fake A
         expect(clients.sent.map((entry) => entry.command)).toContain('DeleteTranscriptionJob');
     });
 
-    it('deletes the audio and the job when the task is canceled', async () => {
+    it("keeps the project's bucket and keys out of a failure reason", async () => {
+        const clients = fakeClients((command) =>
+            command === 'StartTranscriptionJob'
+                ? completedJob('FAILED', {
+                      FailureReason:
+                          'Unsupported audio in s3://media-transcribe/eclair-transcribe/x/audio.flac.',
+                  })
+                : {},
+        );
+        await expect(
+            amazonTranscribe(settings(), clients).transcribe(context, request),
+        ).rejects.toMatchObject({
+            code: 'provider_failed',
+            message: 'Amazon Transcribe failed: Unsupported audio in the file',
+        });
+    });
+
+    it('waits for a canceled job to end, then deletes it with its late transcript', async () => {
         const clients = fakeClients((command) => {
-            if (command === 'GetTranscriptionJob') {
+            if (command === 'GetTranscriptionJob' && !controller.signal.aborted) {
                 controller.abort();
+                return { TranscriptionJob: { TranscriptionJobStatus: 'IN_PROGRESS' } };
             }
-            return command === 'GetTranscriptionJob' || command === 'StartTranscriptionJob'
+            if (command === 'GetTranscriptionJob') {
+                return completedJob('COMPLETED', { Media: undefined, Transcript: undefined });
+            }
+            return command === 'StartTranscriptionJob'
                 ? { TranscriptionJob: { TranscriptionJobStatus: 'IN_PROGRESS' } }
                 : {};
         });
@@ -351,13 +424,121 @@ describe.skipIf(skipWithoutBinaries(['ffmpeg']))('amazon-transcribe, with fake A
             message: 'The task was canceled.',
         });
         const commands = clients.sent.map((entry) => entry.command);
-        expect(commands).toContain('DeleteTranscriptionJob');
-        expect(commands.at(-1)).toBe('DeleteObject');
+        // Amazon refuses to delete a running job: the cleanup asks until it has ended.
+        expect(commands.indexOf('DeleteTranscriptionJob')).toBeGreaterThan(
+            commands.lastIndexOf('GetTranscriptionJob'),
+        );
+        const key = String(clients.sent[0]?.input['Key']);
+        expect(
+            clients.sent
+                .filter((entry) => entry.command === 'DeleteObject')
+                .map((entry) => entry.input['Key']),
+        ).toEqual(expect.arrayContaining([key, key.replace('audio.flac', 'transcript.json')]));
+        expect(warnings).toEqual([]);
+    });
+
+    it('leaves a job that is still running after a timeout, and says so', async () => {
+        const clients = fakeClients((command, input) => {
+            if (command === 'GetTranscriptionJob') {
+                controller.abort('timeout');
+                return { TranscriptionJob: { TranscriptionJobStatus: 'IN_PROGRESS' } };
+            }
+            if (command === 'DeleteTranscriptionJob') {
+                // What Amazon answers for a running job.
+                throw awsError('BadRequestException');
+            }
+            return command === 'StartTranscriptionJob' ? { TranscriptionJob: input } : {};
+        });
+        await expect(
+            amazonTranscribe(settings(), clients).transcribe(context, request),
+        ).rejects.toMatchObject({ message: 'The task was canceled.' });
+        const commands = clients.sent.map((entry) => entry.command);
+        expect(commands).not.toContain('DeleteTranscriptionJob');
+        expect(commands.filter((command) => command === 'DeleteObject')).toHaveLength(3);
+        expect(warnings).toEqual([
+            { failures: ['job: still IN_PROGRESS'], job: 'media-tsk_01TEST' },
+        ]);
+    });
+
+    it('cleans up a job whose start was cut by a cancel', async () => {
+        const clients = fakeClients((command) => {
+            if (command === 'StartTranscriptionJob') {
+                // The request may have reached Amazon: there's no answer to tell.
+                controller.abort();
+                throw awsError('AbortError', undefined);
+            }
+            return command === 'GetTranscriptionJob' ? completedJob() : {};
+        });
+        await expect(
+            amazonTranscribe(settings(), clients).transcribe(context, request),
+        ).rejects.toMatchObject({ message: 'The task was canceled.' });
+        expect(clients.sent.map((entry) => entry.command)).toContain('DeleteTranscriptionJob');
+    });
+
+    it('asks again when a status request fails, and gives up after five in a row', async () => {
+        const transcript = await readFile(fixture('amazon-transcript.json'), 'utf8');
+        let polls = 0;
+        const flaky = fakeClients((command) => {
+            if (command === 'GetTranscriptionJob') {
+                polls++;
+                if (polls <= 2) {
+                    throw awsError('InternalFailureException', 500);
+                }
+                return completedJob();
+            }
+            if (command === 'GetObject') {
+                return { Body: { transformToString: () => Promise.resolve(transcript) } };
+            }
+            return command === 'StartTranscriptionJob'
+                ? { TranscriptionJob: { TranscriptionJobStatus: 'IN_PROGRESS' } }
+                : {};
+        });
+        const result = await amazonTranscribe(settings(), flaky).transcribe(context, request);
+        expect(result.transcript.segments).toHaveLength(2);
+
+        warnings.length = 0;
+        const down = fakeClients((command) => {
+            if (command === 'GetTranscriptionJob') {
+                throw awsError('InternalFailureException', 500);
+            }
+            return command === 'StartTranscriptionJob'
+                ? { TranscriptionJob: { TranscriptionJobStatus: 'IN_PROGRESS' } }
+                : {};
+        });
+        await expect(
+            amazonTranscribe(settings(), down).transcribe(context, request),
+        ).rejects.toMatchObject({
+            code: 'provider_failed',
+            message:
+                "Amazon Transcribe couldn't tell the state of the job (InternalFailureException).",
+        });
+        // Without knowing whether the job ended, the cleanup doesn't delete it.
+        expect(down.sent.map((entry) => entry.command)).not.toContain('DeleteTranscriptionJob');
+        expect(warnings.at(-1)).toMatchObject({ failures: ['job: still unknown'] });
+    });
+
+    it('reads the transcript again when a request fails', async () => {
+        const transcript = await readFile(fixture('amazon-transcript.json'), 'utf8');
+        let reads = 0;
+        const clients = fakeClients((command) => {
+            if (command === 'GetObject') {
+                reads++;
+                if (reads === 1) {
+                    throw awsError('InternalError', 500);
+                }
+                return { Body: { transformToString: () => Promise.resolve(transcript) } };
+            }
+            return command === 'StartTranscriptionJob' ? completedJob() : {};
+        });
+        const result = await amazonTranscribe(settings(), clients).transcribe(context, request);
+        expect(result.transcript.segments).toHaveLength(2);
+        expect(reads).toBe(2);
     });
 
     it('reports throttling as a refusal, and a failed cleanup as a warning', async () => {
         const clients = fakeClients((command) => {
             if (command === 'StartTranscriptionJob') {
+                // Answered by Amazon: there is no job to delete.
                 throw awsError('ThrottlingException');
             }
             if (command === 'DeleteObject') {
@@ -371,23 +552,48 @@ describe.skipIf(skipWithoutBinaries(['ffmpeg']))('amazon-transcribe, with fake A
             code: 'provider_refused',
         });
         expect(clients.sent.map((entry) => entry.command)).not.toContain('DeleteTranscriptionJob');
-        expect(warnings).toEqual([{ failures: ['object: AccessDenied', 'object: AccessDenied'] }]);
+        expect(warnings).toEqual([{ failures: Array<string>(3).fill('object: AccessDenied') }]);
     });
 
-    it('refuses audio shorter than half a second and a language without a locale', async () => {
-        const clients = fakeClients(() => ({}));
+    it('pads audio shorter than half a second with silence, as Amazon needs', async () => {
+        const short = join(workdir, 'short.wav');
+        execFileSync('ffmpeg', ['-v', 'error', '-i', request.audio, '-t', '0.2', short]);
+        let duration = 0;
+        const clients = fakeClients((command, input) => {
+            if (command === 'PutObject') {
+                duration = Number(
+                    execFileSync('ffprobe', [
+                        '-v',
+                        'error',
+                        '-show_entries',
+                        'format=duration',
+                        '-of',
+                        'csv=p=0',
+                        String((input['Body'] as { path: string }).path),
+                    ]).toString(),
+                );
+            }
+            return command === 'StartTranscriptionJob'
+                ? completedJob('FAILED', { FailureReason: 'x' })
+                : {};
+        });
         await expect(
             amazonTranscribe(settings(), clients).transcribe(context, {
                 ...request,
+                audio: short,
                 duration: 0.2,
             }),
-        ).rejects.toMatchObject({ code: 'unsupported_input' });
-        await expect(
-            amazonTranscribe(settings(), clients).transcribe(context, {
-                ...request,
-                language: 'tlh',
-            }),
-        ).rejects.toMatchObject({ code: 'unsupported_input' });
+        ).rejects.toMatchObject({ code: 'provider_failed' });
+        expect(duration).toBeGreaterThanOrEqual(0.5);
+    });
+
+    it('refuses a language Amazon does not transcribe, before sending anything', async () => {
+        const clients = fakeClients(() => ({}));
+        for (const language of ['tlh', 'en-CA']) {
+            await expect(
+                amazonTranscribe(settings(), clients).transcribe(context, { ...request, language }),
+            ).rejects.toMatchObject({ code: 'unsupported_input' });
+        }
         expect(clients.sent).toEqual([]);
     });
 });

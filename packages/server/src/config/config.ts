@@ -95,6 +95,7 @@ const EnvironmentSchema = Type.Object({
     ECLAIR_PLUGINS: Type.String({ default: '', description: 'package names, comma-separated' }),
     ECLAIR_MAX_INPUT_SIZE: size('2GB', 'a size (2GB)'),
     ECLAIR_TASK_TIMEOUT: duration('1h', 'a duration (1h)'),
+    ECLAIR_TASK_MAX_TIMEOUT: duration('12h', 'a duration (12h)'),
     ECLAIR_JOB_RETENTION: duration('30d', 'a duration (30d)'),
     ECLAIR_EMBED_MAX_DURATION: duration('2h', 'a duration (2h)'),
     ECLAIR_MODELS_DIR: Type.String({
@@ -152,6 +153,11 @@ export interface Config {
     maxInputSize: number;
     /** Milliseconds. */
     taskTimeout: number;
+    /**
+     * Milliseconds: the longest time limit an operation may ask for, when it knows it needs more
+     * than `taskTimeout` (a transcription of a long recording).
+     */
+    taskMaxTimeout: number;
     /** Milliseconds. */
     jobRetention: number;
     /** Milliseconds: the longest embed `embed.download` takes, when the project doesn't set one. */
@@ -332,6 +338,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
             .filter((name) => name !== ''),
         maxInputSize: parseSize(environment.ECLAIR_MAX_INPUT_SIZE),
         taskTimeout: parseDuration(environment.ECLAIR_TASK_TIMEOUT),
+        taskMaxTimeout: parseDuration(environment.ECLAIR_TASK_MAX_TIMEOUT),
         jobRetention: parseDuration(environment.ECLAIR_JOB_RETENTION),
         embedMaxDuration: parseDuration(environment.ECLAIR_EMBED_MAX_DURATION),
         aiProviders: {

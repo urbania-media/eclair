@@ -89,6 +89,15 @@ export interface OperationContext {
      * attempts, such as a job at an external provider (rule 5).
      */
     taskId?: string;
+    /**
+     * Asks for the task to run at least `ms` more milliseconds from now, when the operation knows
+     * how long it needs (the duration of the audio, the provider). It never shortens the task's
+     * time limit, and never extends it past the operator's maximum: it returns `false` when it
+     * can't give that much, so that the operation can refuse before it starts a paid job.
+     */
+    extendTimeout?(ms: number): boolean;
+    /** Whether this worker has one of the operation's `optionalBinaries`. */
+    available?(binary: string): Promise<boolean>;
 }
 
 export interface OperationResult {
@@ -137,6 +146,11 @@ interface OperationBase<S extends TSchema | JsonSchemaObject> {
      * allows it, and gives it in `context.providers`.
      */
     providers?: ProviderCapability;
+    /**
+     * The queue of its tasks whose AI provider is external, when it isn't `capability`: a task
+     * that only waits on a hosted API (`network`) doesn't hold a slot of the `ai` queue.
+     */
+    externalQueue?: Capability;
     outputs: { files: boolean; metadata: boolean };
 }
 

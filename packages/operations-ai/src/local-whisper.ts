@@ -34,10 +34,22 @@ export interface LocalWhisperSettings {
      * `PROMPT_CONTEXT` when it is 0.
      */
     maxContext: number;
+    /**
+     * Seconds of work per second of audio, at most, to ask for a longer time limit than the
+     * task's: 2 by default (turbo ran at 1.6 on 4 CPUs in Docker, #119).
+     */
+    timeFactor: number;
 }
 
-/** Tokens of context when a task gives a prompt: room for a 500-character prompt. */
-const PROMPT_CONTEXT = 160;
+/**
+ * Tokens of context when a task gives a prompt: the model's maximum (half its 448-token text
+ * context). whisper.cpp keeps the whole prompt, up to this many tokens less one, then fills what
+ * is left with the previous windows' text. A longer prompt loses its beginning.
+ */
+const PROMPT_CONTEXT = 224;
+
+/** Time for what isn't the model: loading it, writing the files. */
+const FIXED_TIME = 10 * 60 * 1000;
 
 export const LOCAL_WHISPER_DEFAULTS: LocalWhisperSettings = {
     modelsDir: '/var/lib/eclair/models',
@@ -46,6 +58,7 @@ export const LOCAL_WHISPER_DEFAULTS: LocalWhisperSettings = {
     threads: availableParallelism(),
     maxDuration: 4 * 3600,
     maxContext: 0,
+    timeFactor: 2,
 };
 
 /** Reads the settings the context gives, over the defaults. Unknown keys are ignored. */
@@ -73,6 +86,7 @@ export function localWhisperSettings(
             settings['maxContext'] >= 0
                 ? settings['maxContext']
                 : LOCAL_WHISPER_DEFAULTS.maxContext,
+        timeFactor: number('timeFactor') ?? LOCAL_WHISPER_DEFAULTS.timeFactor,
     };
 }
 
@@ -190,8 +204,15 @@ export function localWhisper(settings: LocalWhisperSettings): TranscriptionProvi
     return {
         name: 'local-whisper',
         maxDuration: settings.maxDuration,
+        timeFor: (duration) => FIXED_TIME + Math.ceil(duration * settings.timeFactor * 1000),
 
         async transcribe(context, request) {
+            if (context.available !== undefined && !(await context.available('whisper-cli'))) {
+                throw new OperationError(
+                    'provider_failed',
+                    "whisper-cli isn't installed on this worker.",
+                );
+            }
             const model = request.model ?? settings.defaultModel;
             const modelPath = join(settings.modelsDir, `ggml-${model}.bin`);
             if (!(await exists(modelPath))) {

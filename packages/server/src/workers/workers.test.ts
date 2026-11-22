@@ -212,11 +212,16 @@ const operations = [
         capability: 'cpu',
         binaries: [],
         options: Type.Object(
-            { milliseconds: Type.Integer({ default: 10_000 }) },
+            {
+                milliseconds: Type.Integer({ default: 10_000 }),
+                extend: Type.Optional(Type.Integer()),
+            },
             { additionalProperties: false },
         ),
         outputs: { files: false, metadata: true },
         async run(context, options) {
+            const extended =
+                options.extend === undefined ? undefined : context.extendTimeout?.(options.extend);
             running += 1;
             mostRunning = Math.max(mostRunning, running);
             try {
@@ -230,7 +235,7 @@ const operations = [
             } finally {
                 running -= 1;
             }
-            return { metadata: {} };
+            return { metadata: extended === undefined ? {} : { extended } };
         },
     }),
     defineOperation({
@@ -344,6 +349,7 @@ describe.skipIf(!RUNS_WITH_REDIS)('workers', () => {
                     binaries: { node: process.execPath } as never,
                     tmpDir: services.limits.tmpDir,
                     taskTimeout: 60_000,
+                    taskMaxTimeout: 5_000,
                     maxInputSize: 1024 ** 2,
                     tempRetention: 3_600_000,
                     tempMaxRetention: 7_200_000,
@@ -618,20 +624,15 @@ describe.skipIf(!RUNS_WITH_REDIS)('workers', () => {
             })
         ).project;
         const jobs = services.jobs as NonNullable<Services['jobs']>;
-        const missing = await waitForJob(
-            external.id,
-            (
-                await jobs.create(external, {
-                    input: await input('a.txt', 'a', external),
-                    tasks: { listen: { op: 'test.listen' } },
-                })
-            ).job.id,
-        );
-        expect(missing.tasks['listen']).toMatchObject({
-            status: 'failed',
-            error: {
-                code: 'provider_failed',
-                message: 'The project has no credentials for Hosted.',
+        // Without the project's credentials, the job is refused when it's created.
+        await expect(
+            jobs.create(external, {
+                input: await input('a.txt', 'a', external),
+                tasks: { listen: { op: 'test.listen' } },
+            }),
+        ).rejects.toMatchObject({
+            errors: {
+                '/tasks/listen/options/provider': ['the project has no credentials for Hosted'],
             },
         });
         await services.credentials.set(external.id, 'hosted', { key: 'secret' });
@@ -753,6 +754,33 @@ describe.skipIf(!RUNS_WITH_REDIS)('workers', () => {
         project = previous;
         const done = await waitForJob(slow.id, job.id);
         expect(done.tasks['wait']).toMatchObject({ status: 'failed', error: { code: 'timeout' } });
+    });
+
+    it('lets an operation extend its time limit, up to the maximum', async () => {
+        const slow = (
+            await services.projects.create({ slug: 'extended', settings: { taskTimeout: 1000 } })
+        ).project;
+        const previous = project;
+        project = slow;
+        const jobs = services.jobs as NonNullable<Services['jobs']>;
+        const { job } = await jobs.create(slow, {
+            input: await input('g.txt', 'g'),
+            tasks: {
+                long: { op: 'test.wait', options: { milliseconds: 1500, extend: 2500 } },
+                tooLong: { op: 'test.wait', options: { milliseconds: 10, extend: 60_000 } },
+            },
+        });
+        project = previous;
+        const done = await waitForJob(slow.id, job.id);
+        expect(done.tasks['long']).toMatchObject({
+            status: 'completed',
+            outputs: { metadata: { extended: true } },
+        });
+        // Past the operator's maximum, the operation hears it can't have that much.
+        expect(done.tasks['tooLong']).toMatchObject({
+            status: 'completed',
+            outputs: { metadata: { extended: false } },
+        });
     });
 
     it('runs no more tasks of a project at once than its concurrency', async () => {

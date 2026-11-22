@@ -21,7 +21,7 @@ export interface TranscriptSegment {
 
 /** What a transcription provider returns, whatever the provider. */
 export interface Transcript {
-    /** ISO 639-1 code of the language, the given one or the one the provider detected. */
+    /** ISO 639 code of the language (`fr`, `yue`), the given one or the one the provider detected. */
     language: string | undefined;
     segments: TranscriptSegment[];
 }
@@ -31,10 +31,16 @@ export function roundTime(seconds: number): number {
     return Math.round(seconds * 1000) / 1000;
 }
 
-/** The whole text of a transcript, its segments joined by spaces. */
+/** Languages written without spaces between words. */
+const WITHOUT_SPACES = new Set(['ja', 'zh', 'yue', 'th', 'lo', 'km', 'my', 'bo']);
+
+/**
+ * The whole text of a transcript: its segments joined by spaces, or without them in the languages
+ * written without spaces (`ja`, `zh`, `th`…).
+ */
 export function transcriptText(transcript: Transcript): string {
     return transcript.segments
         .map((segment) => segment.text.trim())
         .filter((text) => text !== '')
-        .join(' ');
+        .join(WITHOUT_SPACES.has(transcript.language ?? '') ? '' : ' ');
 }

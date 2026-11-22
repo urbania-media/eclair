@@ -8,7 +8,7 @@ export interface TranscriptionRequest {
     audio: string;
     /** Seconds of audio. */
     duration: number;
-    /** ISO 639-1 code, or `undefined` to detect the language. */
+    /** An ISO 639 code (`fr`) or a locale (`fr-CA`), or `undefined` to detect the language. */
     language: string | undefined;
     /** A model of the provider, or `undefined` for its default. */
     model: string | undefined;
@@ -32,6 +32,11 @@ export interface TranscriptionProvider {
     readonly name: string;
     /** Seconds of audio it accepts at most. Longer inputs fail with `limit_exceeded`. */
     readonly maxDuration: number;
+    /**
+     * Milliseconds the provider may take on this many seconds of audio, at most: the task asks
+     * for that time limit before it starts.
+     */
+    timeFor(duration: number): number;
     transcribe(
         context: OperationContext,
         request: TranscriptionRequest,

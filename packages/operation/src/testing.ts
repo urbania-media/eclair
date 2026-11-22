@@ -45,11 +45,23 @@ export interface RunOperationOptions {
     /** The AI providers of the context, by capability. */
     providers?: OperationProviders;
     taskId?: string;
+    /**
+     * The longest time limit `context.extendTimeout()` may ask for, in milliseconds: unlimited by
+     * default. The run itself is only limited by `timeout`.
+     */
+    maxTimeout?: number;
+    /**
+     * Which optional binaries `available()` says this worker has: by default those in `binaries`
+     * or on `PATH`.
+     */
+    available?: Record<string, boolean>;
 }
 
 export interface RunOperationResult {
     metadata: Record<string, unknown> | undefined;
     usage: OperationResult['usage'];
+    /** What the operation asked of `context.extendTimeout()`, in order. */
+    timeouts: number[];
     files: ({ name: string; path: string } & OutputOptions)[];
     progress: number[];
     /** The work directory, with the output files. Call `cleanup()` when done. */
@@ -87,6 +99,7 @@ export async function runOperation(
     const workdir = await mkdtemp(join(tmpdir(), `eclair-${operation.name}-`));
     const files: RunOperationResult['files'] = [];
     const progress: number[] = [];
+    const timeouts: number[] = [];
     const controller = new AbortController();
     const timer =
         run.timeout === undefined ? undefined : setTimeout(() => controller.abort(), run.timeout);
@@ -95,7 +108,10 @@ export async function runOperation(
         input: { path: run.input, ...type, size, probe: run.probe },
         workdir,
         exec: (binary, args, options) => {
-            if (!operation.binaries.includes(binary)) {
+            if (
+                !operation.binaries.includes(binary) &&
+                !(operation.optionalBinaries ?? []).includes(binary)
+            ) {
                 throw new Error(
                     `${operation.key} runs ${binary} without declaring it in binaries.`,
                 );
@@ -112,6 +128,16 @@ export async function runOperation(
         output: (name, path, outputOptions) => files.push({ name, path, ...outputOptions }),
         ...(run.providers === undefined ? {} : { providers: run.providers }),
         ...(run.taskId === undefined ? {} : { taskId: run.taskId }),
+        extendTimeout: (ms) => {
+            timeouts.push(ms);
+            return ms <= (run.maxTimeout ?? Number.POSITIVE_INFINITY);
+        },
+        available: (binary) =>
+            Promise.resolve(
+                run.available?.[binary] ??
+                    (run.binaries?.[binary] !== undefined ||
+                        missingBinaries([binary]).length === 0),
+            ),
     };
 
     try {
@@ -119,6 +145,7 @@ export async function runOperation(
         return {
             metadata: result.metadata,
             usage: result.usage,
+            timeouts,
             files,
             progress,
             workdir,

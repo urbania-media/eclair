@@ -73,7 +73,12 @@ export interface TaskRunnerOptions {
         | 'tempRetention'
         | 'tempMaxRetention'
     > &
-        Partial<Pick<Config, 'providerCredentials' | 'embedMaxDuration' | 'aiProviders'>>;
+        Partial<
+            Pick<
+                Config,
+                'providerCredentials' | 'embedMaxDuration' | 'aiProviders' | 'taskMaxTimeout'
+            >
+        >;
     /** The projects' credentials for embed providers. */
     credentials?: Credentials | undefined;
     /** The caches of operations, in Redis. Nothing is cached without it. */
@@ -362,9 +367,25 @@ export class TaskRunner {
         const project = await this.#options.projects.get(job.projectId);
         await mkdir(this.#options.config.tmpDir, { recursive: true });
         const workdir = await mkdtemp(join(this.#options.config.tmpDir, `${task.name}-`));
-        const timeout = project.settings.taskTimeout ?? this.#options.config.taskTimeout;
+        let timeout = project.settings.taskTimeout ?? this.#options.config.taskTimeout;
         const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort('timeout'), timeout);
+        let timer = setTimeout(() => controller.abort('timeout'), timeout);
+        const runStarted = Date.now();
+        // An operation that knows how long it needs extends the limit, up to the operator's maximum.
+        const maxTimeout = Math.max(timeout, this.#options.config.taskMaxTimeout ?? timeout);
+        const extendTimeout = (ms: number): boolean => {
+            const wanted = Date.now() - runStarted + ms;
+            const granted = Math.min(Math.max(timeout, wanted), maxTimeout);
+            if (granted > timeout && !controller.signal.aborted) {
+                clearTimeout(timer);
+                timeout = granted;
+                timer = setTimeout(
+                    () => controller.abort('timeout'),
+                    runStarted + timeout - Date.now(),
+                );
+            }
+            return wanted <= maxTimeout;
+        };
         const onCancel = () => controller.abort('canceled');
         options.signal?.addEventListener('abort', onCancel, { once: true });
         const startedAt = Date.now();
@@ -438,7 +459,11 @@ export class TaskRunner {
                 );
                 const providers = await this.#providers(operation, task, project);
                 result = await (operation as FileOperation).run(
-                    providers === undefined ? context : { ...context, providers },
+                    {
+                        ...context,
+                        extendTimeout,
+                        ...(providers === undefined ? {} : { providers }),
+                    },
                     task.options as never,
                 );
             }
@@ -774,6 +799,12 @@ export class TaskRunner {
             log: this.#log(task, operation),
             output: this.#output(operation, workdir, files),
             taskId: task.id,
+            available: (binary) => {
+                const path = (this.#options.config.binaries as Record<string, string>)[binary];
+                return path === undefined
+                    ? Promise.resolve(false)
+                    : isAvailable(binary as BinaryName, path);
+            },
         };
     }
 

@@ -12,8 +12,9 @@ import {
 } from '@aws-sdk/client-transcribe';
 import type { LanguageCode, TranscriptionJob } from '@aws-sdk/client-transcribe';
 import { randomUUID } from 'node:crypto';
-import { readFile, stat } from 'node:fs/promises';
-import { join } from 'node:path';
+import { createReadStream } from 'node:fs';
+import { stat } from 'node:fs/promises';
+import { join, posix } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { Type } from 'typebox';
 
@@ -57,12 +58,62 @@ export const amazonTranscribeProvider = defineAiProvider({
     capability: 'transcription',
     external: true,
     credentials: AmazonTranscribeCredentials,
+    checkOptions: (options) => {
+        const problem = localeProblem(options['language']);
+        return problem === undefined ? undefined : { language: problem };
+    },
 });
 
 /** Amazon Transcribe's batch limits: 8 hours and 2 GB a file, half a second at least. */
 const MAX_DURATION = 8 * 3600;
 const MAX_SIZE = 2 * 1024 ** 3;
 const MIN_DURATION = 0.5;
+/** Amazon bills 15 seconds at least a job. */
+const MIN_BILLED = 15;
+/** Status requests in a row that may fail before the task gives up on the job. */
+const MAX_POLL_FAILURES = 5;
+/** Time for what isn't Amazon's work: the FLAC, the upload, the cleanup's requests. */
+const FIXED_TIME = 10 * 60 * 1000;
+
+/**
+ * The locales of Amazon Transcribe's batch jobs (`LanguageCode`, `LanguageOptions`), from its
+ * documentation and its API's answer. `en-CA`, for one, isn't among them.
+ */
+// prettier-ignore
+export const AMAZON_LOCALES: readonly string[] = [
+    'ab-GE', 'af-ZA', 'am-ET', 'ar-AE', 'ar-SA', 'ast-ES', 'az-AZ', 'ba-RU', 'be-BY', 'bg-BG',
+    'bn-IN', 'bs-BA', 'ca-ES', 'ckb-IQ', 'ckb-IR', 'cs-CZ', 'cy-GB', 'cy-WL', 'da-DK', 'de-CH',
+    'de-DE', 'el-GR', 'en-AB', 'en-AU', 'en-GB', 'en-IE', 'en-IN', 'en-NZ', 'en-US', 'en-WL',
+    'en-ZA', 'es-ES', 'es-MX', 'es-US', 'et-EE', 'et-ET', 'eu-ES', 'fa-AF', 'fa-IR', 'fi-FI',
+    'fr-BE', 'fr-CA', 'fr-FR', 'ga-IE', 'gd-GB', 'gl-ES', 'gu-IN', 'ha-NG', 'he-IL', 'hi-IN',
+    'hr-HR', 'ht-HT', 'hu-HU', 'hy-AM', 'id-ID', 'is-IS', 'it-IT', 'ja-JP', 'jv-ID', 'ka-GE',
+    'kab-DZ', 'kk-KZ', 'km-KH', 'kn-IN', 'ko-KR', 'ky-KG', 'lg-IN', 'lt-LT', 'lv-LV', 'mhr-RU',
+    'mi-NZ', 'mk-MK', 'ml-IN', 'mn-MN', 'mr-IN', 'ms-MY', 'mt-MT', 'my-MM', 'ne-NP', 'nl-BE',
+    'nl-NL', 'no-NO', 'or-IN', 'pa-IN', 'pl-PL', 'ps-AF', 'pt-BR', 'pt-PT', 'ro-RO', 'ru-RU',
+    'rw-RW', 'si-LK', 'sk-SK', 'sl-SI', 'so-SO', 'sq-AL', 'sr-RS', 'su-ID', 'sv-SE', 'sw-BI',
+    'sw-KE', 'sw-RW', 'sw-TZ', 'sw-UG', 'ta-IN', 'te-IN', 'th-TH', 'tl-PH', 'tr-TR', 'tt-RU',
+    'ug-CN', 'uk-UA', 'uz-UZ', 'vi-VN', 'wo-SN', 'zh-CN', 'zh-HK', 'zh-TW', 'zu-ZA',
+];
+
+/** Why Amazon can't transcribe a requested language, or `undefined` when it can. */
+function localeProblem(language: unknown): string | undefined {
+    if (typeof language !== 'string' || language === 'auto') {
+        return undefined;
+    }
+    if (language.includes('-')) {
+        if (AMAZON_LOCALES.includes(language)) {
+            return undefined;
+        }
+        const base = language.split('-')[0] ?? '';
+        const others = AMAZON_LOCALES.filter((locale) => locale.startsWith(`${base}-`));
+        return others.length === 0
+            ? `Amazon Transcribe doesn't transcribe ${language}`
+            : `Amazon Transcribe doesn't transcribe ${language}: use ${base} or one of ${others.join(', ')}`;
+    }
+    return AMAZON_LOCALES.some((locale) => locale.startsWith(`${language}-`))
+        ? undefined
+        : `Amazon Transcribe doesn't transcribe "${language}"`;
+}
 
 /** Locales when a project gives none: the usual one of each base language. */
 const DEFAULT_LOCALES: Record<string, string> = {
@@ -88,8 +139,13 @@ export interface AmazonTranscribeSettings {
     pricePerMinute: number | undefined;
     /** Seconds of audio a task can transcribe, at most Amazon's 8 hours. */
     maxDuration: number;
-    /** Milliseconds between two status requests, at first. It grows to 15 seconds. */
+    /** Milliseconds between two status requests, at first, 100 at least. It grows to 15 seconds. */
     pollInterval: number;
+    /**
+     * Milliseconds the cleanup waits for a job that is still running after a cancel or a failure:
+     * Amazon can neither stop nor delete a running job. 10 minutes by default.
+     */
+    cleanupWait: number;
 }
 
 /** Reads the project's credentials and the operator's settings. */
@@ -125,15 +181,25 @@ export function amazonTranscribeSettings(
         bucket,
         prefix,
         jobPrefix: credentials?.['jobPrefix'] ?? 'eclair-',
-        languages: (credentials?.['languages'] ?? '').split(',').filter((locale) => locale !== ''),
+        languages: (credentials?.['languages'] ?? '')
+            .split(',')
+            .filter((locale) => locale !== '')
+            .filter((locale) => AMAZON_LOCALES.includes(locale)),
         pricePerMinute:
             Number.isFinite(price) && credentials?.['pricePerMinute'] !== undefined
                 ? price
                 : undefined,
         maxDuration,
-        pollInterval:
-            typeof settings['pollInterval'] === 'number' ? settings['pollInterval'] : 5000,
+        pollInterval: milliseconds(settings['pollInterval'], 5000, 100),
+        cleanupWait: milliseconds(settings['cleanupWait'], 10 * 60 * 1000, 0),
     };
+}
+
+/** A number of milliseconds of the operator's settings, at least `minimum`. */
+function milliseconds(value: unknown, fallback: number, minimum: number): number {
+    return typeof value === 'number' && Number.isFinite(value)
+        ? Math.max(minimum, value)
+        : fallback;
 }
 
 /** What the provider sends to AWS: the official clients, or fakes in tests. */
@@ -309,8 +375,32 @@ function keyOf(uri: string | undefined, bucket: string): string | undefined {
     }
 }
 
-/** Encodes the extracted audio in FLAC: lossless, about half the size of the WAV. */
-async function encodeFlac(context: OperationContext, wav: string): Promise<string> {
+/** Whether Amazon answered the request with an error, rather than the request never arriving. */
+function answered(error: unknown): boolean {
+    return (
+        typeof (error as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode ===
+        'number'
+    );
+}
+
+/** Amazon's failure reasons can name the project's bucket and keys: they stay out of the task. */
+function withoutLocations(reason: string): string {
+    return reason
+        .replace(/s3:\/\/\S+/g, 'the file')
+        .replace(/https:\/\/\S*amazonaws\.com\S*/g, 'the file');
+}
+
+const CANCELED = () => new OperationError('operation_failed', 'The task was canceled.');
+
+/**
+ * Encodes the extracted audio in FLAC: lossless, about half the size of the WAV. Audio shorter
+ * than Amazon's half a second gets silence after it.
+ */
+async function encodeFlac(
+    context: OperationContext,
+    wav: string,
+    duration: number,
+): Promise<string> {
     const path = join(context.workdir, 'audio.flac');
     await context.exec('ffmpeg', [
         '-hide_banner',
@@ -322,6 +412,7 @@ async function encodeFlac(context: OperationContext, wav: string): Promise<strin
         'wav',
         '-i',
         wav,
+        ...(duration < MIN_DURATION ? ['-af', `apad=pad_dur=${MIN_DURATION}`] : []),
         '-c:a',
         'flac',
         '-compression_level',
@@ -329,6 +420,15 @@ async function encodeFlac(context: OperationContext, wav: string): Promise<strin
         path,
     ]);
     return path;
+}
+
+/** The files a job's folder can hold: the audio, the transcript, and Amazon's access check. */
+function filesOf(folder: string): string[] {
+    return [
+        `${folder}audio.flac`,
+        `${folder}transcript.json`,
+        `${folder}.write_access_check_file.temp`,
+    ];
 }
 
 /**
@@ -344,15 +444,15 @@ export function amazonTranscribe(
     return {
         name: 'amazon-transcribe',
         maxDuration: settings.maxDuration,
+        // Amazon usually takes a fraction of the duration; the whole duration leaves a margin.
+        timeFor: (duration) => FIXED_TIME + Math.ceil(duration * 1000) + settings.cleanupWait,
 
         async transcribe(context, request) {
-            if (request.duration < MIN_DURATION) {
-                throw new OperationError(
-                    'unsupported_input',
-                    'The audio is shorter than half a second.',
-                );
+            const problem = localeProblem(request.language);
+            if (problem !== undefined) {
+                throw new OperationError('unsupported_input', `${problem}.`);
             }
-            const flac = await encodeFlac(context, request.audio);
+            const flac = await encodeFlac(context, request.audio, request.duration);
             const { size } = await stat(flac);
             if (size > MAX_SIZE) {
                 throw new OperationError(
@@ -371,9 +471,12 @@ export function amazonTranscribe(
             const folder = `${settings.prefix}${randomUUID()}/`;
             const mediaKey = `${folder}audio.flac`;
             const outputKey = `${folder}transcript.json`;
-            // Amazon also writes an empty file in the output folder to check its access.
-            const toDelete = new Set<string>([mediaKey, `${folder}.write_access_check_file.temp`]);
-            let jobStarted = false;
+            // The folders of this attempt and of an earlier one whose job this one follows.
+            const folders = new Set<string>([folder]);
+            const toDelete = new Set<string>();
+            // Whether a job may exist: from the request that starts it, whatever its answer.
+            let jobMayExist = false;
+            let job: TranscriptionJob | undefined;
 
             const locale =
                 request.language === undefined
@@ -382,13 +485,21 @@ export function amazonTranscribe(
                       ? request.language
                       : (settings.languages.find((option) =>
                             option.startsWith(`${request.language}-`),
-                        ) ?? DEFAULT_LOCALES[request.language]);
-            if (request.language !== undefined && locale === undefined) {
-                throw new OperationError(
-                    'unsupported_input',
-                    `Amazon Transcribe has no locale for "${request.language}" here.`,
-                );
-            }
+                        ) ??
+                        DEFAULT_LOCALES[request.language] ??
+                        AMAZON_LOCALES.find((option) => option.startsWith(`${request.language}-`)));
+
+            const follow = (current: TranscriptionJob | undefined) => {
+                for (const key of [
+                    keyOf(current?.Media?.MediaFileUri, settings.bucket),
+                    keyOf(current?.Transcript?.TranscriptFileUri, settings.bucket),
+                ]) {
+                    if (key !== undefined && key.startsWith(settings.prefix)) {
+                        folders.add(`${posix.dirname(key)}/`);
+                        toDelete.add(key);
+                    }
+                }
+            };
 
             try {
                 try {
@@ -396,18 +507,23 @@ export function amazonTranscribe(
                         new PutObjectCommand({
                             Bucket: settings.bucket,
                             Key: mediaKey,
-                            Body: await readFile(flac),
+                            // Streamed: the audio can weigh up to 2 GB.
+                            Body: createReadStream(flac),
+                            ContentLength: size,
                             ContentType: 'audio/flac',
                         }),
                         { abortSignal: context.signal },
                     );
                 } catch (error) {
+                    if (context.signal.aborted) {
+                        throw CANCELED();
+                    }
                     throw awsError(error, 'receive the audio in the bucket');
                 }
                 context.progress(0.2);
 
-                let job: TranscriptionJob | undefined;
                 try {
+                    jobMayExist = true;
                     const result = await clients.transcribe.send(
                         new StartTranscriptionJobCommand({
                             TranscriptionJobName: name,
@@ -429,28 +545,30 @@ export function amazonTranscribe(
                         { abortSignal: context.signal },
                     );
                     job = result.TranscriptionJob;
-                    jobStarted = true;
                 } catch (error) {
+                    if (context.signal.aborted) {
+                        // The job may have started before the request was cut: the cleanup looks.
+                        throw CANCELED();
+                    }
                     if ((error as { name?: string }).name !== 'ConflictException') {
+                        // Amazon refused it: there is no job. Without an answer, there may be one.
+                        jobMayExist = !answered(error);
                         throw awsError(error, 'start the job');
                     }
                     // The job of an earlier attempt of this task: follow it, and delete what it left.
-                    jobStarted = true;
                     context.log.info('Following the job of an earlier attempt.', { job: name });
                 }
 
                 const started = Date.now();
                 let interval = settings.pollInterval;
-                for (;;) {
-                    if (
-                        job?.TranscriptionJobStatus === 'COMPLETED' ||
-                        job?.TranscriptionJobStatus === 'FAILED'
-                    ) {
-                        break;
-                    }
-                    if (job !== undefined) {
+                let failures = 0;
+                while (
+                    job?.TranscriptionJobStatus !== 'COMPLETED' &&
+                    job?.TranscriptionJobStatus !== 'FAILED'
+                ) {
+                    if (job !== undefined || failures > 0) {
                         await sleep(interval, undefined, { signal: context.signal }).catch(() => {
-                            throw new OperationError('operation_failed', 'The task was canceled.');
+                            throw CANCELED();
                         });
                         interval = Math.min(interval * 1.5, 15_000);
                     }
@@ -461,17 +579,23 @@ export function amazonTranscribe(
                                 { abortSignal: context.signal },
                             )
                         ).TranscriptionJob;
+                        failures = 0;
                     } catch (error) {
-                        throw awsError(error, 'tell the state of the job');
-                    }
-                    for (const key of [
-                        keyOf(job?.Media?.MediaFileUri, settings.bucket),
-                        keyOf(job?.Transcript?.TranscriptFileUri, settings.bucket),
-                    ]) {
-                        if (key !== undefined && key.startsWith(settings.prefix)) {
-                            toDelete.add(key);
+                        if (context.signal.aborted) {
+                            throw CANCELED();
                         }
+                        // A request that fails once doesn't end a job that runs: the next one asks again.
+                        failures += 1;
+                        context.log.warn('Amazon Transcribe did not tell the state of the job.', {
+                            error: (error as { name?: string }).name ?? 'Error',
+                            failures,
+                        });
+                        if (failures >= MAX_POLL_FAILURES) {
+                            throw awsError(error, 'tell the state of the job');
+                        }
+                        continue;
                     }
+                    follow(job);
                     // Amazon takes about a third of the audio's duration: progress up to 90 %.
                     context.progress(
                         Math.min(
@@ -485,7 +609,7 @@ export function amazonTranscribe(
                 }
 
                 if (job.TranscriptionJobStatus === 'FAILED') {
-                    const reason = job.FailureReason ?? 'no reason given';
+                    const reason = withoutLocations(job.FailureReason ?? 'no reason given');
                     throw new OperationError(
                         /duration|length|size|too (long|large)/i.test(reason)
                             ? 'limit_exceeded'
@@ -496,17 +620,8 @@ export function amazonTranscribe(
                 const transcriptKey =
                     keyOf(job.Transcript?.TranscriptFileUri, settings.bucket) ?? outputKey;
                 toDelete.add(transcriptKey);
-                let raw: string;
-                try {
-                    const object = await clients.s3.send(
-                        new GetObjectCommand({ Bucket: settings.bucket, Key: transcriptKey }),
-                        { abortSignal: context.signal },
-                    );
-                    raw = (await object.Body?.transformToString('utf8')) ?? '';
-                } catch (error) {
-                    throw awsError(error, 'give the transcript');
-                }
-                const billed = request.duration;
+                const raw = await readTranscript(context, clients, settings, transcriptKey);
+                const billed = Math.max(MIN_BILLED, request.duration);
                 return {
                     transcript: parseAmazonTranscript(raw, job.LanguageCode ?? locale),
                     model: undefined,
@@ -523,48 +638,121 @@ export function amazonTranscribe(
                 };
             } finally {
                 // Never with the task's signal: the cleanup runs after a cancel too.
+                for (const each of folders) {
+                    for (const key of filesOf(each)) {
+                        toDelete.add(key);
+                    }
+                }
                 await cleanup(
                     context,
                     clients,
-                    settings.bucket,
+                    settings,
                     [...toDelete],
-                    jobStarted ? name : undefined,
+                    jobMayExist ? name : undefined,
+                    job?.TranscriptionJobStatus,
                 );
             }
         },
     };
 }
 
+/** Reads the transcript, asking again when a request fails. */
+async function readTranscript(
+    context: OperationContext,
+    clients: AwsClients,
+    settings: AmazonTranscribeSettings,
+    key: string,
+): Promise<string> {
+    for (let attempt = 1; ; attempt++) {
+        try {
+            const object = await clients.s3.send(
+                new GetObjectCommand({ Bucket: settings.bucket, Key: key }),
+                { abortSignal: context.signal },
+            );
+            return (await object.Body?.transformToString('utf8')) ?? '';
+        } catch (error) {
+            if (context.signal.aborted) {
+                throw CANCELED();
+            }
+            if (attempt >= 3) {
+                throw awsError(error, 'give the transcript');
+            }
+            await sleep(settings.pollInterval * attempt, undefined, {
+                signal: context.signal,
+            }).catch(() => {
+                throw CANCELED();
+            });
+        }
+    }
+}
+
+/**
+ * Deletes the job and the files. Amazon can neither stop nor delete a running job, and writes the
+ * transcript when it ends: the cleanup waits for it to end, up to `cleanupWait`, then deletes the
+ * job and every file of its folders. What it can't delete, the bucket's lifecycle rule does.
+ */
 async function cleanup(
     context: OperationContext,
     clients: AwsClients,
-    bucket: string,
+    settings: AmazonTranscribeSettings,
     keys: string[],
     job: string | undefined,
+    lastStatus: string | undefined,
 ): Promise<void> {
     const failures: string[] = [];
-    if (job !== undefined) {
+    let deleteJob = job !== undefined;
+    if (job !== undefined && lastStatus !== 'COMPLETED' && lastStatus !== 'FAILED') {
+        const deadline = Date.now() + settings.cleanupWait;
+        let interval = settings.pollInterval;
+        for (;;) {
+            let status: string | undefined;
+            try {
+                status = (
+                    await clients.transcribe.send(
+                        new GetTranscriptionJobCommand({ TranscriptionJobName: job }),
+                    )
+                ).TranscriptionJob?.TranscriptionJobStatus;
+            } catch (error) {
+                if ((error as { name?: string }).name === 'NotFoundException') {
+                    // The job never started.
+                    deleteJob = false;
+                    break;
+                }
+            }
+            if (status === 'COMPLETED' || status === 'FAILED') {
+                break;
+            }
+            if (Date.now() + interval > deadline) {
+                deleteJob = false;
+                failures.push(`job: still ${status ?? 'unknown'}`);
+                break;
+            }
+            await sleep(interval);
+            interval = Math.min(interval * 1.5, 15_000);
+        }
+    }
+    if (deleteJob && job !== undefined) {
         try {
             await clients.transcribe.send(
                 new DeleteTranscriptionJobCommand({ TranscriptionJobName: job }),
             );
         } catch (error) {
-            if ((error as { name?: string }).name !== 'NotFoundException') {
-                failures.push(`job: ${(error as { name?: string }).name ?? 'Error'}`);
-            }
+            failures.push(`job: ${(error as { name?: string }).name ?? 'Error'}`);
         }
     }
     for (const key of keys) {
         try {
-            await clients.s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
+            await clients.s3.send(new DeleteObjectCommand({ Bucket: settings.bucket, Key: key }));
         } catch (error) {
             failures.push(`object: ${(error as { name?: string }).name ?? 'Error'}`);
         }
     }
     if (failures.length > 0) {
-        // The bucket's lifecycle rule on the prefix deletes what's left.
+        // The bucket's lifecycle rule deletes the files that are left; a running job's record stays
+        // until it's deleted with the project's key (90 days at most).
         context.log.warn('Some files or the job of Amazon Transcribe could not be deleted.', {
             failures,
+            ...(job === undefined ? {} : { job }),
         });
     }
 }

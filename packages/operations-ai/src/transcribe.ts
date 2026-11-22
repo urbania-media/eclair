@@ -85,6 +85,20 @@ function providerOf(context: OperationContext): TranscriptionProvider {
     }
 }
 
+/**
+ * Asks for the time the provider needs on this audio, before a job starts: a task that would
+ * time out halfway through a paid job fails now instead.
+ */
+function askTime(context: OperationContext, provider: TranscriptionProvider, duration: number) {
+    const needed = provider.timeFor(duration);
+    if (context.extendTimeout !== undefined && !context.extendTimeout(needed)) {
+        throw new OperationError(
+            'limit_exceeded',
+            `The audio lasts ${Math.round(duration)} s: ${provider.name} may need ${Math.round(needed / 60_000)} minutes, more than a task may run on this server.`,
+        );
+    }
+}
+
 /** Transcribes the speech of an audio file or a video. */
 export const transcribe = defineOperation({
     name: 'ai.transcribe',
@@ -93,9 +107,13 @@ export const transcribe = defineOperation({
         'Transcript with timings, through the transcription provider: JSON with segments and words, WebVTT and SRT.',
     accepts: { kinds: ['audio', 'video'] },
     capability: 'ai',
-    binaries: ['ffprobe', 'ffmpeg', 'whisper-cli'],
+    binaries: ['ffprobe', 'ffmpeg'],
+    // Only `local-whisper` runs it: a worker that only sends audio to Amazon can do without.
+    optionalBinaries: ['whisper-cli'],
     options: TranscribeOptions,
     providers: 'transcription',
+    // A task of an external provider only waits on it: it doesn't hold a slot of the `ai` queue.
+    externalQueue: 'network',
     outputs: { files: true, metadata: true },
 
     async run(context, options) {
@@ -107,6 +125,9 @@ export const transcribe = defineOperation({
                 `The audio lasts ${Math.round(probed)} s, more than the ${provider.maxDuration} s this provider transcribes.`,
             );
         }
+        if (probed !== undefined) {
+            askTime(context, provider, probed);
+        }
         const audio = await extractAudio(context, probed, (ratio) => context.progress(ratio * 0.1));
         if (audio.duration > provider.maxDuration) {
             throw new OperationError(
@@ -114,6 +135,7 @@ export const transcribe = defineOperation({
                 `The audio lasts ${Math.round(audio.duration)} s, more than the ${provider.maxDuration} s this provider transcribes.`,
             );
         }
+        askTime(context, provider, audio.duration);
         const language = options.language === 'auto' ? undefined : options.language;
         const baseLanguage = language?.split('-')[0];
         const silent =

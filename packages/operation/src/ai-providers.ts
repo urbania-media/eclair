@@ -22,6 +22,12 @@ export interface AiProviderDefinition {
     external: boolean;
     /** JSON Schema of a project's credentials (`{ accessKeyId, … }`), for external providers. */
     credentials?: TSchema | JsonSchemaObject;
+    /**
+     * Checks a task's options against what the provider supports, when the job is created: by
+     * option name, the problems. A locale the provider doesn't know is refused there rather than
+     * when the task runs.
+     */
+    checkOptions?(options: Readonly<Record<string, unknown>>): Record<string, string> | undefined;
 }
 
 export type AiProvider = Readonly<AiProviderDefinition>;

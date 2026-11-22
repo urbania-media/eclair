@@ -131,6 +131,17 @@ export class Credentials {
         return this.#summary(row);
     }
 
+    /** Whether a project has credentials for a provider, without decrypting them. */
+    async has(projectId: string, provider: string): Promise<boolean> {
+        const row = await this.#database.kysely
+            .selectFrom('credentials')
+            .select('provider')
+            .where('project_id', '=', projectId)
+            .where('provider', '=', provider)
+            .executeTakeFirst();
+        return row !== undefined;
+    }
+
     /** A provider's decrypted credentials of a project, for the workers. */
     async get(projectId: string, provider: string): Promise<Record<string, string> | undefined> {
         const row = await this.#database.kysely

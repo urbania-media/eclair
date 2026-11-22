@@ -124,6 +124,7 @@ export function createServices(options: ServicesOptions): Services {
         uploads,
         operations,
         scheduler,
+        credentials,
         links,
         metrics: options.metrics,
     });

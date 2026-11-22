@@ -27,7 +27,12 @@ export function runOn(
     operation: Operation,
     name: string,
     options: Record<string, unknown> = {},
-    run: { providers?: OperationProviders; whisper?: string } = {},
+    run: {
+        providers?: OperationProviders;
+        whisper?: string;
+        maxTimeout?: number;
+        available?: Record<string, boolean>;
+    } = {},
 ) {
     return runOperation(operation, {
         input: fixture(name),
@@ -35,5 +40,7 @@ export function runOn(
         timeout: 600_000,
         binaries: { 'whisper-cli': run.whisper ?? fixture('fake-whisper-cli.mjs') },
         ...(run.providers === undefined ? {} : { providers: run.providers }),
+        ...(run.maxTimeout === undefined ? {} : { maxTimeout: run.maxTimeout }),
+        ...(run.available === undefined ? {} : { available: run.available }),
     });
 }

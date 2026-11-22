@@ -232,8 +232,12 @@ describe('OperationRegistry, AI providers', () => {
         accepts: { kinds: ['audio'] },
         capability: 'ai',
         binaries: [],
-        options: Type.Object({ provider: Type.Optional(Type.String()) }),
+        options: Type.Object({
+            provider: Type.Optional(Type.String()),
+            language: Type.Optional(Type.String()),
+        }),
         providers: 'transcription',
+        externalQueue: 'network',
         outputs: { files: true, metadata: true },
         run: async () => ({}),
     });
@@ -252,6 +256,10 @@ describe('OperationRegistry, AI providers', () => {
                 title: 'Amazon Transcribe',
                 capability: 'transcription',
                 external: true,
+                checkOptions: (options) =>
+                    options['language'] === 'en-CA'
+                        ? { language: "Amazon Transcribe doesn't transcribe en-CA" }
+                        : undefined,
             }),
             defineAiProvider({
                 name: 'faces',
@@ -318,5 +326,48 @@ describe('OperationRegistry, AI providers', () => {
         expect((error as InvalidValueError).errors).toEqual({
             '/tasks/transcript/options/provider': ['the project may not use amazon-transcribe'],
         });
+    });
+
+    const external = {
+        ...base,
+        aiProviders: { transcription: ['amazon-transcribe', 'local-whisper'] },
+        externalAiProviders: true,
+    };
+
+    it("checks the options against the provider's own limits when the job is created", () => {
+        expect(() =>
+            registry.checkTasks(
+                { transcript: { op: 'ai.transcribe', options: { language: 'en-CA' } } },
+                '/tasks',
+                external,
+            ),
+        ).toThrow(
+            expect.objectContaining({
+                errors: {
+                    '/tasks/transcript/options/language': [
+                        "Amazon Transcribe doesn't transcribe en-CA",
+                    ],
+                },
+            }),
+        );
+        // The same locale is fine for a provider that doesn't check it.
+        expect(() =>
+            registry.checkTasks(
+                {
+                    transcript: {
+                        op: 'ai.transcribe',
+                        options: { language: 'en-CA', provider: 'local-whisper' },
+                    },
+                },
+                '/tasks',
+                external,
+            ),
+        ).not.toThrow();
+    });
+
+    it('queues the tasks of an external provider apart', () => {
+        expect(registry.queueOf(transcribe, {}, external)).toBe('network');
+        expect(registry.queueOf(transcribe, { provider: 'local-whisper' }, external)).toBe('ai');
+        expect(registry.queueOf(transcribe, {}, base)).toBe('ai');
     });
 });

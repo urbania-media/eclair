@@ -18,6 +18,8 @@ export interface ResolvedTask {
     after: string[];
     keep: boolean;
     condition: TaskCondition | undefined;
+    /** The queue it runs on: its operation's capability, or another one for its AI provider. */
+    queue: string;
 }
 
 function escapeToken(token: string): string {
@@ -99,10 +101,12 @@ export function resolvePipeline(
         ) {
             continue;
         }
+        const options = operations.validateOptions(operation, task.options);
         resolved.push({
             name,
             operation,
-            options: operations.validateOptions(operation, task.options),
+            options,
+            queue: operations.queueOf(operation, options, settings),
             source,
             dependencies: [...new Set([...(source === undefined ? [] : [source.task]), ...after])],
             after,
